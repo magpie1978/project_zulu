@@ -163,3 +163,44 @@ body {
     grid-template-columns: 1fr;
   }
 }
+
+
+.page-layout {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  gap: 32px;
+  padding: 30px 50px 70px;
+}
+
+.actor-sidebar {
+  background: #111;
+  border-radius: 14px;
+  padding: 18px;
+  align-self: start;
+  position: sticky;
+  top: 20px;
+}
+
+.actor-sidebar h2 {
+  margin: 0 0 14px;
+  font-size: 18px;
+}
+
+.actor-link {
+  display: block;
+  color: #ddd;
+  text-decoration: none;
+  padding: 8px 0;
+  font-size: 14px;
+}
+
+.actor-link:hover {
+  color: #fff;
+  text-decoration: underline;
+}
+
+.video-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 28px;
+}
