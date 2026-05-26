@@ -9,13 +9,21 @@ const closeModal = document.getElementById("closeModal");
 document.addEventListener("DOMContentLoaded", loadZuluVideos);
 
 async function loadZuluVideos() {
-  const { data, error } = await supabase
-    .from("zulu_videos")
-    .select("uid, film, url")
-    .order("uid", { ascending: true });
+  const actor = new URLSearchParams(window.location.search).get("actor");
+
+  let query = supabase
+    .from("zulu_videos_with_actors")
+    .select("uid, film, url, actor")
+    .order("film", { ascending: true });
+
+  if (actor) {
+    query = query.eq("actor", actor);
+  }
+
+  const { data, error } = await query;
 
   if (error) {
-    console.error("Error loading zulu_videos:", error);
+    console.error("Error loading zulu videos:", error);
     container.innerHTML = `<p class="error">Could not load videos.</p>`;
     return;
   }
@@ -56,6 +64,7 @@ function renderVideoCard(video) {
 
     <div class="video-info">
       <h3>${escapeHTML(title)}</h3>
+      ${video.actor ? `<p>${escapeHTML(video.actor)}</p>` : ""}
     </div>
   `;
 
