@@ -1,22 +1,26 @@
+* {
+  box-sizing: border-box;
+}
+
 body {
   margin: 0;
   background: #050505;
   color: #fff;
-  font-family: Arial, sans-serif;
+  font-family: Arial, Helvetica, sans-serif;
 }
 
 .site-header {
-  padding: 24px 40px;
-  text-align: center;
+  padding: 32px 50px 10px;
 }
 
-.site-banner {
-  max-width: 520px;
-  width: 100%;
+.site-header h1 {
+  margin: 0;
+  font-size: 34px;
+  font-weight: 700;
 }
 
 .page-wrap {
-  padding: 30px 50px 60px;
+  padding: 30px 50px 70px;
 }
 
 .video-grid {
@@ -26,10 +30,10 @@ body {
 }
 
 .video-card {
-  cursor: pointer;
   background: #111;
   border-radius: 14px;
   overflow: hidden;
+  cursor: pointer;
   transition: transform 0.2s ease, background 0.2s ease;
 }
 
@@ -41,13 +45,21 @@ body {
 .thumb-wrap {
   position: relative;
   aspect-ratio: 16 / 9;
-  background: #222;
+  background: #1b1b1b;
 }
 
-.thumb {
+.placeholder-thumb {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.placeholder-thumb svg {
+  width: 52px;
+  height: 52px;
+  opacity: 0.6;
 }
 
 .play-icon {
@@ -56,8 +68,8 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
+  background: rgba(0, 0, 0, 0.45);
   opacity: 0;
-  background: rgba(0,0,0,0.35);
   transition: opacity 0.2s ease;
 }
 
@@ -66,23 +78,25 @@ body {
 }
 
 .play-icon svg {
-  width: 48px;
-  height: 48px;
+  width: 54px;
+  height: 54px;
 }
 
 .video-info {
-  padding: 14px;
+  padding: 14px 15px 16px;
 }
 
 .video-info h3 {
-  margin: 0 0 6px;
+  margin: 0;
   font-size: 16px;
+  line-height: 1.3;
 }
 
-.video-info p {
-  margin: 0;
-  color: #aaa;
-  font-size: 13px;
+.error,
+.empty {
+  grid-column: 1 / -1;
+  color: #ccc;
+  font-size: 16px;
 }
 
 .modal {
@@ -90,7 +104,7 @@ body {
   position: fixed;
   inset: 0;
   z-index: 9999;
-  background: rgba(0,0,0,0.88);
+  background: rgba(0, 0, 0, 0.9);
   align-items: center;
   justify-content: center;
 }
@@ -116,12 +130,13 @@ body {
 
 .close-button {
   position: absolute;
-  top: -42px;
+  top: -46px;
   right: 0;
-  background: none;
   border: 0;
-  color: white;
-  font-size: 36px;
+  background: none;
+  color: #fff;
+  font-size: 40px;
+  line-height: 1;
   cursor: pointer;
 }
 
@@ -134,6 +149,12 @@ body {
 @media (max-width: 800px) {
   .video-grid {
     grid-template-columns: repeat(2, 1fr);
+  }
+
+  .page-wrap,
+  .site-header {
+    padding-left: 24px;
+    padding-right: 24px;
   }
 }
 
