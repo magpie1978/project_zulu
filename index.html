@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Zulu Videos</title>
+
+  <link rel="stylesheet" href="style/zulu.css" />
+  <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+
+<body>
+  <header class="site-header">
+    <img src="banners/douzepoints.png" alt="Zulu Videos" class="site-banner">
+  </header>
+
+  <main class="page-wrap">
+    <section id="video-container" class="video-grid"></section>
+  </main>
+
+  <div id="videoModal" class="modal">
+    <div class="modal-content">
+      <button class="close-button" id="closeModal">×</button>
+      <video id="modalVideo" controls playsinline></video>
+      <iframe id="modalIframe" allowfullscreen></iframe>
+    </div>
+  </div>
+
+  <script type="module" src="js/zulu-videos.js"></script>
+</body>
+</html>
