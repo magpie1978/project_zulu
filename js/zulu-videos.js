@@ -121,6 +121,11 @@ function openVideo(url) {
     return;
   }
 
+  // Convert HiDrive share links to direct links
+  if (url.includes("hidrive.ionos.com/lnk/")) {
+    url = url.replace("/lnk/", "/dl/");
+  }
+
   modal.classList.add("open");
 
   modalVideo.pause();
