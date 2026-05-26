@@ -1,0 +1,144 @@
+body {
+  margin: 0;
+  background: #050505;
+  color: #fff;
+  font-family: Arial, sans-serif;
+}
+
+.site-header {
+  padding: 24px 40px;
+  text-align: center;
+}
+
+.site-banner {
+  max-width: 520px;
+  width: 100%;
+}
+
+.page-wrap {
+  padding: 30px 50px 60px;
+}
+
+.video-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 28px;
+}
+
+.video-card {
+  cursor: pointer;
+  background: #111;
+  border-radius: 14px;
+  overflow: hidden;
+  transition: transform 0.2s ease, background 0.2s ease;
+}
+
+.video-card:hover {
+  transform: scale(1.03);
+  background: #181818;
+}
+
+.thumb-wrap {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  background: #222;
+}
+
+.thumb {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.play-icon {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  background: rgba(0,0,0,0.35);
+  transition: opacity 0.2s ease;
+}
+
+.video-card:hover .play-icon {
+  opacity: 1;
+}
+
+.play-icon svg {
+  width: 48px;
+  height: 48px;
+}
+
+.video-info {
+  padding: 14px;
+}
+
+.video-info h3 {
+  margin: 0 0 6px;
+  font-size: 16px;
+}
+
+.video-info p {
+  margin: 0;
+  color: #aaa;
+  font-size: 13px;
+}
+
+.modal {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: rgba(0,0,0,0.88);
+  align-items: center;
+  justify-content: center;
+}
+
+.modal.open {
+  display: flex;
+}
+
+.modal-content {
+  position: relative;
+  width: 85vw;
+  max-width: 1100px;
+  aspect-ratio: 16 / 9;
+}
+
+.modal-content video,
+.modal-content iframe {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: #000;
+}
+
+.close-button {
+  position: absolute;
+  top: -42px;
+  right: 0;
+  background: none;
+  border: 0;
+  color: white;
+  font-size: 36px;
+  cursor: pointer;
+}
+
+@media (max-width: 1100px) {
+  .video-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (max-width: 800px) {
+  .video-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 520px) {
+  .video-grid {
+    grid-template-columns: 1fr;
+  }
+}
