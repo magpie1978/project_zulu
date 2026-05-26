@@ -202,9 +202,3 @@ body {
   color: #fff;
   text-decoration: underline;
 }
-
-.video-grid {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 28px;
-}
