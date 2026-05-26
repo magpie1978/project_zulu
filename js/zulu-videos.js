@@ -11,8 +11,8 @@ document.addEventListener("DOMContentLoaded", loadZuluVideos);
 async function loadZuluVideos() {
   const { data, error } = await supabase
     .from("zulu_videos")
-    .select("*")
-    .order("id", { ascending: false });
+    .select("uid, film, url")
+    .order("uid", { ascending: true });
 
   if (error) {
     console.error("Error loading zulu_videos:", error);
@@ -26,45 +26,29 @@ async function loadZuluVideos() {
   }
 
   container.innerHTML = "";
-  data.forEach(video => container.appendChild(renderVideoCard(video)));
 
-  if (window.lucide) window.lucide.createIcons();
+  data.forEach(video => {
+    container.appendChild(renderVideoCard(video));
+  });
+
+  if (window.lucide) {
+    window.lucide.createIcons();
+  }
 }
 
 function renderVideoCard(video) {
   const card = document.createElement("article");
   card.className = "video-card";
 
-  const title =
-    video.title ||
-    video.Title ||
-    video.song ||
-    video.Song ||
-    "Untitled video";
-
-  const subtitle =
-    video.artist ||
-    video.Artist ||
-    video.country ||
-    video.Country ||
-    "";
-
-  const image =
-    video.image ||
-    video.Image ||
-    video.thumbnail ||
-    video.Thumbnail ||
-    "images/placeholder.jpg";
-
-  const videoUrl =
-    video.video_url ||
-    video.Video_URL ||
-    video.url ||
-    video.URL;
+  const title = video.film || "Untitled video";
+  const videoUrl = video.url || "";
 
   card.innerHTML = `
     <div class="thumb-wrap">
-      <img src="${escapeHTML(image)}" alt="${escapeHTML(title)}" class="thumb">
+      <div class="placeholder-thumb">
+        <i data-lucide="film"></i>
+      </div>
+
       <div class="play-icon">
         <i data-lucide="play"></i>
       </div>
@@ -72,17 +56,21 @@ function renderVideoCard(video) {
 
     <div class="video-info">
       <h3>${escapeHTML(title)}</h3>
-      <p>${escapeHTML(subtitle)}</p>
     </div>
   `;
 
-  card.addEventListener("click", () => openVideo(videoUrl));
+  card.addEventListener("click", () => {
+    openVideo(videoUrl);
+  });
 
   return card;
 }
 
 function openVideo(url) {
-  if (!url) return;
+  if (!url) {
+    console.warn("No video URL found.");
+    return;
+  }
 
   modal.classList.add("open");
 
@@ -93,7 +81,9 @@ function openVideo(url) {
   modalIframe.removeAttribute("src");
   modalIframe.style.display = "none";
 
-  if (url.endsWith(".mp4")) {
+  const cleanUrl = url.split("?")[0].toLowerCase();
+
+  if (cleanUrl.endsWith(".mp4")) {
     modalVideo.src = url;
     modalVideo.style.display = "block";
     modalVideo.play();
@@ -104,8 +94,17 @@ function openVideo(url) {
 }
 
 closeModal.addEventListener("click", closeVideoModal);
-modal.addEventListener("click", e => {
-  if (e.target === modal) closeVideoModal();
+
+modal.addEventListener("click", event => {
+  if (event.target === modal) {
+    closeVideoModal();
+  }
+});
+
+document.addEventListener("keydown", event => {
+  if (event.key === "Escape") {
+    closeVideoModal();
+  }
 });
 
 function closeVideoModal() {
