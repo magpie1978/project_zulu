@@ -27,9 +27,11 @@ body {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: 28px;
+  align-items: start;
 }
 
 .video-card {
+  height: 270px;
   background: #111;
   border-radius: 14px;
   overflow: hidden;
@@ -43,8 +45,8 @@ body {
 }
 
 .thumb-wrap {
+  height: 150px;
   position: relative;
-  aspect-ratio: 16 / 9;
   background: #1b1b1b;
 }
 
@@ -83,7 +85,9 @@ body {
 }
 
 .video-info {
+  height: 120px;
   padding: 14px 15px 16px;
+  overflow: hidden;
 }
 
 .video-info h3 {
