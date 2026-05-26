@@ -11,6 +11,7 @@ const closeModal = document.getElementById("closeModal");
 document.addEventListener("DOMContentLoaded", async () => {
   await loadActorSidebar();
   await loadZuluVideos();
+  attachModalEvents();
 });
 
 async function loadActorSidebar() {
@@ -23,6 +24,8 @@ async function loadActorSidebar() {
     console.error("Error loading actors:", error);
     return;
   }
+
+  if (!actorList) return;
 
   actorList.innerHTML = "";
 
@@ -121,19 +124,14 @@ function openVideo(url) {
     return;
   }
 
-  // Convert HiDrive share links to direct links
+  // Convert HiDrive share links to direct-download-style links
   if (url.includes("hidrive.ionos.com/lnk/")) {
     url = url.replace("/lnk/", "/dl/");
   }
 
   modal.classList.add("open");
 
-  modalVideo.pause();
-  modalVideo.removeAttribute("src");
-  modalVideo.style.display = "none";
-
-  modalIframe.removeAttribute("src");
-  modalIframe.style.display = "none";
+  resetModalSources();
 
   const cleanUrl = url.split("?")[0].toLowerCase();
 
@@ -152,14 +150,22 @@ function openVideo(url) {
 
     modalVideo.play().catch(err => {
       console.error("Video could not be played:", err);
+      console.error("Failed video URL:", url);
     });
 
     return;
   }
 
   if (isHiDriveSharePage) {
-    console.error("This HiDrive URL cannot be embedded. Use a /dl/ direct MP4 link instead:", url);
-    alert("This video link is a HiDrive share page and cannot be embedded. Use a /dl/ direct MP4 link instead.");
+    console.error(
+      "This HiDrive URL cannot be embedded. Use a /dl/ direct MP4 link instead:",
+      url
+    );
+
+    alert(
+      "This video link is a HiDrive share page and cannot be embedded. Use a /dl/ direct MP4 link instead."
+    );
+
     closeVideoModal();
     return;
   }
@@ -168,11 +174,52 @@ function openVideo(url) {
   modalIframe.style.display = "block";
 }
 
+function attachModalEvents() {
+  if (closeModal) {
+    closeModal.addEventListener("click", event => {
+      event.preventDefault();
+      event.stopPropagation();
+      closeVideoModal();
+    });
+  }
+
+  if (modal) {
+    modal.addEventListener("click", event => {
+      if (event.target === modal) {
+        closeVideoModal();
+      }
+    });
+  }
+
+  document.addEventListener("keydown", event => {
+    if (event.key === "Escape") {
+      closeVideoModal();
+    }
+  });
+}
+
 function closeVideoModal() {
   modal.classList.remove("open");
-  modalVideo.pause();
-  modalVideo.removeAttribute("src");
-  modalIframe.removeAttribute("src");
+  resetModalSources();
+}
+
+function resetModalSources() {
+  if (modalVideo) {
+    try {
+      modalVideo.pause();
+    } catch (e) {
+      // Ignore pause errors when no video is loaded
+    }
+
+    modalVideo.removeAttribute("src");
+    modalVideo.load();
+    modalVideo.style.display = "none";
+  }
+
+  if (modalIframe) {
+    modalIframe.removeAttribute("src");
+    modalIframe.style.display = "none";
+  }
 }
 
 function escapeHTML(value) {
