@@ -1,12 +1,49 @@
 import { supabase } from "./supabaseClient.js";
 
 const container = document.getElementById("video-container");
+const actorList = document.getElementById("actor-sidebar-list");
+
 const modal = document.getElementById("videoModal");
 const modalVideo = document.getElementById("modalVideo");
 const modalIframe = document.getElementById("modalIframe");
 const closeModal = document.getElementById("closeModal");
 
-document.addEventListener("DOMContentLoaded", loadZuluVideos);
+document.addEventListener("DOMContentLoaded", async () => {
+  await loadActorSidebar();
+  await loadZuluVideos();
+});
+
+async function loadActorSidebar() {
+  const { data, error } = await supabase
+    .from("zulu_distinct_actors")
+    .select("actor")
+    .order("actor", { ascending: true });
+
+  if (error) {
+    console.error("Error loading actors:", error);
+    return;
+  }
+
+  actorList.innerHTML = "";
+
+  const allLink = document.createElement("a");
+  allLink.href = "index.html";
+  allLink.className = "actor-link";
+  allLink.textContent = "All Videos";
+  actorList.appendChild(allLink);
+
+  data.forEach(row => {
+    const actor = row.actor;
+    if (!actor) return;
+
+    const a = document.createElement("a");
+    a.href = `index.html?actor=${encodeURIComponent(actor)}`;
+    a.className = "actor-link";
+    a.textContent = actor;
+
+    actorList.appendChild(a);
+  });
+}
 
 async function loadZuluVideos() {
   const actor = new URLSearchParams(window.location.search).get("actor");
@@ -33,9 +70,13 @@ async function loadZuluVideos() {
     return;
   }
 
+  const uniqueVideos = Array.from(
+    new Map(data.map(row => [row.uid, row])).values()
+  );
+
   container.innerHTML = "";
 
-  data.forEach(video => {
+  uniqueVideos.forEach(video => {
     container.appendChild(renderVideoCard(video));
   });
 
@@ -64,7 +105,6 @@ function renderVideoCard(video) {
 
     <div class="video-info">
       <h3>${escapeHTML(title)}</h3>
-      ${video.actor ? `<p>${escapeHTML(video.actor)}</p>` : ""}
     </div>
   `;
 
@@ -76,10 +116,7 @@ function renderVideoCard(video) {
 }
 
 function openVideo(url) {
-  if (!url) {
-    console.warn("No video URL found.");
-    return;
-  }
+  if (!url) return;
 
   modal.classList.add("open");
 
@@ -118,7 +155,6 @@ document.addEventListener("keydown", event => {
 
 function closeVideoModal() {
   modal.classList.remove("open");
-
   modalVideo.pause();
   modalVideo.removeAttribute("src");
   modalIframe.removeAttribute("src");
