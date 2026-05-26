@@ -127,9 +127,24 @@ function openVideo(url) {
   modalIframe.removeAttribute("src");
   modalIframe.style.display = "none";
 
-  const cleanUrl = url.split("?")[0].toLowerCase();
+  //const cleanUrl = url.split("?")[0].toLowerCase();
 
-  if (cleanUrl.endsWith(".mp4")) {
+  //if (cleanUrl.endsWith(".mp4")) {
+  //  modalVideo.src = url;
+  //  modalVideo.style.display = "block";
+  //  modalVideo.play();
+  //} else {
+  //  modalIframe.src = url;
+   // modalIframe.style.display = "block";
+ // }
+
+  const cleanUrl = url.split("?")[0].toLowerCase();
+  
+  const isDirectVideo =
+    cleanUrl.endsWith(".mp4") ||
+    cleanUrl.includes("hidrive.ionos.com/dl/");
+  
+  if (isDirectVideo) {
     modalVideo.src = url;
     modalVideo.style.display = "block";
     modalVideo.play();
@@ -137,6 +152,7 @@ function openVideo(url) {
     modalIframe.src = url;
     modalIframe.style.display = "block";
   }
+    
 }
 
 closeModal.addEventListener("click", closeVideoModal);
