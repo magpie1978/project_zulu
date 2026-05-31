@@ -202,3 +202,25 @@ body {
   color: #fff;
   text-decoration: underline;
 }
+
+body {
+  overflow: hidden;
+}
+
+.page-layout {
+  display: flex;
+  height: 100vh;
+}
+
+.actor-sidebar {
+  width: 240px;
+  height: 100vh;
+  overflow-y: auto;
+  flex-shrink: 0;
+}
+
+.main-content {
+  flex: 1;
+  height: 100vh;
+  overflow-y: auto;
+}
