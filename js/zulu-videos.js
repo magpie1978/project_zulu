@@ -30,9 +30,18 @@ async function loadActorSidebar() {
   actorList.innerHTML = "";
 
   const allLink = document.createElement("a");
-  allLink.href = "index.html";
+  allLink.href = "#";
   allLink.className = "actor-link";
   allLink.textContent = "All Videos";
+
+  allLink.addEventListener("click", async event => {
+    event.preventDefault();
+
+    history.pushState({}, "", "index.html");
+
+    await loadZuluVideos();
+  });
+
   actorList.appendChild(allLink);
 
   data.forEach(row => {
@@ -40,9 +49,21 @@ async function loadActorSidebar() {
     if (!actor) return;
 
     const a = document.createElement("a");
-    a.href = `index.html?actor=${encodeURIComponent(actor)}`;
+    a.href = "#";
     a.className = "actor-link";
     a.textContent = actor;
+
+    a.addEventListener("click", async event => {
+      event.preventDefault();
+
+      history.pushState(
+        {},
+        "",
+        `index.html?actor=${encodeURIComponent(actor)}`
+      );
+
+      await loadZuluVideos();
+    });
 
     actorList.appendChild(a);
   });
