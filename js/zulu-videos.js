@@ -15,6 +15,9 @@ document.addEventListener("DOMContentLoaded", async () => {
 });
 
 
+const actorSort = document.getElementById("actor-sort");
+let actorSidebarData = [];
+
 
 
 async function loadActorSidebar() {
@@ -65,52 +68,14 @@ async function loadActorSidebar() {
     actorCounts.get(row.actor).add(row.uid);
   });
 
-  const allLink = document.createElement("a");
-  allLink.href = "#";
-  allLink.className = "actor-link";
-  allLink.textContent = `All Videos (${allVideoIds.size})`;
+  actorSidebarData = [...actorCounts.entries()].map(([actor, videos]) => ({
+    actor,
+    videoCount: videos.size
+  }));
 
-  allLink.addEventListener("click", async event => {
-    event.preventDefault();
-    history.pushState({}, "", "index.html");
-    await loadZuluVideos();
-  });
-
-  actorList.appendChild(allLink);
-
-  [...actorCounts.entries()]
-    .sort(([a], [b]) => a.localeCompare(b))
-    .forEach(([actor, videos]) => {
-      const a = document.createElement("a");
-      a.href = "#";
-      a.className = "actor-link";
-
-      const nameSpan = document.createElement("span");
-      nameSpan.className = "actor-name";
-      nameSpan.textContent = actor;
-
-      const countSpan = document.createElement("span");
-      countSpan.className = "actor-count";
-      countSpan.textContent = ` (${videos.size})`;
-
-      a.appendChild(nameSpan);
-      a.appendChild(countSpan);
-
-      a.addEventListener("click", async event => {
-        event.preventDefault();
-
-        history.pushState(
-          {},
-          "",
-          `index.html?actor=${encodeURIComponent(actor)}`
-        );
-
-        await loadZuluVideos();
-      });
-
-      actorList.appendChild(a);
-    });
+  renderActorSidebar(allVideoIds.size);
 }
+
 
 
 async function loadZuluVideos() {
