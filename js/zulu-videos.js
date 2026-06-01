@@ -17,7 +17,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 async function loadActorSidebar() {
   const { data, error } = await supabase
     .from("zulu_distinct_actors")
-    .select("actor")
+    .select("actor, video_count")
     .order("actor", { ascending: true });
 
   if (error) {
@@ -51,7 +51,7 @@ async function loadActorSidebar() {
     const a = document.createElement("a");
     a.href = "#";
     a.className = "actor-link";
-    a.textContent = actor;
+    a.textContent = `${actor} (${row.video_count})`;
 
     a.addEventListener("click", async event => {
       event.preventDefault();
