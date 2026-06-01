@@ -29,15 +29,18 @@ body {
 .page-layout {
   display: flex;
   height: calc(100vh - 90px);
+  min-height: 0;
   overflow: hidden;
-  padding: 30px 50px 30px;
+  padding: 30px 50px;
   gap: 32px;
 }
 
 .actor-sidebar {
   width: 240px;
   height: 100%;
+  min-height: 0;
   overflow-y: auto;
+  overflow-x: hidden;
   flex-shrink: 0;
   background: #111;
   border-radius: 14px;
@@ -70,6 +73,8 @@ body {
 
 #video-container {
   flex: 1;
+  min-width: 0;
+  min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
   padding-right: 6px;
@@ -77,9 +82,10 @@ body {
 
 .video-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 28px;
   align-items: start;
+  align-content: start;
 }
 
 .video-card {
@@ -198,7 +204,7 @@ body {
 
 @media (max-width: 1100px) {
   .video-grid {
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
 
@@ -214,7 +220,7 @@ body {
   }
 
   .video-grid {
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
