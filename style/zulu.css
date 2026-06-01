@@ -2,14 +2,21 @@
   box-sizing: border-box;
 }
 
+html,
 body {
+  height: 100%;
   margin: 0;
+  overflow: hidden;
+}
+
+body {
   background: #050505;
   color: #fff;
   font-family: Arial, Helvetica, sans-serif;
 }
 
 .site-header {
+  height: 90px;
   padding: 32px 50px 10px;
 }
 
@@ -19,8 +26,53 @@ body {
   font-weight: 700;
 }
 
-.page-wrap {
-  padding: 30px 50px 70px;
+.page-layout {
+  display: flex;
+  height: calc(100vh - 90px);
+  overflow: hidden;
+  padding: 30px 50px 30px;
+  gap: 32px;
+}
+
+.actor-sidebar {
+  width: 240px;
+  height: 100%;
+  overflow-y: auto;
+  flex-shrink: 0;
+  background: #111;
+  border-radius: 14px;
+  padding: 18px;
+}
+
+.actor-sidebar h2 {
+  margin: 0 0 14px;
+  font-size: 18px;
+}
+
+.actor-link {
+  display: block;
+  color: #ddd;
+  text-decoration: none;
+  padding: 8px 0;
+  font-size: 14px;
+}
+
+.actor-link:hover {
+  color: #fff;
+  text-decoration: underline;
+}
+
+.actor-count {
+  margin-left: 8px;
+  color: #999;
+  font-size: 0.9em;
+}
+
+#video-container {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 6px;
 }
 
 .video-grid {
@@ -151,82 +203,32 @@ body {
 }
 
 @media (max-width: 800px) {
-  .video-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
-
-  .page-wrap,
   .site-header {
     padding-left: 24px;
     padding-right: 24px;
   }
-}
 
-@media (max-width: 520px) {
+  .page-layout {
+    padding-left: 24px;
+    padding-right: 24px;
+  }
+
   .video-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, 1fr);
   }
 }
 
+@media (max-width: 520px) {
+  .page-layout {
+    gap: 18px;
+    padding: 20px 16px;
+  }
 
-.page-layout {
-  display: grid;
-  grid-template-columns: 240px 1fr;
-  gap: 32px;
-  padding: 30px 50px 70px;
-}
+  .actor-sidebar {
+    width: 180px;
+  }
 
-.actor-sidebar {
-  background: #111;
-  border-radius: 14px;
-  padding: 18px;
-  align-self: start;
-  position: sticky;
-  top: 20px;
-}
-
-.actor-sidebar h2 {
-  margin: 0 0 14px;
-  font-size: 18px;
-}
-
-.actor-link {
-  display: block;
-  color: #ddd;
-  text-decoration: none;
-  padding: 8px 0;
-  font-size: 14px;
-}
-
-.actor-link:hover {
-  color: #fff;
-  text-decoration: underline;
-}
-
-.actor-count {
-  margin-left: 8px;
-  color: #999;
-  font-size: 0.9em;
-}
-
-body {
-  overflow: hidden;
-}
-
-.page-layout {
-  display: flex;
-  height: 100vh;
-  overflow: hidden;
-}
-
-.actor-sidebar {
-  width: 240px;
-  height: 100vh;
-  overflow-y: auto;
-  flex-shrink: 0;
-}
-
-.main-content {
-  flex: 1;
-  overflow-y: auto;
+  .video-grid {
+    grid-template-columns: 1fr;
+  }
 }
