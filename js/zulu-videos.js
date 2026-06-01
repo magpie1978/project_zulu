@@ -51,7 +51,17 @@ async function loadActorSidebar() {
     const a = document.createElement("a");
     a.href = "#";
     a.className = "actor-link";
-    a.textContent = `${actor} (${row.video_count})`;
+    
+    const nameSpan = document.createElement("span");
+      nameSpan.className = "actor-name";
+      nameSpan.textContent = actor;
+      
+    const countSpan = document.createElement("span");
+      countSpan.className = "actor-count";
+      countSpan.textContent = ` (${row.video_count || 0})`;
+      
+      a.appendChild(nameSpan);
+      a.appendChild(countSpan);
 
     a.addEventListener("click", async event => {
       event.preventDefault();
