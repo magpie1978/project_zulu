@@ -18,24 +18,45 @@ document.addEventListener("DOMContentLoaded", async () => {
 
 
 async function loadActorSidebar() {
-  const { data, error } = await supabase
-    .from("zulu_videos_with_actors")
-    .select("uid, actor")
-    .order("actor", { ascending: true });
-
-  if (error) {
-    console.error("Error loading actors:", error);
-    return;
-  }
-
   if (!actorList) return;
 
   actorList.innerHTML = "";
 
-  const actorCounts = new Map();
+  let allRows = [];
+  let from = 0;
+  const batchSize = 1000;
+  let keepGoing = true;
 
-  data.forEach(row => {
-    if (!row.actor || !row.uid) return;
+  while (keepGoing) {
+    const { data, error } = await supabase
+      .from("zulu_videos_with_actors")
+      .select("uid, actor")
+      .order("actor", { ascending: true })
+      .range(from, from + batchSize - 1);
+
+    if (error) {
+      console.error("Error loading actors:", error);
+      return;
+    }
+
+    allRows = allRows.concat(data || []);
+
+    if (!data || data.length < batchSize) {
+      keepGoing = false;
+    } else {
+      from += batchSize;
+    }
+  }
+
+  const actorCounts = new Map();
+  const allVideoIds = new Set();
+
+  allRows.forEach(row => {
+    if (!row.uid) return;
+
+    allVideoIds.add(row.uid);
+
+    if (!row.actor) return;
 
     if (!actorCounts.has(row.actor)) {
       actorCounts.set(row.actor, new Set());
@@ -47,7 +68,7 @@ async function loadActorSidebar() {
   const allLink = document.createElement("a");
   allLink.href = "#";
   allLink.className = "actor-link";
-  allLink.textContent = `All Videos (${new Set(data.map(row => row.uid)).size})`;
+  allLink.textContent = `All Videos (${allVideoIds.size})`;
 
   allLink.addEventListener("click", async event => {
     event.preventDefault();
