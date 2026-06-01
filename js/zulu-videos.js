@@ -12,6 +12,17 @@ document.addEventListener("DOMContentLoaded", async () => {
   await loadActorSidebar();
   await loadZuluVideos();
   attachModalEvents();
+
+  if (actorSort) {
+  actorSort.addEventListener("change", () => {
+    const currentScroll = actorList.parentElement.scrollTop;
+    renderActorSidebar(
+      actorSidebarData.reduce((total, actor) => total + actor.videoCount, 0)
+    );
+    actorList.parentElement.scrollTop = currentScroll;
+  });
+}
+  
 });
 
 
@@ -75,6 +86,85 @@ async function loadActorSidebar() {
 
   renderActorSidebar(allVideoIds.size);
 }
+
+
+
+
+
+
+function renderActorSidebar(totalVideoCount) {
+  if (!actorList) return;
+
+  actorList.innerHTML = "";
+
+  const sortMode = actorSort?.value || "actor-asc";
+
+  const sortedActors = [...actorSidebarData].sort((a, b) => {
+    if (sortMode === "actor-asc") {
+      return a.actor.localeCompare(b.actor);
+    }
+
+    if (sortMode === "actor-desc") {
+      return b.actor.localeCompare(a.actor);
+    }
+
+    if (sortMode === "count-desc") {
+      return b.videoCount - a.videoCount || a.actor.localeCompare(b.actor);
+    }
+
+    if (sortMode === "count-asc") {
+      return a.videoCount - b.videoCount || a.actor.localeCompare(b.actor);
+    }
+
+    return a.actor.localeCompare(b.actor);
+  });
+
+  const allLink = document.createElement("a");
+  allLink.href = "#";
+  allLink.className = "actor-link";
+  allLink.textContent = `All Videos (${totalVideoCount})`;
+
+  allLink.addEventListener("click", async event => {
+    event.preventDefault();
+    history.pushState({}, "", "index.html");
+    await loadZuluVideos();
+  });
+
+  actorList.appendChild(allLink);
+
+  sortedActors.forEach(({ actor, videoCount }) => {
+    const a = document.createElement("a");
+    a.href = "#";
+    a.className = "actor-link";
+
+    const nameSpan = document.createElement("span");
+    nameSpan.className = "actor-name";
+    nameSpan.textContent = actor;
+
+    const countSpan = document.createElement("span");
+    countSpan.className = "actor-count";
+    countSpan.textContent = ` (${videoCount})`;
+
+    a.appendChild(nameSpan);
+    a.appendChild(countSpan);
+
+    a.addEventListener("click", async event => {
+      event.preventDefault();
+
+      history.pushState(
+        {},
+        "",
+        `index.html?actor=${encodeURIComponent(actor)}`
+      );
+
+      await loadZuluVideos();
+    });
+
+    actorList.appendChild(a);
+  });
+}
+
+
 
 
 
