@@ -14,10 +14,13 @@ document.addEventListener("DOMContentLoaded", async () => {
   attachModalEvents();
 });
 
+
+
+
 async function loadActorSidebar() {
   const { data, error } = await supabase
-    .from("zulu_distinct_actors")
-    .select("actor, video_count")
+    .from("zulu_videos_with_actors")
+    .select("uid, actor")
     .order("actor", { ascending: true });
 
   if (error) {
@@ -29,55 +32,65 @@ async function loadActorSidebar() {
 
   actorList.innerHTML = "";
 
+  const actorCounts = new Map();
+
+  data.forEach(row => {
+    if (!row.actor || !row.uid) return;
+
+    if (!actorCounts.has(row.actor)) {
+      actorCounts.set(row.actor, new Set());
+    }
+
+    actorCounts.get(row.actor).add(row.uid);
+  });
+
   const allLink = document.createElement("a");
   allLink.href = "#";
   allLink.className = "actor-link";
-  allLink.textContent = "All Videos";
+  allLink.textContent = `All Videos (${new Set(data.map(row => row.uid)).size})`;
 
   allLink.addEventListener("click", async event => {
     event.preventDefault();
-
     history.pushState({}, "", "index.html");
-
     await loadZuluVideos();
   });
 
   actorList.appendChild(allLink);
 
-  data.forEach(row => {
-    const actor = row.actor;
-    if (!actor) return;
+  [...actorCounts.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .forEach(([actor, videos]) => {
+      const a = document.createElement("a");
+      a.href = "#";
+      a.className = "actor-link";
 
-    const a = document.createElement("a");
-    a.href = "#";
-    a.className = "actor-link";
-    
-    const nameSpan = document.createElement("span");
+      const nameSpan = document.createElement("span");
       nameSpan.className = "actor-name";
       nameSpan.textContent = actor;
-      
-    const countSpan = document.createElement("span");
+
+      const countSpan = document.createElement("span");
       countSpan.className = "actor-count";
-      countSpan.textContent = ` (${row.video_count || 0})`;
-      
+      countSpan.textContent = ` (${videos.size})`;
+
       a.appendChild(nameSpan);
       a.appendChild(countSpan);
 
-    a.addEventListener("click", async event => {
-      event.preventDefault();
+      a.addEventListener("click", async event => {
+        event.preventDefault();
 
-      history.pushState(
-        {},
-        "",
-        `index.html?actor=${encodeURIComponent(actor)}`
-      );
+        history.pushState(
+          {},
+          "",
+          `index.html?actor=${encodeURIComponent(actor)}`
+        );
 
-      await loadZuluVideos();
+        await loadZuluVideos();
+      });
+
+      actorList.appendChild(a);
     });
-
-    actorList.appendChild(a);
-  });
 }
+
 
 async function loadZuluVideos() {
   const actor = new URLSearchParams(window.location.search).get("actor");
