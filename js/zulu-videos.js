@@ -28,14 +28,11 @@ document.addEventListener("DOMContentLoaded", async () => {
   });
 }
 
-  if (searchInput) {
+if (searchInput) {
   searchInput.addEventListener("input", () => {
-    const term = searchInput.value.trim().toLowerCase();
-
-    if (!term) {
-      renderVideos(allVideos);
-      return;
-    }
+    applySearchFilter();
+  });
+}
 
     const filtered = allVideos.filter(video => {
       const film = (video.film || "").toLowerCase();
@@ -232,17 +229,30 @@ async function loadZuluVideos() {
     return;
   }
 
-  const uniqueVideos = Array.from(
-    new Map(data.map(row => [row.uid, row])).values()
-  );
+  const groupedVideos = {};
+
+  data.forEach(row => {
+    if (!row.uid) return;
+
+    if (!groupedVideos[row.uid]) {
+      groupedVideos[row.uid] = {
+        uid: row.uid,
+        film: row.film,
+        url: row.url,
+        actors: []
+      };
+    }
+
+    if (row.actor && !groupedVideos[row.uid].actors.includes(row.actor)) {
+      groupedVideos[row.uid].actors.push(row.actor);
+    }
+  });
+
+  const uniqueVideos = Object.values(groupedVideos);
 
   allVideos = uniqueVideos;
 
-  renderVideos(uniqueVideos);
-
-  if (window.lucide) {
-    window.lucide.createIcons();
-  }
+  applySearchFilter();
 }
 
 
@@ -405,4 +415,22 @@ function escapeHTML(value) {
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;");
+}
+
+function applySearchFilter() {
+  const term = searchInput?.value.trim().toLowerCase() || "";
+
+  if (!term) {
+    renderVideos(allVideos);
+    return;
+  }
+
+  const filtered = allVideos.filter(video => {
+    const film = (video.film || "").toLowerCase();
+    const actors = (video.actors || []).join(" ").toLowerCase();
+
+    return film.includes(term) || actors.includes(term);
+  });
+
+  renderVideos(filtered);
 }
