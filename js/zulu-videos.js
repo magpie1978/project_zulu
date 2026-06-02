@@ -8,6 +8,11 @@ const modalVideo = document.getElementById("modalVideo");
 const modalIframe = document.getElementById("modalIframe");
 const closeModal = document.getElementById("closeModal");
 
+const searchInput = document.getElementById("searchInput");
+
+let allVideos = [];
+let currentActor = null;
+
 document.addEventListener("DOMContentLoaded", async () => {
   await loadActorSidebar();
   await loadZuluVideos();
@@ -22,8 +27,42 @@ document.addEventListener("DOMContentLoaded", async () => {
     actorList.parentElement.scrollTop = currentScroll;
   });
 }
+
+  if (searchInput) {
+  searchInput.addEventListener("input", () => {
+    const term = searchInput.value.trim().toLowerCase();
+
+    if (!term) {
+      renderVideos(allVideos);
+      return;
+    }
+
+    const filtered = allVideos.filter(video => {
+      const film = (video.film || "").toLowerCase();
+      const actor = (video.actor || "").toLowerCase();
+
+      return (
+        film.includes(term) ||
+        actor.includes(term)
+      );
+    });
+
+    renderVideos(filtered);
+  });
+}
   
 });
+
+
+
+
+
+
+
+
+
+
+
 
 
 const actorSort = document.getElementById("actor-sort");
@@ -197,9 +236,26 @@ async function loadZuluVideos() {
     new Map(data.map(row => [row.uid, row])).values()
   );
 
+  allVideos = uniqueVideos;
+
+  renderVideos(uniqueVideos);
+
+  if (window.lucide) {
+    window.lucide.createIcons();
+  }
+}
+
+
+function renderVideos(videos) {
   container.innerHTML = "";
 
-  uniqueVideos.forEach(video => {
+  if (!videos.length) {
+    container.innerHTML =
+      '<p class="empty">No matching videos found.</p>';
+    return;
+  }
+
+  videos.forEach(video => {
     container.appendChild(renderVideoCard(video));
   });
 
@@ -207,6 +263,8 @@ async function loadZuluVideos() {
     window.lucide.createIcons();
   }
 }
+
+
 
 function renderVideoCard(video) {
   const card = document.createElement("article");
