@@ -2,16 +2,17 @@ import { supabase } from "./supabaseClient.js";
 
 const container = document.getElementById("video-container");
 const actorList = document.getElementById("actor-sidebar-list");
+const actorSort = document.getElementById("actor-sort");
+const searchInput = document.getElementById("searchInput");
 
 const modal = document.getElementById("videoModal");
 const modalVideo = document.getElementById("modalVideo");
 const modalIframe = document.getElementById("modalIframe");
 const closeModal = document.getElementById("closeModal");
 
-const searchInput = document.getElementById("searchInput");
-
 let allVideos = [];
-let currentActor = null;
+let actorSidebarData = [];
+let totalVideoCount = 0;
 
 document.addEventListener("DOMContentLoaded", async () => {
   await loadActorSidebar();
@@ -19,59 +20,26 @@ document.addEventListener("DOMContentLoaded", async () => {
   attachModalEvents();
 
   if (actorSort) {
-  actorSort.addEventListener("change", () => {
-    const currentScroll = actorList.parentElement.scrollTop;
-    renderActorSidebar(
-      actorSidebarData.reduce((total, actor) => total + actor.videoCount, 0)
-    );
-    actorList.parentElement.scrollTop = currentScroll;
-  });
-}
+    actorSort.addEventListener("change", () => {
+      const sidebar = actorList?.parentElement;
+      const currentScroll = sidebar ? sidebar.scrollTop : 0;
 
-if (searchInput) {
-  searchInput.addEventListener("input", () => {
-    applySearchFilter();
-  });
-}
+      renderActorSidebar();
 
-    const filtered = allVideos.filter(video => {
-      const film = (video.film || "").toLowerCase();
-      const actor = (video.actor || "").toLowerCase();
-
-      return (
-        film.includes(term) ||
-        actor.includes(term)
-      );
+      if (sidebar) {
+        sidebar.scrollTop = currentScroll;
+      }
     });
+  }
 
-    renderVideos(filtered);
-  });
-}
-  
+  if (searchInput) {
+    searchInput.addEventListener("input", () => {
+      applySearchFilter();
+    });
+  }
 });
 
-
-
-
-
-
-
-
-
-
-
-
-
-const actorSort = document.getElementById("actor-sort");
-let actorSidebarData = [];
-
-
-
-async function loadActorSidebar() {
-  if (!actorList) return;
-
-  actorList.innerHTML = "";
-
+async function fetchAllRows({ table, select, orderColumn }) {
   let allRows = [];
   let from = 0;
   const batchSize = 1000;
@@ -79,14 +47,13 @@ async function loadActorSidebar() {
 
   while (keepGoing) {
     const { data, error } = await supabase
-      .from("zulu_videos_with_actors")
-      .select("uid, actor")
-      .order("actor", { ascending: true })
+      .from(table)
+      .select(select)
+      .order(orderColumn, { ascending: true })
       .range(from, from + batchSize - 1);
 
     if (error) {
-      console.error("Error loading actors:", error);
-      return;
+      throw error;
     }
 
     allRows = allRows.concat(data || []);
@@ -98,37 +65,53 @@ async function loadActorSidebar() {
     }
   }
 
-  const actorCounts = new Map();
-  const allVideoIds = new Set();
-
-  allRows.forEach(row => {
-    if (!row.uid) return;
-
-    allVideoIds.add(row.uid);
-
-    if (!row.actor) return;
-
-    if (!actorCounts.has(row.actor)) {
-      actorCounts.set(row.actor, new Set());
-    }
-
-    actorCounts.get(row.actor).add(row.uid);
-  });
-
-  actorSidebarData = [...actorCounts.entries()].map(([actor, videos]) => ({
-    actor,
-    videoCount: videos.size
-  }));
-
-  renderActorSidebar(allVideoIds.size);
+  return allRows;
 }
 
+async function loadActorSidebar() {
+  if (!actorList) return;
 
+  actorList.innerHTML = "";
 
+  try {
+    const allRows = await fetchAllRows({
+      table: "zulu_videos_with_actors",
+      select: "uid, actor",
+      orderColumn: "actor"
+    });
 
+    const actorCounts = new Map();
+    const allVideoIds = new Set();
 
+    allRows.forEach(row => {
+      if (!row.uid) return;
 
-function renderActorSidebar(totalVideoCount) {
+      allVideoIds.add(row.uid);
+
+      if (!row.actor) return;
+
+      if (!actorCounts.has(row.actor)) {
+        actorCounts.set(row.actor, new Set());
+      }
+
+      actorCounts.get(row.actor).add(row.uid);
+    });
+
+    totalVideoCount = allVideoIds.size;
+
+    actorSidebarData = [...actorCounts.entries()].map(([actor, videos]) => ({
+      actor,
+      videoCount: videos.size
+    }));
+
+    renderActorSidebar();
+  } catch (error) {
+    console.error("Error loading actors:", error);
+    actorList.innerHTML = `<p class="error">Could not load actors.</p>`;
+  }
+}
+
+function renderActorSidebar() {
   if (!actorList) return;
 
   actorList.innerHTML = "";
@@ -136,10 +119,6 @@ function renderActorSidebar(totalVideoCount) {
   const sortMode = actorSort?.value || "actor-asc";
 
   const sortedActors = [...actorSidebarData].sort((a, b) => {
-    if (sortMode === "actor-asc") {
-      return a.actor.localeCompare(b.actor);
-    }
-
     if (sortMode === "actor-desc") {
       return b.actor.localeCompare(a.actor);
     }
@@ -200,20 +179,18 @@ function renderActorSidebar(totalVideoCount) {
   });
 }
 
-
-
-
-
 async function loadZuluVideos() {
-  const actor = new URLSearchParams(window.location.search).get("actor");
+  if (!container) return;
+
+  const selectedActor = new URLSearchParams(window.location.search).get("actor");
 
   let query = supabase
     .from("zulu_videos_with_actors")
     .select("uid, film, url, actor")
     .order("film", { ascending: true });
 
-  if (actor) {
-    query = query.eq("actor", actor);
+  if (selectedActor) {
+    query = query.eq("actor", selectedActor);
   }
 
   const { data, error } = await query;
@@ -225,6 +202,7 @@ async function loadZuluVideos() {
   }
 
   if (!data || data.length === 0) {
+    allVideos = [];
     container.innerHTML = `<p class="empty">No videos found.</p>`;
     return;
   }
@@ -248,20 +226,36 @@ async function loadZuluVideos() {
     }
   });
 
-  const uniqueVideos = Object.values(groupedVideos);
-
-  allVideos = uniqueVideos;
+  allVideos = Object.values(groupedVideos);
 
   applySearchFilter();
 }
 
+function applySearchFilter() {
+  const term = searchInput?.value.trim().toLowerCase() || "";
+
+  if (!term) {
+    renderVideos(allVideos);
+    return;
+  }
+
+  const filtered = allVideos.filter(video => {
+    const film = (video.film || "").toLowerCase();
+    const actors = (video.actors || []).join(" ").toLowerCase();
+
+    return film.includes(term) || actors.includes(term);
+  });
+
+  renderVideos(filtered);
+}
 
 function renderVideos(videos) {
+  if (!container) return;
+
   container.innerHTML = "";
 
   if (!videos.length) {
-    container.innerHTML =
-      '<p class="empty">No matching videos found.</p>';
+    container.innerHTML = `<p class="empty">No matching videos found.</p>`;
     return;
   }
 
@@ -273,8 +267,6 @@ function renderVideos(videos) {
     window.lucide.createIcons();
   }
 }
-
-
 
 function renderVideoCard(video) {
   const card = document.createElement("article");
@@ -312,7 +304,6 @@ function openVideo(url) {
     return;
   }
 
-  // Convert HiDrive share links to direct-download-style links
   if (url.includes("hidrive.ionos.com/lnk/")) {
     url = url.replace("/lnk/", "/dl/");
   }
@@ -345,11 +336,6 @@ function openVideo(url) {
   }
 
   if (isHiDriveSharePage) {
-    console.error(
-      "This HiDrive URL cannot be embedded. Use a /dl/ direct MP4 link instead:",
-      url
-    );
-
     alert(
       "This video link is a HiDrive share page and cannot be embedded. Use a /dl/ direct MP4 link instead."
     );
@@ -395,9 +381,7 @@ function resetModalSources() {
   if (modalVideo) {
     try {
       modalVideo.pause();
-    } catch (e) {
-      // Ignore pause errors when no video is loaded
-    }
+    } catch (e) {}
 
     modalVideo.removeAttribute("src");
     modalVideo.load();
@@ -415,22 +399,4 @@ function escapeHTML(value) {
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;");
-}
-
-function applySearchFilter() {
-  const term = searchInput?.value.trim().toLowerCase() || "";
-
-  if (!term) {
-    renderVideos(allVideos);
-    return;
-  }
-
-  const filtered = allVideos.filter(video => {
-    const film = (video.film || "").toLowerCase();
-    const actors = (video.actors || []).join(" ").toLowerCase();
-
-    return film.includes(term) || actors.includes(term);
-  });
-
-  renderVideos(filtered);
 }
