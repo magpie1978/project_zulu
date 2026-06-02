@@ -17,13 +17,35 @@ body {
 
 .site-header {
   height: 90px;
-  padding: 32px 50px 10px;
+  padding: 20px 50px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
 }
 
 .site-header h1 {
   margin: 0;
   font-size: 34px;
   font-weight: 700;
+}
+
+.header-search {
+  width: 320px;
+}
+
+#searchInput {
+  width: 100%;
+  padding: 10px 14px;
+  border: 1px solid #333;
+  border-radius: 8px;
+  background: #111;
+  color: #fff;
+  font-size: 14px;
+}
+
+#searchInput:focus {
+  outline: none;
+  border-color: #666;
 }
 
 .page-layout {
