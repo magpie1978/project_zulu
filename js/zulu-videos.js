@@ -190,8 +190,26 @@ async function loadZuluVideos() {
 
   const { data, error } = await supabase
     .from("zulu_videos_search")
-    .select("uid, film, url, actors, actor_search, tags, views")
+    .select("uid, film, url, actors, actor_search, tags")
     .order("film", { ascending: true });
+
+  const { data: countsData, error: countsError } = await supabase
+  .from("zulu_video_counts")
+  .select("video_uid, views");
+
+if (countsError) {
+  console.error("Error loading video counts:", countsError);
+}
+
+
+  const viewCounts = new Map();
+
+(countsData || []).forEach(row => {
+  viewCounts.set(Number(row.video_uid), Number(row.views));
+});
+
+
+  
 
   if (error) {
     console.error("Error loading zulu videos:", error);
@@ -205,7 +223,10 @@ async function loadZuluVideos() {
     return;
   }
 
-  allVideos = data;
+ allVideos = (data || []).map(video => ({
+  ...video,
+  views: viewCounts.get(Number(video.uid)) || 0
+}));
 
   if (selectedActor) {
     allVideos = allVideos.filter(video =>
