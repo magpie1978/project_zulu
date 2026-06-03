@@ -10,6 +10,10 @@ const modalVideo = document.getElementById("modalVideo");
 const modalIframe = document.getElementById("modalIframe");
 const closeModal = document.getElementById("closeModal");
 
+let activeVideoUid = null;
+let viewTimer = null;
+let viewLogged = false;
+
 let allVideos = [];
 let actorSidebarData = [];
 let totalVideoCount = 0;
@@ -186,7 +190,7 @@ async function loadZuluVideos() {
 
   const { data, error } = await supabase
     .from("zulu_videos_search")
-    .select("uid, film, url, actors, actor_search, tags")
+    .select("uid, film, url, actors, actor_search, tags, views")
     .order("film", { ascending: true });
 
   if (error) {
@@ -232,6 +236,10 @@ function applySearchFilter() {
 }
 
 function renderVideos(videos) {
+
+  const views = video.views || 0;
+
+  
   if (!container) return;
 
   container.innerHTML = "";
@@ -303,15 +311,16 @@ function renderVideoCard(video) {
 `;
 
   card.addEventListener("click", () => {
-    openVideo(videoUrl);
-  });
+    openVideo(videoUrl, video.uid);
+    });
 
+  
   return card;
 }
 
 
 
-function openVideo(url) {
+function openVideo(url, uid) {
   if (!url) {
     console.warn("No video URL found.");
     return;
@@ -321,6 +330,15 @@ function openVideo(url) {
     url = url.replace("/lnk/", "/dl/");
   }
 
+  activeVideoUid = uid;
+viewLogged = false;
+
+if (viewTimer) {
+  clearTimeout(viewTimer);
+  viewTimer = null;
+}
+
+  
   modal.classList.add("open");
 
   resetModalSources();
@@ -345,6 +363,11 @@ function openVideo(url) {
       console.error("Failed video URL:", url);
     });
 
+    viewTimer = setTimeout(() => {
+  logVideoView(activeVideoUid);
+}, 15000);
+
+    
     return;
   }
 
@@ -387,6 +410,15 @@ function attachModalEvents() {
 
 function closeVideoModal() {
   modal.classList.remove("open");
+
+  if (viewTimer) {
+    clearTimeout(viewTimer);
+    viewTimer = null;
+  }
+
+  activeVideoUid = null;
+  viewLogged = false;
+
   resetModalSources();
 }
 
@@ -427,4 +459,22 @@ function getTagColor(tag) {
   };
 
   return colors[tag] || "#444";
+}
+
+
+async function logVideoView(uid) {
+  if (!uid || viewLogged) return;
+
+  viewLogged = true;
+
+  const { error } = await supabase
+    .from("zulu_video_views")
+    .insert({
+      video_uid: uid,
+      watch_seconds: 15
+    });
+
+  if (error) {
+    console.error("Error logging video view:", error);
+  }
 }
