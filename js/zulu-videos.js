@@ -256,9 +256,18 @@ function renderVideoCard(video) {
 
   const title = video.film || "Untitled video";
   const videoUrl = video.url || "";
+  const thumbnailUrl = `/thumbnails/${video.uid}.png`;
 
   card.innerHTML = `
     <div class="thumb-wrap">
+      <img
+        class="video-thumbnail"
+        src="${thumbnailUrl}"
+        alt="${escapeHTML(title)} thumbnail"
+        loading="lazy"
+        onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';"
+      >
+
       <div class="placeholder-thumb">
         <i data-lucide="film"></i>
       </div>
@@ -279,6 +288,8 @@ function renderVideoCard(video) {
 
   return card;
 }
+
+
 
 function openVideo(url) {
   if (!url) {
