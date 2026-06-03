@@ -185,8 +185,8 @@ async function loadZuluVideos() {
   const selectedActor = new URLSearchParams(window.location.search).get("actor");
 
   let query = supabase
-    .from("zulu_videos_with_actors")
-    .select("uid, film, url, actor")
+    .from("zulu_videos_search")
+    .select("uid, film, url, actors, actor_search")
     .order("film", { ascending: true });
 
   if (selectedActor) {
@@ -241,7 +241,7 @@ function applySearchFilter() {
 
   const filtered = allVideos.filter(video => {
     const film = (video.film || "").toLowerCase();
-    const actors = (video.actors || []).join(" ").toLowerCase();
+    const actors = (video.actor_search || "").toLowerCase();
 
     return film.includes(term) || actors.includes(term);
   });
