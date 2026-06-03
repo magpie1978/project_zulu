@@ -256,7 +256,7 @@ function renderVideoCard(video) {
 
   const title = video.film || "Untitled video";
   const videoUrl = video.url || "";
-  const thumbnailUrl = `/thumbnails/${video.uid}.png`;
+  const thumbnailUrl = `/images/${video.uid}.png`;
 
   card.innerHTML = `
     <div class="thumb-wrap">
