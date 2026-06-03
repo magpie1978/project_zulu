@@ -184,16 +184,10 @@ async function loadZuluVideos() {
 
   const selectedActor = new URLSearchParams(window.location.search).get("actor");
 
-  let query = supabase
+  const { data, error } = await supabase
     .from("zulu_videos_search")
     .select("uid, film, url, actors, actor_search")
     .order("film", { ascending: true });
-
-  if (selectedActor) {
-    query = query.eq("actor", selectedActor);
-  }
-
-  const { data, error } = await query;
 
   if (error) {
     console.error("Error loading zulu videos:", error);
@@ -207,26 +201,14 @@ async function loadZuluVideos() {
     return;
   }
 
-  const groupedVideos = {};
+  allVideos = data;
 
-  data.forEach(row => {
-    if (!row.uid) return;
-
-    if (!groupedVideos[row.uid]) {
-      groupedVideos[row.uid] = {
-        uid: row.uid,
-        film: row.film,
-        url: row.url,
-        actors: []
-      };
-    }
-
-    if (row.actor && !groupedVideos[row.uid].actors.includes(row.actor)) {
-      groupedVideos[row.uid].actors.push(row.actor);
-    }
-  });
-
-  allVideos = Object.values(groupedVideos);
+  if (selectedActor) {
+    allVideos = allVideos.filter(video =>
+      Array.isArray(video.actors) &&
+      video.actors.includes(selectedActor)
+    );
+  }
 
   applySearchFilter();
 }
