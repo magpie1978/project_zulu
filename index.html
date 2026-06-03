@@ -10,51 +10,36 @@
 
 <body>
   <header class="site-header">
-  <h1>Zulu Videos</h1>
+    <h1>Zulu Videos</h1>
 
-  <div class="header-search">
-    <input
-      type="text"
-      id="searchInput"
-      placeholder="Search actors or videos..."
-      autocomplete="off"
-    >
-  </div>
+    <div class="header-search">
+      <input
+        type="text"
+        id="searchInput"
+        placeholder="Search actors or videos..."
+        autocomplete="off"
+      >
+    </div>
   </header>
 
-
   <main class="page-layout">
-
     <aside class="actor-sidebar">
       <h2>Actors</h2>
+
       <select id="actor-sort">
         <option value="actor-asc">Actor A-Z</option>
         <option value="actor-desc">Actor Z-A</option>
         <option value="count-desc">Most videos</option>
         <option value="count-asc">Fewest videos</option>
       </select>
+
       <div id="actor-sidebar-list"></div>
     </aside>
-  
-    <div class="main-content">
-      <div class="main-content">
-        <section id="video-container" class="video-grid"></section>
-      </div>
-      <div class="video-info">
-        <h3>${escapeHTML(title)}</h3>
-        <div class="video-meta">
-          <div class="video-views">
-            👁 ${views.toLocaleString()}
-          </div>
 
-    <div class="video-tags">
-      ${tagsHtml}
-    </div>
-  </div>
-</div>
+    <div class="main-content">
+      <section id="video-container" class="video-grid"></section>
     </div>
   </main>
-
 
   <div id="videoModal" class="modal">
     <div class="modal-content">
