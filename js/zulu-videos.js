@@ -228,18 +228,19 @@ function applySearchFilter() {
   const filtered = allVideos.filter(video => {
     const film = (video.film || "").toLowerCase();
     const actors = (video.actor_search || "").toLowerCase();
+    const tags = (video.tags || "").toLowerCase();
 
-    return film.includes(term) || actors.includes(term);
+    return (
+      film.includes(term) ||
+      actors.includes(term) ||
+      tags.includes(term)
+    );
   });
 
   renderVideos(filtered);
 }
 
 function renderVideos(videos) {
-
-  const views = video.views || 0;
-
-  
   if (!container) return;
 
   container.innerHTML = "";
@@ -265,23 +266,24 @@ function renderVideoCard(video) {
   const title = video.film || "Untitled video";
   const videoUrl = video.url || "";
   const thumbnailUrl = `/images/${video.uid}.png`;
-
+  const views = Number(video.views || 0);
 
   const tags = (video.tags || "")
-  .split(",")
-  .map(t => t.trim())
-  .filter(Boolean);
+    .split(",")
+    .map(tag => tag.trim())
+    .filter(Boolean);
 
   const tagsHtml = tags
-    .map(tag =>
-      `<span
-        class="tag-pill"
-        style="background:${getTagColor(tag)}"
-      >${escapeHTML(tag)}</span>`
-    )
+    .map(tag => {
+      return `
+        <span
+          class="tag-pill"
+          style="background:${getTagColor(tag)}"
+        >${escapeHTML(tag)}</span>
+      `;
+    })
     .join("");
 
-  
   card.innerHTML = `
     <div class="thumb-wrap">
       <img
@@ -301,24 +303,27 @@ function renderVideoCard(video) {
       </div>
     </div>
 
-<div class="video-info">
-  <h3>${escapeHTML(title)}</h3>
+    <div class="video-info">
+      <h3>${escapeHTML(title)}</h3>
 
-  <div class="video-tags">
-    ${tagsHtml}
-  </div>
-</div>
-`;
+      <div class="video-meta">
+        <div class="video-views">
+          👁 ${views.toLocaleString()}
+        </div>
+
+        <div class="video-tags">
+          ${tagsHtml}
+        </div>
+      </div>
+    </div>
+  `;
 
   card.addEventListener("click", () => {
     openVideo(videoUrl, video.uid);
-    });
+  });
 
-  
   return card;
 }
-
-
 
 function openVideo(url, uid) {
   if (!url) {
@@ -331,14 +336,13 @@ function openVideo(url, uid) {
   }
 
   activeVideoUid = uid;
-viewLogged = false;
+  viewLogged = false;
 
-if (viewTimer) {
-  clearTimeout(viewTimer);
-  viewTimer = null;
-}
+  if (viewTimer) {
+    clearTimeout(viewTimer);
+    viewTimer = null;
+  }
 
-  
   modal.classList.add("open");
 
   resetModalSources();
@@ -364,10 +368,9 @@ if (viewTimer) {
     });
 
     viewTimer = setTimeout(() => {
-  logVideoView(activeVideoUid);
-}, 15000);
+      logVideoView(activeVideoUid);
+    }, 15000);
 
-    
     return;
   }
 
@@ -426,7 +429,9 @@ function resetModalSources() {
   if (modalVideo) {
     try {
       modalVideo.pause();
-    } catch (e) {}
+    } catch (e) {
+      // Ignore pause errors
+    }
 
     modalVideo.removeAttribute("src");
     modalVideo.load();
@@ -438,29 +443,6 @@ function resetModalSources() {
     modalIframe.style.display = "none";
   }
 }
-
-function escapeHTML(value) {
-  return String(value ?? "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
-}
-
-
-function getTagColor(tag) {
-  const colors = {
-    tag1: "#2563eb",
-    tag2: "#dc2626",
-    tag3: "#16a34a",
-    Amateur: "#9333ea",
-    Bareback: "#ea580c",
-    Group: "#0891b2",
-    Solo: "#64748b"
-  };
-
-  return colors[tag] || "#444";
-}
-
 
 async function logVideoView(uid) {
   if (!uid || viewLogged) return;
@@ -477,4 +459,25 @@ async function logVideoView(uid) {
   if (error) {
     console.error("Error logging video view:", error);
   }
+}
+
+function getTagColor(tag) {
+  const colors = {
+    tag1: "#2563eb",
+    tag2: "#dc2626",
+    tag3: "#16a34a",
+    Amateur: "#9333ea",
+    Bareback: "#ea580c",
+    Group: "#0891b2",
+    Solo: "#64748b"
+  };
+
+  return colors[tag] || "#444";
+}
+
+function escapeHTML(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
 }
