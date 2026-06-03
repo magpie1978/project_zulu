@@ -186,7 +186,7 @@ async function loadZuluVideos() {
 
   const { data, error } = await supabase
     .from("zulu_videos_search")
-    .select("uid, film, url, actors, actor_search")
+    .select("uid, film, url, actors, actor_search, tags")
     .order("film", { ascending: true });
 
   if (error) {
@@ -258,6 +258,22 @@ function renderVideoCard(video) {
   const videoUrl = video.url || "";
   const thumbnailUrl = `/images/${video.uid}.png`;
 
+
+  const tags = (video.tags || "")
+  .split(",")
+  .map(t => t.trim())
+  .filter(Boolean);
+
+  const tagsHtml = tags
+    .map(tag =>
+      `<span
+        class="tag-pill"
+        style="background:${getTagColor(tag)}"
+      >${escapeHTML(tag)}</span>`
+    )
+    .join("");
+
+  
   card.innerHTML = `
     <div class="thumb-wrap">
       <img
@@ -277,10 +293,14 @@ function renderVideoCard(video) {
       </div>
     </div>
 
-    <div class="video-info">
-      <h3>${escapeHTML(title)}</h3>
-    </div>
-  `;
+<div class="video-info">
+  <h3>${escapeHTML(title)}</h3>
+
+  <div class="video-tags">
+    ${tagsHtml}
+  </div>
+</div>
+`;
 
   card.addEventListener("click", () => {
     openVideo(videoUrl);
@@ -392,4 +412,19 @@ function escapeHTML(value) {
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;");
+}
+
+
+function getTagColor(tag) {
+  const colors = {
+    tag1: "#2563eb",
+    tag2: "#dc2626",
+    tag3: "#16a34a",
+    Amateur: "#9333ea",
+    Bareback: "#ea580c",
+    Group: "#0891b2",
+    Solo: "#64748b"
+  };
+
+  return colors[tag] || "#444";
 }
