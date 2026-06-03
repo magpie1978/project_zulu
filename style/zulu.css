@@ -184,7 +184,28 @@ body {
 
 .video-info {
   padding: 8px 10px 12px;
-  height: 52px;
+  min-height: 72px;
+
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.video-tags {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+.tag-pill {
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  color: white;
+  white-space: nowrap;
 }
 
 .video-info h3 {
