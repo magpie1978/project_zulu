@@ -188,12 +188,13 @@ body {
 
 .video-info h3 {
   margin: 0;
-  font-size: 13px;
-  line-height: 1.25;
+  font-size: 15px;
+  line-height: 1.3;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
 
 .error,
 .empty {
