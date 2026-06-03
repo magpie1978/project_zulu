@@ -40,6 +40,18 @@
       <div class="main-content">
         <section id="video-container" class="video-grid"></section>
       </div>
+      <div class="video-info">
+        <h3>${escapeHTML(title)}</h3>
+        <div class="video-meta">
+          <div class="video-views">
+            👁 ${views.toLocaleString()}
+          </div>
+
+    <div class="video-tags">
+      ${tagsHtml}
+    </div>
+  </div>
+</div>
     </div>
   </main>
 
