@@ -4,6 +4,7 @@ const container = document.getElementById("video-container");
 const actorList = document.getElementById("actor-sidebar-list");
 const actorSort = document.getElementById("actor-sort");
 const searchInput = document.getElementById("searchInput");
+const videoSort = document.getElementById("video-sort");
 
 const modal = document.getElementById("videoModal");
 const modalVideo = document.getElementById("modalVideo");
@@ -38,6 +39,12 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   if (searchInput) {
     searchInput.addEventListener("input", () => {
+      applySearchFilter();
+    });
+  }
+
+  if (videoSort) {
+    videoSort.addEventListener("change", () => {
       applySearchFilter();
     });
   }
@@ -194,22 +201,18 @@ async function loadZuluVideos() {
     .order("film", { ascending: true });
 
   const { data: countsData, error: countsError } = await supabase
-  .from("zulu_video_counts")
-  .select("video_uid, views");
+    .from("zulu_video_counts")
+    .select("video_uid, views");
 
-if (countsError) {
-  console.error("Error loading video counts:", countsError);
-}
-
+  if (countsError) {
+    console.error("Error loading video counts:", countsError);
+  }
 
   const viewCounts = new Map();
 
-(countsData || []).forEach(row => {
-  viewCounts.set(Number(row.video_uid), Number(row.views));
-});
-
-
-  
+  (countsData || []).forEach(row => {
+    viewCounts.set(Number(row.video_uid), Number(row.views));
+  });
 
   if (error) {
     console.error("Error loading zulu videos:", error);
@@ -223,10 +226,10 @@ if (countsError) {
     return;
   }
 
- allVideos = (data || []).map(video => ({
-  ...video,
-  views: viewCounts.get(Number(video.uid)) || 0
-}));
+  allVideos = (data || []).map(video => ({
+    ...video,
+    views: viewCounts.get(Number(video.uid)) || 0
+  }));
 
   if (selectedActor) {
     allVideos = allVideos.filter(video =>
@@ -241,21 +244,39 @@ if (countsError) {
 function applySearchFilter() {
   const term = searchInput?.value.trim().toLowerCase() || "";
 
-  if (!term) {
-    renderVideos(allVideos);
-    return;
+  let filtered = [...allVideos];
+
+  if (term) {
+    filtered = filtered.filter(video => {
+      const film = (video.film || "").toLowerCase();
+      const actors = (video.actor_search || "").toLowerCase();
+      const tags = (video.tags || "").toLowerCase();
+
+      return (
+        film.includes(term) ||
+        actors.includes(term) ||
+        tags.includes(term)
+      );
+    });
   }
 
-  const filtered = allVideos.filter(video => {
-    const film = (video.film || "").toLowerCase();
-    const actors = (video.actor_search || "").toLowerCase();
-    const tags = (video.tags || "").toLowerCase();
+  const sortMode = videoSort?.value || "title-asc";
 
-    return (
-      film.includes(term) ||
-      actors.includes(term) ||
-      tags.includes(term)
-    );
+  filtered.sort((a, b) => {
+    switch (sortMode) {
+      case "title-desc":
+        return (b.film || "").localeCompare(a.film || "");
+
+      case "views-desc":
+        return Number(b.views || 0) - Number(a.views || 0);
+
+      case "views-asc":
+        return Number(a.views || 0) - Number(b.views || 0);
+
+      case "title-asc":
+      default:
+        return (a.film || "").localeCompare(b.film || "");
+    }
   });
 
   renderVideos(filtered);
