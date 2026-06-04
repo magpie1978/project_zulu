@@ -192,10 +192,27 @@ function createAllVideosLink() {
 
     history.pushState({}, "", "index.html");
     await loadZuluVideos();
+    scrollVideosToTop();
   });
 
   return link;
 }
+
+
+function scrollVideosToTop() {
+  const mainContent = document.querySelector(".main-content");
+
+  if (mainContent) {
+    mainContent.scrollTop = 0;
+    return;
+  }
+
+  window.scrollTo({
+    top: 0,
+    behavior: "smooth"
+  });
+}
+
 
 function createActorLink({ actor, videoCount }) {
   const link = document.createElement("a");
@@ -224,6 +241,7 @@ function createActorLink({ actor, videoCount }) {
     );
 
     await loadZuluVideos();
+    scrollVideosToTop();
   });
 
   return link;
