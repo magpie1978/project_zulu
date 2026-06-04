@@ -1,5 +1,9 @@
 import { supabase } from "./supabaseClient.js";
 
+/* =========================
+   DOM ELEMENTS
+========================= */
+
 const container = document.getElementById("video-container");
 const actorList = document.getElementById("actor-sidebar-list");
 const actorSort = document.getElementById("actor-sort");
@@ -11,52 +15,65 @@ const modalVideo = document.getElementById("modalVideo");
 const modalIframe = document.getElementById("modalIframe");
 const closeModal = document.getElementById("closeModal");
 
-let activeVideoUid = null;
-let viewTimer = null;
-let viewLogged = false;
+/* =========================
+   STATE
+========================= */
 
 let allVideos = [];
 let actorSidebarData = [];
 let totalVideoCount = 0;
 
+let activeVideoUid = null;
+let viewTimer = null;
+let viewLogged = false;
+
+/* =========================
+   INITIALISATION
+========================= */
+
 document.addEventListener("DOMContentLoaded", async () => {
   await loadActorSidebar();
   await loadZuluVideos();
+
   attachModalEvents();
-
-  if (actorSort) {
-    actorSort.addEventListener("change", () => {
-      const sidebar = actorList?.parentElement;
-      const currentScroll = sidebar ? sidebar.scrollTop : 0;
-
-      renderActorSidebar();
-
-      if (sidebar) {
-        sidebar.scrollTop = currentScroll;
-      }
-    });
-  }
-
-  if (searchInput) {
-    searchInput.addEventListener("input", () => {
-      applySearchFilter();
-    });
-  }
-
-  if (videoSort) {
-    videoSort.addEventListener("change", () => {
-      applySearchFilter();
-    });
-  }
+  attachFilterEvents();
 });
 
-async function fetchAllRows({ table, select, orderColumn }) {
-  let allRows = [];
-  let from = 0;
-  const batchSize = 1000;
-  let keepGoing = true;
+/* =========================
+   EVENT HANDLERS
+========================= */
 
-  while (keepGoing) {
+function attachFilterEvents() {
+  actorSort?.addEventListener("change", () => {
+    preserveSidebarScroll(() => renderActorSidebar());
+  });
+
+  searchInput?.addEventListener("input", applySearchFilter);
+
+  videoSort?.addEventListener("change", applySearchFilter);
+}
+
+function preserveSidebarScroll(callback) {
+  const sidebar = actorList?.parentElement;
+  const currentScroll = sidebar?.scrollTop || 0;
+
+  callback();
+
+  if (sidebar) {
+    sidebar.scrollTop = currentScroll;
+  }
+}
+
+/* =========================
+   SUPABASE HELPERS
+========================= */
+
+async function fetchAllRows({ table, select, orderColumn }) {
+  const batchSize = 1000;
+  let from = 0;
+  let allRows = [];
+
+  while (true) {
     const { data, error } = await supabase
       .from(table)
       .select(select)
@@ -70,14 +87,18 @@ async function fetchAllRows({ table, select, orderColumn }) {
     allRows = allRows.concat(data || []);
 
     if (!data || data.length < batchSize) {
-      keepGoing = false;
-    } else {
-      from += batchSize;
+      break;
     }
+
+    from += batchSize;
   }
 
   return allRows;
 }
+
+/* =========================
+   ACTOR SIDEBAR
+========================= */
 
 async function loadActorSidebar() {
   if (!actorList) return;
@@ -85,35 +106,37 @@ async function loadActorSidebar() {
   actorList.innerHTML = "";
 
   try {
-    const allRows = await fetchAllRows({
+    const rows = await fetchAllRows({
       table: "zulu_videos_with_actors",
       select: "uid, actor",
       orderColumn: "actor"
     });
 
     const actorCounts = new Map();
-    const allVideoIds = new Set();
+    const uniqueVideoIds = new Set();
 
-    allRows.forEach(row => {
-      if (!row.uid) return;
+    rows.forEach(({ uid, actor }) => {
+      if (!uid) return;
 
-      allVideoIds.add(row.uid);
+      uniqueVideoIds.add(String(uid));
 
-      if (!row.actor) return;
+      if (!actor) return;
 
-      if (!actorCounts.has(row.actor)) {
-        actorCounts.set(row.actor, new Set());
+      if (!actorCounts.has(actor)) {
+        actorCounts.set(actor, new Set());
       }
 
-      actorCounts.get(row.actor).add(row.uid);
+      actorCounts.get(actor).add(String(uid));
     });
 
-    totalVideoCount = allVideoIds.size;
+    totalVideoCount = uniqueVideoIds.size;
 
-    actorSidebarData = [...actorCounts.entries()].map(([actor, videos]) => ({
-      actor,
-      videoCount: videos.size
-    }));
+    actorSidebarData = Array.from(actorCounts.entries()).map(
+      ([actor, videos]) => ({
+        actor,
+        videoCount: videos.size
+      })
+    );
 
     renderActorSidebar();
   } catch (error) {
@@ -127,142 +150,183 @@ function renderActorSidebar() {
 
   actorList.innerHTML = "";
 
+  const sortedActors = sortActors(actorSidebarData);
+
+  actorList.appendChild(createAllVideosLink());
+
+  sortedActors.forEach(actorData => {
+    actorList.appendChild(createActorLink(actorData));
+  });
+}
+
+function sortActors(actors) {
   const sortMode = actorSort?.value || "actor-asc";
 
-  const sortedActors = [...actorSidebarData].sort((a, b) => {
-    if (sortMode === "actor-desc") {
-      return b.actor.localeCompare(a.actor);
-    }
+  return [...actors].sort((a, b) => {
+    switch (sortMode) {
+      case "actor-desc":
+        return b.actor.localeCompare(a.actor);
 
-    if (sortMode === "count-desc") {
-      return b.videoCount - a.videoCount || a.actor.localeCompare(b.actor);
-    }
+      case "count-desc":
+        return b.videoCount - a.videoCount || a.actor.localeCompare(b.actor);
 
-    if (sortMode === "count-asc") {
-      return a.videoCount - b.videoCount || a.actor.localeCompare(b.actor);
-    }
+      case "count-asc":
+        return a.videoCount - b.videoCount || a.actor.localeCompare(b.actor);
 
-    return a.actor.localeCompare(b.actor);
+      case "actor-asc":
+      default:
+        return a.actor.localeCompare(b.actor);
+    }
   });
+}
 
-  const allLink = document.createElement("a");
-  allLink.href = "#";
-  allLink.className = "actor-link";
-  allLink.textContent = `All Videos (${totalVideoCount})`;
+function createAllVideosLink() {
+  const link = document.createElement("a");
 
-  allLink.addEventListener("click", async event => {
+  link.href = "#";
+  link.className = "actor-link";
+  link.textContent = `All Videos (${totalVideoCount})`;
+
+  link.addEventListener("click", async event => {
     event.preventDefault();
+
     history.pushState({}, "", "index.html");
     await loadZuluVideos();
   });
 
-  actorList.appendChild(allLink);
-
-  sortedActors.forEach(({ actor, videoCount }) => {
-    const a = document.createElement("a");
-    a.href = "#";
-    a.className = "actor-link";
-
-    const nameSpan = document.createElement("span");
-    nameSpan.className = "actor-name";
-    nameSpan.textContent = actor;
-
-    const countSpan = document.createElement("span");
-    countSpan.className = "actor-count";
-    countSpan.textContent = ` (${videoCount})`;
-
-    a.appendChild(nameSpan);
-    a.appendChild(countSpan);
-
-    a.addEventListener("click", async event => {
-      event.preventDefault();
-
-      history.pushState(
-        {},
-        "",
-        `index.html?actor=${encodeURIComponent(actor)}`
-      );
-
-      await loadZuluVideos();
-    });
-
-    actorList.appendChild(a);
-  });
+  return link;
 }
+
+function createActorLink({ actor, videoCount }) {
+  const link = document.createElement("a");
+
+  link.href = "#";
+  link.className = "actor-link";
+
+  const nameSpan = document.createElement("span");
+  nameSpan.className = "actor-name";
+  nameSpan.textContent = actor;
+
+  const countSpan = document.createElement("span");
+  countSpan.className = "actor-count";
+  countSpan.textContent = ` (${videoCount})`;
+
+  link.appendChild(nameSpan);
+  link.appendChild(countSpan);
+
+  link.addEventListener("click", async event => {
+    event.preventDefault();
+
+    history.pushState(
+      {},
+      "",
+      `index.html?actor=${encodeURIComponent(actor)}`
+    );
+
+    await loadZuluVideos();
+  });
+
+  return link;
+}
+
+/* =========================
+   VIDEO LOADING
+========================= */
 
 async function loadZuluVideos() {
   if (!container) return;
 
-  const selectedActor = new URLSearchParams(window.location.search).get("actor");
+  const selectedActor = getSelectedActor();
 
+  try {
+    const { data: videos, error: videosError } = await supabase
+      .from("zulu_videos_search")
+      .select("uid, film, url, actors, actor_search, tags")
+      .order("film", { ascending: true });
+
+    if (videosError) {
+      throw videosError;
+    }
+
+    const viewCounts = await loadVideoViewCounts();
+
+    allVideos = (videos || []).map(video => ({
+      ...video,
+      views: viewCounts.get(String(video.uid)) || 0
+    }));
+
+    if (selectedActor) {
+      allVideos = allVideos.filter(video =>
+        Array.isArray(video.actors) &&
+        video.actors.includes(selectedActor)
+      );
+    }
+
+    applySearchFilter();
+  } catch (error) {
+    console.error("Error loading zulu videos:", error);
+    container.innerHTML = `<p class="error">Could not load videos.</p>`;
+  }
+}
+
+async function loadVideoViewCounts() {
   const { data, error } = await supabase
-    .from("zulu_videos_search")
-    .select("uid, film, url, actors, actor_search, tags")
-    .order("film", { ascending: true });
-
-  const { data: countsData, error: countsError } = await supabase
     .from("zulu_video_counts")
     .select("video_uid, views");
 
-  if (countsError) {
-    console.error("Error loading video counts:", countsError);
-  }
-
-  const viewCounts = new Map();
-
-  (countsData || []).forEach(row => {
-    viewCounts.set(Number(row.video_uid), Number(row.views));
-  });
-
   if (error) {
-    console.error("Error loading zulu videos:", error);
-    container.innerHTML = `<p class="error">Could not load videos.</p>`;
-    return;
+    console.error("Error loading video counts:", error);
+    return new Map();
   }
 
-  if (!data || data.length === 0) {
-    allVideos = [];
-    container.innerHTML = `<p class="empty">No videos found.</p>`;
-    return;
-  }
+  return new Map(
+    (data || []).map(row => [
+      String(row.video_uid),
+      Number(row.views || 0)
+    ])
+  );
+}
 
-  allVideos = (data || []).map(video => ({
-    ...video,
-    views: viewCounts.get(Number(video.uid)) || 0
-  }));
+function getSelectedActor() {
+  return new URLSearchParams(window.location.search).get("actor");
+}
 
-  if (selectedActor) {
-    allVideos = allVideos.filter(video =>
-      Array.isArray(video.actors) &&
-      video.actors.includes(selectedActor)
+/* =========================
+   SEARCHING AND SORTING
+========================= */
+
+function applySearchFilter() {
+  const searchTerm = searchInput?.value.trim().toLowerCase() || "";
+
+  let filteredVideos = [...allVideos];
+
+  if (searchTerm) {
+    filteredVideos = filteredVideos.filter(video =>
+      videoMatchesSearch(video, searchTerm)
     );
   }
 
-  applySearchFilter();
+  filteredVideos = sortVideos(filteredVideos);
+
+  renderVideos(filteredVideos);
 }
 
-function applySearchFilter() {
-  const term = searchInput?.value.trim().toLowerCase() || "";
+function videoMatchesSearch(video, term) {
+  const film = (video.film || "").toLowerCase();
+  const actors = (video.actor_search || "").toLowerCase();
+  const tags = (video.tags || "").toLowerCase();
 
-  let filtered = [...allVideos];
+  return (
+    film.includes(term) ||
+    actors.includes(term) ||
+    tags.includes(term)
+  );
+}
 
-  if (term) {
-    filtered = filtered.filter(video => {
-      const film = (video.film || "").toLowerCase();
-      const actors = (video.actor_search || "").toLowerCase();
-      const tags = (video.tags || "").toLowerCase();
-
-      return (
-        film.includes(term) ||
-        actors.includes(term) ||
-        tags.includes(term)
-      );
-    });
-  }
-
+function sortVideos(videos) {
   const sortMode = videoSort?.value || "title-asc";
 
-  filtered.sort((a, b) => {
+  return [...videos].sort((a, b) => {
     switch (sortMode) {
       case "title-desc":
         return (b.film || "").localeCompare(a.film || "");
@@ -278,9 +342,11 @@ function applySearchFilter() {
         return (a.film || "").localeCompare(b.film || "");
     }
   });
-
-  renderVideos(filtered);
 }
+
+/* =========================
+   VIDEO RENDERING
+========================= */
 
 function renderVideos(videos) {
   if (!container) return;
@@ -296,9 +362,7 @@ function renderVideos(videos) {
     container.appendChild(renderVideoCard(video));
   });
 
-  if (window.lucide) {
-    window.lucide.createIcons();
-  }
+  window.lucide?.createIcons();
 }
 
 function renderVideoCard(video) {
@@ -306,25 +370,9 @@ function renderVideoCard(video) {
   card.className = "video-card";
 
   const title = video.film || "Untitled video";
-  const videoUrl = video.url || "";
   const thumbnailUrl = `/images/${video.uid}.png`;
   const views = Number(video.views || 0);
-
-  const tags = (video.tags || "")
-    .split(",")
-    .map(tag => tag.trim())
-    .filter(Boolean);
-
-  const tagsHtml = tags
-    .map(tag => {
-      return `
-        <span
-          class="tag-pill"
-          style="background:${getTagColor(tag)}"
-        >${escapeHTML(tag)}</span>
-      `;
-    })
-    .join("");
+  const tagsHtml = createTagsHtml(video.tags);
 
   card.innerHTML = `
     <div class="thumb-wrap">
@@ -361,11 +409,29 @@ function renderVideoCard(video) {
   `;
 
   card.addEventListener("click", () => {
-    openVideo(videoUrl, video.uid);
+    openVideo(video.url, video.uid);
   });
 
   return card;
 }
+
+function createTagsHtml(tagsString) {
+  return String(tagsString || "")
+    .split(",")
+    .map(tag => tag.trim())
+    .filter(Boolean)
+    .map(tag => `
+      <span
+        class="tag-pill"
+        style="background:${getTagColor(tag)}"
+      >${escapeHTML(tag)}</span>
+    `)
+    .join("");
+}
+
+/* =========================
+   VIDEO MODAL
+========================= */
 
 function openVideo(url, uid) {
   if (!url) {
@@ -373,50 +439,25 @@ function openVideo(url, uid) {
     return;
   }
 
-  if (url.includes("hidrive.ionos.com/lnk/")) {
-    url = url.replace("/lnk/", "/dl/");
-  }
+  if (!modal) return;
+
+  const videoUrl = normaliseVideoUrl(url);
 
   activeVideoUid = uid;
   viewLogged = false;
 
-  if (viewTimer) {
-    clearTimeout(viewTimer);
-    viewTimer = null;
-  }
+  clearViewTimer();
+  resetModalSources();
 
   modal.classList.add("open");
 
-  resetModalSources();
-
-  const cleanUrl = url.split("?")[0].toLowerCase();
-
-  const isDirectVideo =
-    cleanUrl.endsWith(".mp4") ||
-    cleanUrl.includes("hidrive.ionos.com/dl/");
-
-  const isHiDriveSharePage =
-    cleanUrl.includes("hidrive.ionos.com/lnk/") ||
-    cleanUrl === "https://hidrive.ionos.com/" ||
-    cleanUrl.includes("hidrive.ionos.com/share/");
-
-  if (isDirectVideo) {
-    modalVideo.src = url;
-    modalVideo.style.display = "block";
-
-    modalVideo.play().catch(err => {
-      console.error("Video could not be played:", err);
-      console.error("Failed video URL:", url);
-    });
-
-    viewTimer = setTimeout(() => {
-      logVideoView(activeVideoUid);
-    }, 15000);
-
+  if (isDirectVideoUrl(videoUrl)) {
+    playDirectVideo(videoUrl);
+    startViewTimer();
     return;
   }
 
-  if (isHiDriveSharePage) {
+  if (isUnsupportedHiDriveShareUrl(videoUrl)) {
     alert(
       "This video link is a HiDrive share page and cannot be embedded. Use a /dl/ direct MP4 link instead."
     );
@@ -425,26 +466,66 @@ function openVideo(url, uid) {
     return;
   }
 
+  showIframeVideo(videoUrl);
+}
+
+function normaliseVideoUrl(url) {
+  if (url.includes("hidrive.ionos.com/lnk/")) {
+    return url.replace("/lnk/", "/dl/");
+  }
+
+  return url;
+}
+
+function isDirectVideoUrl(url) {
+  const cleanUrl = url.split("?")[0].toLowerCase();
+
+  return (
+    cleanUrl.endsWith(".mp4") ||
+    cleanUrl.includes("hidrive.ionos.com/dl/")
+  );
+}
+
+function isUnsupportedHiDriveShareUrl(url) {
+  const cleanUrl = url.toLowerCase();
+
+  return (
+    cleanUrl === "https://hidrive.ionos.com/" ||
+    cleanUrl.includes("hidrive.ionos.com/share/")
+  );
+}
+
+function playDirectVideo(url) {
+  if (!modalVideo) return;
+
+  modalVideo.src = url;
+  modalVideo.style.display = "block";
+
+  modalVideo.play().catch(error => {
+    console.error("Video could not be played:", error);
+    console.error("Failed video URL:", url);
+  });
+}
+
+function showIframeVideo(url) {
+  if (!modalIframe) return;
+
   modalIframe.src = url;
   modalIframe.style.display = "block";
 }
 
 function attachModalEvents() {
-  if (closeModal) {
-    closeModal.addEventListener("click", event => {
-      event.preventDefault();
-      event.stopPropagation();
-      closeVideoModal();
-    });
-  }
+  closeModal?.addEventListener("click", event => {
+    event.preventDefault();
+    event.stopPropagation();
+    closeVideoModal();
+  });
 
-  if (modal) {
-    modal.addEventListener("click", event => {
-      if (event.target === modal) {
-        closeVideoModal();
-      }
-    });
-  }
+  modal?.addEventListener("click", event => {
+    if (event.target === modal) {
+      closeVideoModal();
+    }
+  });
 
   document.addEventListener("keydown", event => {
     if (event.key === "Escape") {
@@ -454,24 +535,20 @@ function attachModalEvents() {
 }
 
 function closeVideoModal() {
-  modal.classList.remove("open");
+  modal?.classList.remove("open");
 
-  if (viewTimer) {
-    clearTimeout(viewTimer);
-    viewTimer = null;
-  }
+  clearViewTimer();
+  resetModalSources();
 
   activeVideoUid = null;
   viewLogged = false;
-
-  resetModalSources();
 }
 
 function resetModalSources() {
   if (modalVideo) {
     try {
       modalVideo.pause();
-    } catch (e) {
+    } catch {
       // Ignore pause errors
     }
 
@@ -483,6 +560,25 @@ function resetModalSources() {
   if (modalIframe) {
     modalIframe.removeAttribute("src");
     modalIframe.style.display = "none";
+  }
+}
+
+/* =========================
+   VIEW LOGGING
+========================= */
+
+function startViewTimer() {
+  clearViewTimer();
+
+  viewTimer = setTimeout(() => {
+    logVideoView(activeVideoUid);
+  }, 15000);
+}
+
+function clearViewTimer() {
+  if (viewTimer) {
+    clearTimeout(viewTimer);
+    viewTimer = null;
   }
 }
 
@@ -503,6 +599,10 @@ async function logVideoView(uid) {
   }
 }
 
+/* =========================
+   UTILITIES
+========================= */
+
 function getTagColor(tag) {
   const colors = {
     tag1: "#2563eb",
@@ -521,5 +621,7 @@ function escapeHTML(value) {
   return String(value ?? "")
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
 }
