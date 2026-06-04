@@ -16,18 +16,40 @@ body {
 }
 
 .site-header {
-  min-height: 360px;
+  min-height: 120px;
   padding: 20px 50px;
+
   display: flex;
   align-items: center;
   justify-content: space-between;
+
+  background: linear-gradient(
+    to bottom,
+    #111 0%,
+    #000 100%
+  );
+
+  border-bottom: 2px solid #E50914;
+
+  box-shadow:
+    0 2px 20px rgba(229, 9, 20, 0.15);
 }
+
+
 
 .site-header h1 {
   margin: 0;
   font-size: 34px;
   font-weight: 700;
 }
+
+
+.header-logo img {
+  height: 80px;
+  width: auto;
+  display: block;
+}
+
 
 .header-search {
   width: 320px;
