@@ -345,9 +345,9 @@ body {
 
 .netflix-style {
     font-family: 'Bebas Neue', sans-serif;
-    font-size: 420px;
+    font-size: 120px;
     color: #E50914;
-    letter-spacing: 6px;
+    letter-spacing: 4px;
     text-transform: uppercase;
     text-shadow:
         0 0 2px rgba(0,0,0,0.8),
