@@ -187,20 +187,15 @@ function createAllVideosLink() {
   link.className = "actor-link";
   link.textContent = `All Videos (${totalVideoCount})`;
 
- link.addEventListener("click", async event => {
-  event.preventDefault();
+  link.addEventListener("click", async event => {
+    event.preventDefault();
 
-  history.pushState(
-    {},
-    "",
-    `index.html?actor=${encodeURIComponent(actor)}`
-  );
+    history.pushState({}, "", "index.html");
 
-  await loadZuluVideos();
-  scrollVideosToTop();
-});
+    await loadZuluVideos();
+    scrollVideosToTop();
+  });
 
-   
   return link;
 }
 
@@ -208,14 +203,19 @@ function createAllVideosLink() {
 function scrollVideosToTop() {
   const mainContent = document.querySelector(".main-content");
 
+  // If .main-content is scrollable, reset it
   if (mainContent) {
     mainContent.scrollTop = 0;
-    return;
   }
+
+  // Also reset normal page scrolling
+  document.documentElement.scrollTop = 0;
+  document.body.scrollTop = 0;
 
   window.scrollTo({
     top: 0,
-    behavior: "smooth"
+    left: 0,
+    behavior: "auto"
   });
 }
 
