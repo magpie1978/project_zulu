@@ -37,6 +37,16 @@
     </aside>
 
     <div class="main-content">
+      <div class="video-toolbar">
+        <label for="video-sort">Sort videos</label>
+        <select id="video-sort">
+          <option value="film-asc">Title A-Z</option>
+          <option value="film-desc">Title Z-A</option>
+          <option value="views-desc">Most watched</option>
+          <option value="views-asc">Least watched</option>
+        </select>
+      </div>
+
       <section id="video-container" class="video-grid"></section>
     </div>
   </main>
