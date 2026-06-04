@@ -81,14 +81,35 @@ body {
   font-size: 18px;
 }
 
-#actor-sort {
-  width: 100%;
-  margin-bottom: 14px;
+#actor-sort,
+#video-sort {
   padding: 8px;
   border-radius: 8px;
   border: 0;
   background: #222;
   color: #fff;
+}
+
+#actor-sort {
+  width: 100%;
+  margin-bottom: 14px;
+}
+
+.video-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 18px;
+}
+
+.video-toolbar label {
+  color: #bbb;
+  font-size: 14px;
+}
+
+#video-sort {
+  min-width: 170px;
 }
 
 .actor-link {
