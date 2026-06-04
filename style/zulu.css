@@ -326,6 +326,7 @@ body {
   }
 }
 
+
 @media (max-width: 520px) {
   .page-layout {
     gap: 18px;
