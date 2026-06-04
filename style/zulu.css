@@ -10,7 +10,7 @@ body {
 }
 
 body {
-  background: #0C0C0E;
+  background: #0B0C0E;
   color: #fff;
   font-family: Arial, Helvetica, sans-serif;
 }
@@ -23,7 +23,7 @@ body {
   align-items: center;
   justify-content: space-between;
 
-  background: #000;
+  background: #0B0C0E;
   border-bottom: 2px solid #E50914;
 }
 
