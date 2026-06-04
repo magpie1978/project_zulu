@@ -438,8 +438,6 @@ function openVideo(url, uid) {
 
   if (!modal) return;
 
-  const videoUrl = normaliseVideoUrl(url);
-
   activeVideoUid = uid;
   viewLogged = false;
 
@@ -448,49 +446,25 @@ function openVideo(url, uid) {
 
   modal.classList.add("open");
 
-  if (isDirectVideoUrl(videoUrl)) {
-    playDirectVideo(videoUrl);
+  if (isDirectVideoUrl(url)) {
+    playDirectVideo(url);
     startViewTimer();
     return;
   }
 
-  if (isUnsupportedHiDriveShareUrl(videoUrl)) {
-    alert(
-      "This video link is a HiDrive share page and cannot be embedded. Use a /dl/ direct MP4 link instead."
-    );
-
-    closeVideoModal();
-    return;
-  }
-
-  showIframeVideo(videoUrl);
+  showIframeVideo(url);
 }
 
-function normaliseVideoUrl(url) {
-  if (url.includes("hidrive.ionos.com/lnk/")) {
-    return url.replace("/lnk/", "/dl/");
-  }
 
-  return url;
-}
+
 
 function isDirectVideoUrl(url) {
   const cleanUrl = url.split("?")[0].toLowerCase();
 
-  return (
-    cleanUrl.endsWith(".mp4") ||
-    cleanUrl.includes("hidrive.ionos.com/dl/")
-  );
+  return cleanUrl.endsWith(".mp4");
 }
 
-function isUnsupportedHiDriveShareUrl(url) {
-  const cleanUrl = url.toLowerCase();
 
-  return (
-    cleanUrl === "https://hidrive.ionos.com/" ||
-    cleanUrl.includes("hidrive.ionos.com/share/")
-  );
-}
 
 function playDirectVideo(url) {
   if (!modalVideo) return;
