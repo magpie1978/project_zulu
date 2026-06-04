@@ -341,3 +341,15 @@ body {
     grid-template-columns: 1fr;
   }
 }
+
+
+.netflix-style {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 120px;
+    color: #E50914;
+    letter-spacing: 4px;
+    text-transform: uppercase;
+    text-shadow:
+        0 0 2px rgba(0,0,0,0.8),
+        0 4px 8px rgba(0,0,0,0.5);
+}
