@@ -324,11 +324,11 @@ function videoMatchesSearch(video, term) {
 }
 
 function sortVideos(videos) {
-  const sortMode = videoSort?.value || "title-asc";
+  const sortMode = videoSort?.value || "film-asc";
 
   return [...videos].sort((a, b) => {
     switch (sortMode) {
-      case "title-desc":
+      case "film-desc":
         return (b.film || "").localeCompare(a.film || "");
 
       case "views-desc":
@@ -337,12 +337,13 @@ function sortVideos(videos) {
       case "views-asc":
         return Number(a.views || 0) - Number(b.views || 0);
 
-      case "title-asc":
+      case "film-asc":
       default:
         return (a.film || "").localeCompare(b.film || "");
     }
   });
 }
+
 
 /* =========================
    VIDEO RENDERING
@@ -383,10 +384,6 @@ function renderVideoCard(video) {
         loading="lazy"
         onerror="this.onerror=null; this.src='/images/default.png';"
       >
-
-      <div class="placeholder-thumb">
-        <i data-lucide="film"></i>
-      </div>
 
       <div class="play-icon">
         <i data-lucide="play"></i>
