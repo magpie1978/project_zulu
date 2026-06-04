@@ -187,14 +187,20 @@ function createAllVideosLink() {
   link.className = "actor-link";
   link.textContent = `All Videos (${totalVideoCount})`;
 
-  link.addEventListener("click", async event => {
-    event.preventDefault();
+ link.addEventListener("click", async event => {
+  event.preventDefault();
 
-    history.pushState({}, "", "index.html");
-    await loadZuluVideos();
-    scrollVideosToTop();
-  });
+  history.pushState(
+    {},
+    "",
+    `index.html?actor=${encodeURIComponent(actor)}`
+  );
 
+  await loadZuluVideos();
+  scrollVideosToTop();
+});
+
+   
   return link;
 }
 
