@@ -16,7 +16,7 @@ body {
 }
 
 .site-header {
-  min-height: 180px;
+  min-height: 360px;
   padding: 20px 50px;
   display: flex;
   align-items: center;
