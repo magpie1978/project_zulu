@@ -12,7 +12,7 @@ const videoSort = document.getElementById("video-sort");
 
 const modal = document.getElementById("videoModal");
 const modalVideo = document.getElementById("modalVideo");
-const modalIframe = document.getElementById("modalIframe");
+//const modalIframe = document.getElementById("modalIframe");
 const closeModal = document.getElementById("closeModal");
 
 /* =========================
@@ -436,7 +436,7 @@ function openVideo(url, uid) {
     return;
   }
 
-  if (!modal) return;
+  if (!modal || !modalVideo) return;
 
   activeVideoUid = uid;
   viewLogged = false;
@@ -446,23 +446,23 @@ function openVideo(url, uid) {
 
   modal.classList.add("open");
 
-  if (isDirectVideoUrl(url)) {
-    playDirectVideo(url);
-    startViewTimer();
-    return;
-  }
+  modalVideo.src = url;
+  modalVideo.style.display = "block";
 
-  showIframeVideo(url);
+  modalVideo.play().catch(error => {
+    console.error("Video could not be played:", error);
+    console.error("Failed video URL:", url);
+  });
+
+  startViewTimer();
 }
 
 
-
-
-function isDirectVideoUrl(url) {
-  const cleanUrl = url.split("?")[0].toLowerCase();
-
-  return cleanUrl.endsWith(".mp4");
-}
+//function isDirectVideoUrl(url) {
+//  const cleanUrl = url.split("?")[0].toLowerCase();
+//
+//  return cleanUrl.endsWith(".mp4");
+//}
 
 
 
@@ -478,12 +478,12 @@ function playDirectVideo(url) {
   });
 }
 
-function showIframeVideo(url) {
-  if (!modalIframe) return;
-
-  modalIframe.src = url;
-  modalIframe.style.display = "block";
-}
+//function showIframeVideo(url) {
+//  if (!modalIframe) return;
+//
+//  modalIframe.src = url;
+//  modalIframe.style.display = "block";
+//}
 
 function attachModalEvents() {
   closeModal?.addEventListener("click", event => {
@@ -516,22 +516,17 @@ function closeVideoModal() {
 }
 
 function resetModalSources() {
-  if (modalVideo) {
-    try {
-      modalVideo.pause();
-    } catch {
-      // Ignore pause errors
-    }
+  if (!modalVideo) return;
 
-    modalVideo.removeAttribute("src");
-    modalVideo.load();
-    modalVideo.style.display = "none";
+  try {
+    modalVideo.pause();
+  } catch {
+    // Ignore pause errors
   }
 
-  if (modalIframe) {
-    modalIframe.removeAttribute("src");
-    modalIframe.style.display = "none";
-  }
+  modalVideo.removeAttribute("src");
+  modalVideo.load();
+  modalVideo.style.display = "none";
 }
 
 /* =========================
