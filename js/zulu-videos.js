@@ -333,7 +333,7 @@ function renderVideoCard(video) {
         src="${thumbnailUrl}"
         alt="${escapeHTML(title)} thumbnail"
         loading="lazy"
-        onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';"
+        onerror="this.onerror=null; this.src='/images/default.png';"
       >
 
       <div class="placeholder-thumb">
