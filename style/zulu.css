@@ -4,9 +4,9 @@
 
 html,
 body {
-  height: 100%;
   margin: 0;
-  overflow: hidden;
+  background: #050505;
+  color: #fff;
 }
 
 body {
@@ -50,11 +50,10 @@ body {
 
 .page-layout {
   display: flex;
-  height: calc(100vh - 90px);
-  overflow: hidden;
   padding: 24px 50px 36px;
   gap: 32px;
 }
+
 
 .main-content {
   flex: 1;
