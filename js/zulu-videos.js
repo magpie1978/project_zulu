@@ -1,8 +1,8 @@
 import { supabase } from "./supabaseClient.js";
 
-/* =========================
+/* =================================================================================================================
    DOM ELEMENTS
-========================= */
+==================================================================================================================== */
 
 const container = document.getElementById("video-container");
 const actorList = document.getElementById("actor-sidebar-list");
@@ -12,12 +12,13 @@ const videoSort = document.getElementById("video-sort");
 
 const modal = document.getElementById("videoModal");
 const modalVideo = document.getElementById("modalVideo");
-//const modalIframe = document.getElementById("modalIframe");
 const closeModal = document.getElementById("closeModal");
 
-/* =========================
+
+
+/* =================================================================================================================
    STATE
-========================= */
+==================================================================================================================== */
 
 let allVideos = [];
 let actorSidebarData = [];
@@ -27,10 +28,14 @@ let activeVideoUid = null;
 let viewTimer = null;
 let viewLogged = false;
 
-/* =========================
-   INITIALISATION
-========================= */
 
+
+/* =================================================================================================================
+   INITIALISATIONS
+==================================================================================================================== */
+
+// DOMContentLoaded starts the page. 
+// It loads the actor sidebar, loads the videos, attaches modal controls, and attaches the search/sort controls.
 document.addEventListener("DOMContentLoaded", async () => {
   await loadActorSidebar();
   await loadZuluVideos();
@@ -39,10 +44,13 @@ document.addEventListener("DOMContentLoaded", async () => {
   attachFilterEvents();
 });
 
-/* =========================
-   EVENT HANDLERS
-========================= */
 
+
+/* =================================================================================================================
+   EVENT HANDLERS
+==================================================================================================================== */
+
+// Connects the actor sort dropdown, search box, and video sort dropdown to the relevant filtering functions.
 function attachFilterEvents() {
   actorSort?.addEventListener("change", () => {
     preserveSidebarScroll(() => renderActorSidebar());
@@ -53,10 +61,11 @@ function attachFilterEvents() {
   videoSort?.addEventListener("change", applySearchFilter);
 }
 
+// Keeps the actor sidebar in the same scroll position when it is re-rendered.
 function preserveSidebarScroll(callback) {
   const sidebar = actorList?.parentElement;
   const currentScroll = sidebar?.scrollTop || 0;
-
+   
   callback();
 
   if (sidebar) {
@@ -64,10 +73,13 @@ function preserveSidebarScroll(callback) {
   }
 }
 
-/* =========================
-   SUPABASE HELPERS
-========================= */
 
+
+/* =================================================================================================================
+   SUPABASE HELPERS
+==================================================================================================================== */
+
+// Fetches all rows from Supabase in batches of 1,000, avoiding Supabase’s default row limit.
 async function fetchAllRows({ table, select, orderColumn }) {
   const batchSize = 1000;
   let from = 0;
@@ -96,10 +108,15 @@ async function fetchAllRows({ table, select, orderColumn }) {
   return allRows;
 }
 
-/* =========================
-   ACTOR SIDEBAR
-========================= */
 
+
+/* =================================================================================================================
+  ACTOR SIDEBAR
+==================================================================================================================== */
+
+// Loads actor/video data from zulu_videos_with_actors, 
+// counts how many unique videos each actor appears in, 
+// and stores that data for the sidebar
 async function loadActorSidebar() {
   if (!actorList) return;
 
@@ -145,6 +162,9 @@ async function loadActorSidebar() {
   }
 }
 
+
+
+// Redraws the sidebar, including the “All Videos” link and all actor links.
 function renderActorSidebar() {
   if (!actorList) return;
 
@@ -159,6 +179,9 @@ function renderActorSidebar() {
   });
 }
 
+
+
+// Sorts the sidebar by actor name or video count
 function sortActors(actors) {
   const sortMode = actorSort?.value || "actor-asc";
 
@@ -180,6 +203,9 @@ function sortActors(actors) {
   });
 }
 
+
+
+// Creates the sidebar link that resets the page to show every video.
 function createAllVideosLink() {
   const link = document.createElement("a");
 
@@ -200,15 +226,14 @@ function createAllVideosLink() {
 }
 
 
+
 function scrollVideosToTop() {
   const mainContent = document.querySelector(".main-content");
 
-  // If .main-content is scrollable, reset it
   if (mainContent) {
     mainContent.scrollTop = 0;
   }
 
-  // Also reset normal page scrolling
   document.documentElement.scrollTop = 0;
   document.body.scrollTop = 0;
 
@@ -220,6 +245,8 @@ function scrollVideosToTop() {
 }
 
 
+
+// Creates each individual actor filter link and updates the URL with ?actor=...
 function createActorLink({ actor, videoCount }) {
   const link = document.createElement("a");
 
@@ -253,10 +280,14 @@ function createActorLink({ actor, videoCount }) {
   return link;
 }
 
-/* =========================
-   VIDEO LOADING
-========================= */
 
+
+/* =================================================================================================================
+   VIDEO LOADING
+==================================================================================================================== */
+
+// Loads the searchable video data, adds view counts, 
+// applies the selected actor filter if present, then calls the search/sort renderer
 async function loadZuluVideos() {
   if (!container) return;
 
@@ -293,6 +324,9 @@ async function loadZuluVideos() {
   }
 }
 
+
+
+// Loads view totals from zulu_video_counts and returns them as a map
 async function loadVideoViewCounts() {
   const { data, error } = await supabase
     .from("zulu_video_counts")
@@ -311,14 +345,20 @@ async function loadVideoViewCounts() {
   );
 }
 
+
+
+// reads the selected actor from the page URL
 function getSelectedActor() {
   return new URLSearchParams(window.location.search).get("actor");
 }
 
-/* =========================
-   SEARCHING AND SORTING
-========================= */
 
+
+/* =================================================================================================================
+   SEARCHING & SORTING
+==================================================================================================================== */
+
+// Applies the search box filter, applies the selected video sort order, and redraws the video grid.
 function applySearchFilter() {
   const searchTerm = searchInput?.value.trim().toLowerCase() || "";
 
@@ -335,6 +375,9 @@ function applySearchFilter() {
   renderVideos(filteredVideos);
 }
 
+
+
+// Checks whether the search term appears in the film title, actor list, or tags.
 function videoMatchesSearch(video, term) {
   const film = (video.film || "").toLowerCase();
   const actors = (video.actor_search || "").toLowerCase();
@@ -347,6 +390,9 @@ function videoMatchesSearch(video, term) {
   );
 }
 
+
+
+// Sorts by title or views
 function sortVideos(videos) {
   const sortMode = videoSort?.value || "film-asc";
 
@@ -369,10 +415,12 @@ function sortVideos(videos) {
 }
 
 
-/* =========================
-   VIDEO RENDERING
-========================= */
 
+/* =================================================================================================================
+   VIDEO RENDERING
+==================================================================================================================== */
+
+// Clears and redraws the video grid.
 function renderVideos(videos) {
   if (!container) return;
 
@@ -390,6 +438,9 @@ function renderVideos(videos) {
   window.lucide?.createIcons();
 }
 
+
+
+// Builds one video card, including thumbnail, title, view count, tags, play icon, and click behaviour.
 function renderVideoCard(video) {
   const card = document.createElement("article");
   card.className = "video-card";
@@ -436,6 +487,9 @@ function renderVideoCard(video) {
   return card;
 }
 
+
+
+// Turns comma-separated tags into styled tag pills
 function createTagsHtml(tagsString) {
   return String(tagsString || "")
     .split(",")
@@ -450,10 +504,13 @@ function createTagsHtml(tagsString) {
     .join("");
 }
 
-/* =========================
-   VIDEO MODAL
-========================= */
 
+
+/* =================================================================================================================
+   VIDEO MODAL
+==================================================================================================================== */
+
+// Opens the modal and decides whether to use the <video> player or an iframe.
 function openVideo(url, uid) {
   if (!url) {
     console.warn("No video URL found.");
@@ -482,14 +539,8 @@ function openVideo(url, uid) {
 }
 
 
-//function isDirectVideoUrl(url) {
-//  const cleanUrl = url.split("?")[0].toLowerCase();
-//
-//  return cleanUrl.endsWith(".mp4");
-//}
 
-
-
+// Loads the video into the modal video player
 function playDirectVideo(url) {
   if (!modalVideo) return;
 
@@ -502,13 +553,9 @@ function playDirectVideo(url) {
   });
 }
 
-//function showIframeVideo(url) {
-//  if (!modalIframe) return;
-//
-//  modalIframe.src = url;
-//  modalIframe.style.display = "block";
-//}
 
+
+// Allows the user to close the modal using the close button, clicking outside the video, or pressing Escape
 function attachModalEvents() {
   closeModal?.addEventListener("click", event => {
     event.preventDefault();
@@ -529,6 +576,9 @@ function attachModalEvents() {
   });
 }
 
+
+
+// Closes the modal, stops playback, clears the view timer, and resets the current video state.
 function closeVideoModal() {
   modal?.classList.remove("open");
 
@@ -539,6 +589,7 @@ function closeVideoModal() {
   viewLogged = false;
 }
 
+// Removes video and iframe sources so playback fully stops
 function resetModalSources() {
   if (!modalVideo) return;
 
@@ -553,10 +604,13 @@ function resetModalSources() {
   modalVideo.style.display = "none";
 }
 
-/* =========================
-   VIEW LOGGING
-========================= */
 
+
+/* =================================================================================================================
+   VIEW LOGGING
+==================================================================================================================== */
+
+// Starts a 15-second timer before logging a view
 function startViewTimer() {
   clearViewTimer();
 
@@ -565,6 +619,9 @@ function startViewTimer() {
   }, 15000);
 }
 
+
+
+// Clears any existing view timer
 function clearViewTimer() {
   if (viewTimer) {
     clearTimeout(viewTimer);
@@ -572,6 +629,9 @@ function clearViewTimer() {
   }
 }
 
+
+
+// Inserts a view record into zulu_video_views once a video has been watched for 15 seconds.
 async function logVideoView(uid) {
   if (!uid || viewLogged) return;
 
@@ -589,10 +649,13 @@ async function logVideoView(uid) {
   }
 }
 
-/* =========================
-   UTILITIES
-========================= */
 
+
+/* =================================================================================================================
+   UTILITIES
+==================================================================================================================== */
+
+// Assigns colours to known tags
 function getTagColor(tag) {
   const colors = {
     tag1: "#2563eb",
@@ -607,6 +670,9 @@ function getTagColor(tag) {
   return colors[tag] || "#444";
 }
 
+
+
+// Safely escapes text before inserting it into HTML
 function escapeHTML(value) {
   return String(value ?? "")
     .replace(/&/g, "&amp;")
