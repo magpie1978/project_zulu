@@ -1,3 +1,7 @@
+/* =====================================================================
+   RESET / BASE
+===================================================================== */
+
 * {
   box-sizing: border-box;
 }
@@ -5,15 +9,19 @@
 html,
 body {
   margin: 0;
-  background: #0C0C0E;
+  background: #0B0C0E;
   color: #fff;
 }
 
 body {
-  background: #0B0C0E;
-  color: #fff;
   font-family: Arial, Helvetica, sans-serif;
 }
+
+
+
+/* =====================================================================
+   HEADER
+===================================================================== */
 
 .site-header {
   min-height: 360px;
@@ -28,13 +36,6 @@ body {
 }
 
 
-.site-header h1 {
-  margin: 0;
-  font-size: 34px;
-  font-weight: 700;
-}
-
-
 .header-logo img {
   height: 320px;
   width: auto;
@@ -46,66 +47,107 @@ body {
   width: 320px;
 }
 
+
 #searchInput {
   width: 100%;
   padding: 10px 14px;
+
   border: 1px solid #333;
   border-radius: 8px;
+
   background: #111;
   color: #fff;
   font-size: 14px;
 }
+
 
 #searchInput:focus {
   outline: none;
   border-color: #666;
 }
 
+
+
+/* =====================================================================
+   PAGE LAYOUT
+===================================================================== */
+
 .page-layout {
   display: flex;
-  padding: 24px 50px 36px;
   gap: 32px;
+  padding: 24px 50px 36px;
 }
 
 
 .main-content {
   flex: 1;
-  height: 100%;
-  min-height: 0;
-  overflow-y: auto;
-  overflow-x: hidden;
+  min-width: 0;
   padding-right: 8px;
 }
 
+
+
+/* =====================================================================
+   ACTOR SIDEBAR
+===================================================================== */
+
 .actor-sidebar {
   width: 240px;
-  height: 100%;
-  overflow-y: auto;
-  overflow-x: hidden;
   flex-shrink: 0;
   background: #111;
   border-radius: 14px;
   padding: 18px;
 }
 
+
 .actor-sidebar h2 {
   margin: 0 0 14px;
   font-size: 18px;
 }
 
-#actor-sort,
-#video-sort {
-  padding: 8px;
-  border-radius: 8px;
-  border: 0;
-  background: #222;
-  color: #fff;
-}
 
 #actor-sort {
   width: 100%;
   margin-bottom: 14px;
 }
+
+
+.actor-link {
+  display: block;
+  padding: 8px 0;
+  color: #ddd;
+  text-decoration: none;
+  font-size: 14px;
+}
+
+
+.actor-link:hover {
+  color: #fff;
+  text-decoration: underline;
+}
+
+
+.actor-count {
+  margin-left: 8px;
+  color: #999;
+  font-size: 0.9em;
+}
+
+
+
+/* =====================================================================
+   CONTROLS
+===================================================================== */
+
+#actor-sort,
+#video-sort {
+  padding: 8px;
+  border: 0;
+  border-radius: 8px;
+  background: #222;
+  color: #fff;
+}
+
 
 .video-toolbar {
   display: flex;
@@ -115,37 +157,27 @@ body {
   margin-bottom: 18px;
 }
 
+
 .video-toolbar label {
   color: #bbb;
   font-size: 14px;
 }
 
+
 #video-sort {
   min-width: 170px;
 }
 
-.actor-link {
-  display: block;
-  color: #ddd;
-  text-decoration: none;
-  padding: 8px 0;
-  font-size: 14px;
-}
 
-.actor-link:hover {
-  color: #fff;
-  text-decoration: underline;
-}
 
-.actor-count {
-  margin-left: 8px;
-  color: #999;
-  font-size: 0.9em;
-}
+/* =====================================================================
+   VIDEO GRID
+===================================================================== */
 
 #video-container {
   width: 100%;
 }
+
 
 .video-grid {
   display: grid;
@@ -153,13 +185,17 @@ body {
   gap: 22px;
 }
 
+
 .video-card {
-  background: #111;
-  border-radius: 10px;
   overflow: hidden;
   cursor: pointer;
-  transition: transform 0.2s ease, background 0.2s ease;
+  background: #111;
+  border-radius: 10px;
+  transition:
+    transform 0.2s ease,
+    background 0.2s ease;
 }
+
 
 .video-card:hover {
   transform: scale(1.04);
@@ -167,19 +203,27 @@ body {
   z-index: 2;
 }
 
+
+
+/* =====================================================================
+  VIDEO THUMBNAIL
+===================================================================== */
+
 .thumb-wrap {
+  position: relative;
   width: 100%;
   aspect-ratio: 16 / 9;
-  position: relative;
   background: #1b1b1b;
 }
+
 
 .video-thumbnail {
   width: 100%;
   height: 100%;
-  object-fit: cover;
   display: block;
+  object-fit: cover;
 }
+
 
 .play-icon {
   position: absolute;
@@ -192,22 +236,31 @@ body {
   transition: opacity 0.2s ease;
 }
 
+
 .video-card:hover .play-icon {
   opacity: 1;
 }
+
 
 .play-icon svg {
   width: 52px;
   height: 52px;
 }
 
+
+
+/* =====================================================================
+   VIDEO INFO
+===================================================================== */
+
 .video-info {
-  padding: 8px 10px 12px;
   min-height: 76px;
+  padding: 8px 10px 12px;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
 }
+
 
 .video-info h3 {
   margin: 0;
@@ -220,6 +273,7 @@ body {
   overflow: hidden;
 }
 
+
 .video-meta {
   display: flex;
   justify-content: space-between;
@@ -228,11 +282,13 @@ body {
   margin-top: 6px;
 }
 
+
 .video-views {
-  font-size: 12px;
   color: #aaa;
+  font-size: 12px;
   white-space: nowrap;
 }
+
 
 .video-tags {
   display: flex;
@@ -241,14 +297,21 @@ body {
   gap: 4px;
 }
 
+
 .tag-pill {
   padding: 2px 8px;
   border-radius: 999px;
+  color: #fff;
   font-size: 11px;
   font-weight: 600;
-  color: white;
   white-space: nowrap;
 }
+
+
+
+/* =====================================================================
+   EMPTY / ERROR STATES
+===================================================================== */
 
 .error,
 .empty {
@@ -257,19 +320,27 @@ body {
   font-size: 16px;
 }
 
+
+
+/* =====================================================================
+   MODAL
+===================================================================== */
+
 .modal {
   display: none;
   position: fixed;
   inset: 0;
   z-index: 9999;
-  background: rgba(0, 0, 0, 0.9);
   align-items: center;
   justify-content: center;
+  background: rgba(0, 0, 0, 0.9);
 }
+
 
 .modal.open {
   display: flex;
 }
+
 
 .modal-content {
   position: relative;
@@ -278,12 +349,14 @@ body {
   aspect-ratio: 16 / 9;
 }
 
+
 .modal-content video {
   width: 100%;
   height: 100%;
   border: 0;
   background: #000;
 }
+
 
 .close-button {
   position: absolute;
@@ -297,16 +370,27 @@ body {
   cursor: pointer;
 }
 
+
+
+/* =====================================================================
+   RESPONSIVE
+===================================================================== */
+
 @media (max-width: 1200px) {
   .video-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
 
+
 @media (max-width: 800px) {
   .site-header {
     padding-left: 24px;
     padding-right: 24px;
+  }
+
+  .header-logo img {
+    height: 220px;
   }
 
   .header-search {
@@ -325,6 +409,20 @@ body {
 
 
 @media (max-width: 520px) {
+  .site-header {
+    min-height: auto;
+    flex-direction: column;
+    gap: 18px;
+  }
+
+  .header-logo img {
+    height: 140px;
+  }
+
+  .header-search {
+    width: 100%;
+  }
+
   .page-layout {
     gap: 18px;
     padding: 20px 16px;
@@ -337,16 +435,4 @@ body {
   .video-grid {
     grid-template-columns: 1fr;
   }
-}
-
-
-.netflix-style {
-    font-family: 'Bebas Neue', sans-serif;
-    font-size: 360px;
-    color: #E50914;
-    letter-spacing: 6px;
-    text-transform: uppercase;
-    text-shadow:
-        0 0 2px rgba(0,0,0,0.8),
-        0 4px 8px rgba(0,0,0,0.5);
 }
