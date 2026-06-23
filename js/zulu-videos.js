@@ -210,17 +210,25 @@ function createAllVideosLink() {
   const link = document.createElement("a");
 
   link.href = "#";
-  link.className = "actor-link";
+  link.className = getSelectedActor()
+    ? "actor-link"
+    : "actor-link active";
+
   link.textContent = `All Videos (${totalVideoCount})`;
 
-  link.addEventListener("click", async event => {
-    event.preventDefault();
+link.addEventListener("click", async event => {
+  event.preventDefault();
 
-    history.pushState({}, "", "index.html");
+  history.pushState(
+    {},
+    "",
+    `index.html?actor=${encodeURIComponent(actor)}`
+  );
 
-    await loadZuluVideos();
-    scrollVideosToTop();
-  });
+  renderActorSidebar();
+  await loadZuluVideos();
+  scrollVideosToTop();
+});
 
   return link;
 }
@@ -247,12 +255,32 @@ function scrollVideosToTop() {
 
 
 // Creates each individual actor filter link and updates the URL with ?actor=...
+
+
 function createActorLink({ actor, videoCount }) {
   const link = document.createElement("a");
 
-  link.href = "#";
-  link.className = "actor-link";
+  const selectedActor = getSelectedActor();
 
+  link.href = "#";
+  link.className = selectedActor === actor
+    ? "actor-link active"
+    : "actor-link";
+
+
+
+
+
+function createActorLink({ actor, videoCount }) {
+  const link = document.createElement("a");
+
+  const selectedActor = getSelectedActor();
+
+  link.href = "#";
+  link.className = selectedActor === actor
+    ? "actor-link active"
+    : "actor-link";
+   
   const nameSpan = document.createElement("span");
   nameSpan.className = "actor-name";
   nameSpan.textContent = actor;
