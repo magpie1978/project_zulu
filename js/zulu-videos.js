@@ -216,19 +216,15 @@ function createAllVideosLink() {
 
   link.textContent = `All Videos (${totalVideoCount})`;
 
-link.addEventListener("click", async event => {
-  event.preventDefault();
+  link.addEventListener("click", async event => {
+    event.preventDefault();
 
-  history.pushState(
-    {},
-    "",
-    `index.html?actor=${encodeURIComponent(actor)}`
-  );
+    history.pushState({}, "", "index.html");
 
-  renderActorSidebar();
-  await loadZuluVideos();
-  scrollVideosToTop();
-});
+    renderActorSidebar();
+    await loadZuluVideos();
+    scrollVideosToTop();
+  });
 
   return link;
 }
@@ -254,12 +250,8 @@ function scrollVideosToTop() {
 
 
 
-// Creates each individual actor filter link and updates the URL with ?actor=...
-
-
 function createActorLink({ actor, videoCount }) {
   const link = document.createElement("a");
-
   const selectedActor = getSelectedActor();
 
   link.href = "#";
@@ -267,20 +259,6 @@ function createActorLink({ actor, videoCount }) {
     ? "actor-link active"
     : "actor-link";
 
-
-
-
-
-function createActorLink({ actor, videoCount }) {
-  const link = document.createElement("a");
-
-  const selectedActor = getSelectedActor();
-
-  link.href = "#";
-  link.className = selectedActor === actor
-    ? "actor-link active"
-    : "actor-link";
-   
   const nameSpan = document.createElement("span");
   nameSpan.className = "actor-name";
   nameSpan.textContent = actor;
@@ -301,13 +279,13 @@ function createActorLink({ actor, videoCount }) {
       `index.html?actor=${encodeURIComponent(actor)}`
     );
 
+    renderActorSidebar();
     await loadZuluVideos();
     scrollVideosToTop();
   });
 
   return link;
 }
-
 
 
 /* =================================================================================================================
