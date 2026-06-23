@@ -133,7 +133,14 @@ body {
   font-size: 0.9em;
 }
 
+.actor-link.active {
+  background-color: #e50914;
+  color: #fff;
+}
 
+.actor-link.active .actor-count {
+  color: #fff;
+}
 
 /* =====================================================================
    CONTROLS
