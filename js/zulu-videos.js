@@ -664,13 +664,13 @@ async function logVideoView(uid) {
 // Assigns colours to known tags
 function getTagColor(tag) {
   const colors = {
-    tag1: "#2563eb",
-    tag2: "#dc2626",
-    tag3: "#16a34a",
-    Amateur: "#9333ea",
-    Bareback: "#ea580c",
-    Group: "#0891b2",
-    Solo: "#64748b"
+    orgy: "#2563eb",
+    group: "#dc2626",
+    threesome: "#16a34a",
+    solo: "#9333ea",
+    tag5: "#ea580c",
+    tag6: "#0891b2",
+    tag7: "#64748b"
   };
 
   return colors[tag] || "#444";
