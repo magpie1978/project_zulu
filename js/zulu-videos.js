@@ -690,3 +690,16 @@ function escapeHTML(value) {
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#039;");
 }
+
+
+
+/* =================================================================================================================
+   LOGOUT
+==================================================================================================================== */
+
+const logoutButton = document.getElementById("logoutButton");
+
+logoutButton?.addEventListener("click", () => {
+    sessionStorage.removeItem("loggedIn");
+    window.location.replace("index.html");
+});
