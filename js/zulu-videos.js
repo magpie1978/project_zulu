@@ -532,6 +532,7 @@ function openVideo(url, uid) {
   resetModalSources();
 
   modal.classList.add("open");
+  document.body.classList.add("modal-open");
 
   modalVideo.src = url;
   modalVideo.style.display = "block";
@@ -587,13 +588,15 @@ function attachModalEvents() {
 // Closes the modal, stops playback, clears the view timer, and resets the current video state.
 function closeVideoModal() {
   modal?.classList.remove("open");
-
+  document.body.classList.remove("modal-open");
+   
   clearViewTimer();
   resetModalSources();
 
   activeVideoUid = null;
   viewLogged = false;
 }
+
 
 // Removes video and iframe sources so playback fully stops
 function resetModalSources() {
