@@ -24,8 +24,8 @@ body {
 ===================================================================== */
 
 .site-header {
-  min-height: 360px;
-  padding: 20px 50px;
+  height: 90px;
+  padding: 0 50px;
 
   display: flex;
   align-items: center;
@@ -35,9 +35,8 @@ body {
   border-bottom: 2px solid #E50914;
 }
 
-
 .header-logo img {
-  height: 320px;
+  height: 64px;
   width: auto;
   display: block;
 }
