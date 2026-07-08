@@ -1,17 +1,31 @@
-const USERNAME = "admin";
-const PASSWORD = "pornflix";
+import { supabase } from "./supabaseClient.js";
 
-document.getElementById("loginForm").addEventListener("submit", e => {
-    e.preventDefault();
+const loginForm = document.getElementById("loginForm");
+const errorBox = document.getElementById("error");
 
-    const username = document.getElementById("username").value;
-    const password = document.getElementById("password").value;
+loginForm?.addEventListener("submit", async event => {
+  event.preventDefault();
 
-    if (username === USERNAME && password === PASSWORD) {
-        sessionStorage.setItem("loggedIn", "true");
-        window.location.href = "pornflix.html";
-    } else {
-        document.getElementById("error").textContent =
-            "Incorrect username or password.";
-    }
+  errorBox.textContent = "";
+
+  const username = document.getElementById("username").value.trim();
+  const password = document.getElementById("password").value;
+
+  const { data, error } = await supabase.rpc("check_zulu_login", {
+    input_username: username,
+    input_password: password
+  });
+
+  if (error) {
+    console.error("Login error:", error);
+    errorBox.textContent = "Login failed. Please try again.";
+    return;
+  }
+
+  if (data === true) {
+    sessionStorage.setItem("loggedIn", "true");
+    window.location.href = "pornflix.html";
+  } else {
+    errorBox.textContent = "Incorrect username or password.";
+  }
 });
