@@ -123,7 +123,11 @@ body {
 
 .actor-link:hover {
   color: #fff;
-  text-decoration: underline;
+  background-color: #c1121f;   /* Slightly lighter red than the active state */
+  border-radius: 8px;
+  padding: 8px 12px;
+  text-decoration: none;
+  transition: background-color 0.2s ease;
 }
 
 
