@@ -1,5 +1,5 @@
 const USERNAME = "admin";
-const PASSWORD = "password";
+const PASSWORD = "pornflix";
 
 document.getElementById("loginForm").addEventListener("submit", e => {
     e.preventDefault();
