@@ -2,6 +2,28 @@
    LOGIN PAGE
 ========================================== */
 
+
+.site-header {
+  height: 300px;
+  padding: 0 50px;
+
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+
+  background: #0B0C0E;
+  border-bottom: 2px solid #E50914;
+}
+
+.header-logo img {
+  height: 256px;
+  width: auto;
+  display: block;
+}
+
+
+
+
 .login-page {
     display: flex;
     justify-content: center;
