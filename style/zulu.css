@@ -133,10 +133,19 @@ body {
   font-size: 0.9em;
 }
 
+
 .actor-link.active {
   background-color: #e50914;
   color: #fff;
+  border-radius: 8px;   /* Rounded corners */
+  padding: 8px 12px;    /* Optional: gives the highlight some breathing room */
 }
+
+
+.actor-link.active:hover {
+  text-decoration: none;
+}
+
 
 .actor-link.active .actor-count {
   color: #fff;
