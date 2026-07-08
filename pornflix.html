@@ -4,6 +4,14 @@
   <meta charset="utf-8" />
   <title>PornFlix</title>
 
+
+  <script>
+    if (sessionStorage.getItem("loggedIn") !== "true") {
+        window.location.replace("index.html");
+    }
+  </script>
+
+  
   <link rel="stylesheet" href="style/zulu.css" />
   <script src="https://unpkg.com/lucide@latest"></script>
 </head>
