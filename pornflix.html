@@ -5,14 +5,19 @@
       
       <title>PornFlix</title>
 
-      <!--  Check to see ig user is logged in, if not logged in, redirect to index.html page -->
+      <!-- ======================================================
+             LOGGED IN STATUS CHECK
+        ======================================================= -->
       <script>
         if (sessionStorage.getItem("loggedIn") !== "true") {
             window.location.replace("index.html");
         }
       </script>
-    
-      <!--  STYLESHEETS -->
+
+        
+      <!-- ======================================================
+             STYLESHEETS
+        ======================================================= -->
       <link rel="stylesheet" href="style/zulu.css" />
       <script src="https://unpkg.com/lucide@latest"></script>
         
