@@ -2,17 +2,20 @@
 <html lang="en">
     <head>
       <meta charset="utf-8" />
+      
       <title>PornFlix</title>
-    
+
+      <!--  Check to see ig user is logged in, if not logged in, redirect to index.html page -->
       <script>
         if (sessionStorage.getItem("loggedIn") !== "true") {
             window.location.replace("index.html");
         }
       </script>
     
-      
+      <!--  STYLESHEETS -->
       <link rel="stylesheet" href="style/zulu.css" />
       <script src="https://unpkg.com/lucide@latest"></script>
+        
     </head>
     
     <body>
@@ -69,7 +72,8 @@
           <video id="modalVideo" controls playsinline></video>
         </div>
       </div>
-    
+
       <script type="module" src="js/zulu-videos.js"></script>
+        
     </body>
 </html>
