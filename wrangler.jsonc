@@ -3,6 +3,13 @@
   "name": "project-zulu-preview",
   "compatibility_date": "2026-08-20",
   "assets": {
-    "directory": "."
+    "directory": ".",
+    "exclude": [
+      ".git",
+      ".git/**",
+      ".DS_Store",
+      "node_modules",
+      "node_modules/**"
+    ]
   }
 }
