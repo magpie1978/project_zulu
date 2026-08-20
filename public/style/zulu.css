@@ -490,17 +490,17 @@ body {
 }
 
 
-/* Header is 90px high */
+/* Preserve the existing/main-branch header sizing */
 .site-header {
-  height: 90px;
+  height: auto;
 }
 
 
-/* Area beneath the header */
+/* Area beneath the existing header */
 .page-layout {
   display: flex;
 
-  height: calc(100vh - 90px);
+  height: calc(100vh - 170px);
   min-height: 0;
 
   overflow: hidden;
@@ -526,7 +526,7 @@ body {
 }
 
 
-/* Video column gets a completely separate scrollbar */
+/* Video column gets its own scrollbar */
 .main-content {
   flex: 1;
   min-width: 0;
