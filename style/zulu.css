@@ -490,17 +490,11 @@ body {
 }
 
 
-/* Preserve the existing/main-branch header sizing */
-.site-header {
-  height: auto;
-}
-
-
-/* Area beneath the existing header */
+/* Area beneath the 300px header */
 .page-layout {
   display: flex;
 
-  height: calc(100vh - 170px);
+  height: calc(100vh - 300px);
   min-height: 0;
 
   overflow: hidden;
