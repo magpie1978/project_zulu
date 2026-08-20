@@ -475,3 +475,66 @@ body.modal-open {
     grid-template-columns: 1fr;
   }
 }
+
+
+
+/* =====================================================
+   INDEPENDENT SIDEBAR / VIDEO SCROLLING
+   ===================================================== */
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+}
+
+
+/* Preserve the existing/main-branch header sizing */
+.site-header {
+  height: auto;
+}
+
+
+/* Area beneath the existing header */
+.page-layout {
+  display: flex;
+
+  height: calc(100vh - 170px);
+  min-height: 0;
+
+  overflow: hidden;
+
+  padding: 24px 50px 36px;
+  gap: 32px;
+}
+
+
+/* Actor column gets its own scrollbar */
+.actor-sidebar {
+  width: 240px;
+  height: 100%;
+  min-height: 0;
+
+  flex-shrink: 0;
+
+  overflow-y: auto;
+  overflow-x: hidden;
+
+  position: static;
+  align-self: stretch;
+}
+
+
+/* Video column gets its own scrollbar */
+.main-content {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+
+  overflow-y: auto;
+  overflow-x: hidden;
+
+  padding-right: 8px;
+}
