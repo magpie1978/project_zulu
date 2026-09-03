@@ -138,11 +138,16 @@ async function loadActorSidebar() {
   actorList.innerHTML = "";
 
   try {
-    const rows = await fetchAllRows({
-      table: "zulu_videos_with_actors",
-      select: "uid, actor",
-      orderColumn: "actor"
-    });
+   const rows = await fetchAllRows({
+     table: "zulu_videos_with_actors",
+     select: "uid, actor",
+     orderColumn: "actor"
+   });
+   
+   console.log("ACTOR DEBUG:", {
+     rowCount: rows.length,
+     firstFiveRows: rows.slice(0, 5)
+   });
 
     const actorCounts = new Map();
     const uniqueVideoIds = new Set();
