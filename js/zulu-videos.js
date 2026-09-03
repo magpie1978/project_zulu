@@ -37,13 +37,28 @@ let viewLogged = false;
 // DOMContentLoaded starts the page. 
 // It loads the actor sidebar, loads the videos, attaches modal controls, and attaches the search/sort controls.
 document.addEventListener("DOMContentLoaded", async () => {
+  const {
+    data: { session },
+    error
+  } = await supabase.auth.getSession();
+
+  if (error) {
+    console.error("Session check failed:", error);
+    window.location.replace("index.html");
+    return;
+  }
+
+  if (!session) {
+    window.location.replace("index.html");
+    return;
+  }
+
   await loadActorSidebar();
   await loadZuluVideos();
 
   attachModalEvents();
   attachFilterEvents();
 });
-
 
 
 /* =================================================================================================================
