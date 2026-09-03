@@ -712,9 +712,12 @@ function escapeHTML(value) {
    LOGOUT
 ==================================================================================================================== */
 
-const logoutButton = document.getElementById("logoutButton");
+logoutButton?.addEventListener("click", async () => {
+  const { error } = await supabase.auth.signOut();
 
-logoutButton?.addEventListener("click", () => {
-    sessionStorage.removeItem("loggedIn");
-    window.location.replace("index.html");
+  if (error) {
+    console.error("Logout error:", error);
+  }
+
+  window.location.replace("index.html");
 });
