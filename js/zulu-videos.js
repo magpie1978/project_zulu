@@ -506,10 +506,6 @@ function renderVideoCard(video) {
     </div>
   `;
 
-  card.addEventListener("click", () => {
-    openVideo(video.url, video.uid);
-  });
-
   return card;
 }
 
@@ -532,12 +528,52 @@ function createTagsHtml(tagsString) {
 
 
 
+// Requests a temporary signed media URL from the Supabase Edge Function.
+async function getSignedVideoUrl(originalUrl) {
+  if (!originalUrl) {
+    throw new Error("No video URL supplied.");
+  }
+
+  let path;
+
+  try {
+    const parsedUrl = new URL(originalUrl);
+    path = parsedUrl.pathname;
+  } catch {
+    path = originalUrl.startsWith("/")
+      ? originalUrl
+      : `/${originalUrl}`;
+  }
+
+  const { data, error } = await supabase.functions.invoke(
+    "zulu-sign-media",
+    {
+      body: {
+        path
+      }
+    }
+  );
+
+  if (error) {
+    console.error("Signed URL error:", error);
+    throw error;
+  }
+
+  if (!data?.url) {
+    throw new Error("Signing service did not return a video URL.");
+  }
+
+  return data.url;
+}
+
+
+
 /* =================================================================================================================
    VIDEO MODAL
 ==================================================================================================================== */
 
 // Opens the modal and decides whether to use the <video> player or an iframe.
-function openVideo(url, uid) {
+async function openVideo(url, uid) {
   if (!url) {
     console.warn("No video URL found.");
     return;
@@ -554,15 +590,24 @@ function openVideo(url, uid) {
   modal.classList.add("open");
   document.body.classList.add("modal-open");
 
-  modalVideo.src = url;
-  modalVideo.style.display = "block";
+  try {
+    const signedUrl = await getSignedVideoUrl(url);
 
-  modalVideo.play().catch(error => {
-    console.error("Video could not be played:", error);
-    console.error("Failed video URL:", url);
-  });
+    modalVideo.src = signedUrl;
+    modalVideo.style.display = "block";
 
-  startViewTimer();
+    await modalVideo.play();
+
+    startViewTimer();
+
+  } catch (error) {
+    console.error("Video could not be opened:", error);
+
+    resetModalSources();
+
+    modal.classList.remove("open");
+    document.body.classList.remove("modal-open");
+  }
 }
 
 
