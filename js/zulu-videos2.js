@@ -800,6 +800,215 @@ function resetModalSources() {
 }
 
 
+
+
+
+/* =================================================================================================================
+   MODAL HELPER FUNCTIONS
+==================================================================================================================== */
+
+function encodeB2Filename(filename) {
+  return encodeURIComponent(filename)
+    .replace(/[!'()*]/g, char =>
+      "%" + char.charCodeAt(0)
+        .toString(16)
+        .toUpperCase()
+    );
+}
+
+
+async function calculateFileSha1(file) {
+  const buffer = await file.arrayBuffer();
+
+  const hashBuffer = await crypto.subtle.digest(
+    "SHA-1",
+    buffer
+  );
+
+  return [...new Uint8Array(hashBuffer)]
+    .map(byte =>
+      byte.toString(16).padStart(2, "0")
+    )
+    .join("");
+}
+
+
+function formatBytes(bytes) {
+  if (!bytes) {
+    return "0 B";
+  }
+
+  const units = [
+    "B",
+    "KB",
+    "MB",
+    "GB",
+    "TB"
+  ];
+
+  let value = bytes;
+  let unit = 0;
+
+  while (
+    value >= 1024 &&
+    unit < units.length - 1
+  ) {
+    value /= 1024;
+    unit++;
+  }
+
+  return `${value.toFixed(1)} ${units[unit]}`;
+}
+
+
+
+
+/* =================================================================================================================
+   UPLOAD TO BACKBLAZE
+==================================================================================================================== */
+
+function uploadFileToBackblaze({
+  uploadUrl,
+  authorizationToken,
+  file,
+  filename,
+  sha1
+}) {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+
+    xhr.open(
+      "POST",
+      uploadUrl,
+      true
+    );
+
+    xhr.setRequestHeader(
+      "Authorization",
+      authorizationToken
+    );
+
+    xhr.setRequestHeader(
+      "X-Bz-File-Name",
+      encodeB2Filename(filename)
+    );
+
+    xhr.setRequestHeader(
+      "Content-Type",
+      "video/mp4"
+    );
+
+    xhr.setRequestHeader(
+      "X-Bz-Content-Sha1",
+      sha1
+    );
+
+    xhr.setRequestHeader(
+      "X-Bz-Info-src_last_modified_millis",
+      String(file.lastModified)
+    );
+
+
+    // -----------------------------------------------------
+    // Upload progress
+    // -----------------------------------------------------
+
+    xhr.upload.addEventListener(
+      "progress",
+      event => {
+        if (!event.lengthComputable) {
+          return;
+        }
+
+        const percent =
+          (event.loaded / event.total) * 100;
+
+        addVideoProgress.value =
+          percent;
+
+        addVideoProgressText.textContent =
+          `${percent.toFixed(1)}% — ` +
+          `${formatBytes(event.loaded)} / ` +
+          `${formatBytes(event.total)}`;
+      }
+    );
+
+
+    // -----------------------------------------------------
+    // Successful request
+    // -----------------------------------------------------
+
+    xhr.addEventListener(
+      "load",
+      () => {
+        let response;
+
+        try {
+          response =
+            JSON.parse(xhr.responseText);
+        } catch {
+          response = {
+            raw: xhr.responseText
+          };
+        }
+
+        if (
+          xhr.status >= 200 &&
+          xhr.status < 300
+        ) {
+          resolve(response);
+        } else {
+          reject(
+            new Error(
+              response?.message ||
+              response?.code ||
+              `Backblaze returned HTTP ${xhr.status}`
+            )
+          );
+        }
+      }
+    );
+
+
+    xhr.addEventListener(
+      "error",
+      () => {
+        reject(
+          new Error(
+            "Network error while uploading to Backblaze."
+          )
+        );
+      }
+    );
+
+
+    xhr.addEventListener(
+      "abort",
+      () => {
+        reject(
+          new Error(
+            "Upload cancelled."
+          )
+        );
+      }
+    );
+
+
+    xhr.send(file);
+  });
+}
+
+
+
+
+
+
+
+
+
+
+
+
 /* =================================================================================================================
    VIEW LOGGING
 ==================================================================================================================== */
@@ -862,6 +1071,10 @@ const addVideoTags = document.getElementById("add-video-tags");
 const addVideoStatus = document.getElementById("add-video-status");
 const addVideoSubmit = document.getElementById("add-video-submit");
 const addVideoFileInfo = document.getElementById("add-video-file-info");
+
+const addVideoProgressWrap = document.getElementById("add-video-upload-progress-wrap");
+const addVideoProgress = document.getElementById("add-video-upload-progress");
+const addVideoProgressText = document.getElementById("add-video-upload-progress-text");
 
 let zuluActorNames = [];
 
@@ -1152,39 +1365,230 @@ function getAddVideoPayload() {
    Next stage will replace this with the secure B2 ingest.
 --------------------------------------------------------- */
 
-addVideoSubmit?.addEventListener("click", async () => {
-  const payload = getAddVideoPayload();
+addVideoSubmit?.addEventListener(
+  "click",
+  async () => {
+    const payload =
+      getAddVideoPayload();
 
-  if (!payload.file) {
-    addVideoStatus.textContent =
-      "Please choose an MP4 file.";
-    return;
+    if (!payload.file) {
+      addVideoStatus.textContent =
+        "Please choose an MP4 file.";
+
+      return;
+    }
+
+    if (!payload.film) {
+      addVideoStatus.textContent =
+        "Please enter a film title.";
+
+      return;
+    }
+
+    if (!payload.actors.length) {
+      addVideoStatus.textContent =
+        "Please add at least one actor.";
+
+      return;
+    }
+
+    if (
+      !payload.filename
+        .toLowerCase()
+        .endsWith(".mp4")
+    ) {
+      addVideoStatus.textContent =
+        "Only MP4 files are currently supported.";
+
+      return;
+    }
+
+
+    // -----------------------------------------------------
+    // Canonical destination filename
+    // -----------------------------------------------------
+
+    const canonicalFilename =
+      `${payload.film}.mp4`;
+
+
+    try {
+      addVideoSubmit.disabled = true;
+      addVideoFile.disabled = true;
+
+      addVideoProgressWrap.style.display =
+        "block";
+
+      addVideoProgress.value = 0;
+
+      addVideoProgressText.textContent =
+        "0%";
+
+
+      // ---------------------------------------------------
+      // 1. Calculate checksum
+      // ---------------------------------------------------
+
+      addVideoStatus.textContent =
+        "Calculating checksum…";
+
+      console.log(
+        "Calculating SHA-1:",
+        canonicalFilename
+      );
+
+      const sha1 =
+        await calculateFileSha1(
+          payload.file
+        );
+
+      console.log(
+        "SHA-1 calculated:",
+        sha1
+      );
+
+
+      // ---------------------------------------------------
+      // 2. Request temporary B2 upload authorization
+      // ---------------------------------------------------
+
+      addVideoStatus.textContent =
+        "Preparing secure Backblaze upload…";
+
+      const {
+        data: uploadAuth,
+        error: authError
+      } = await supabase.functions.invoke(
+        "zulu-upload-authorize",
+        {
+          body: {}
+        }
+      );
+
+      if (authError) {
+        throw authError;
+      }
+
+      if (
+        !uploadAuth?.uploadUrl ||
+        !uploadAuth?.authorizationToken
+      ) {
+        throw new Error(
+          "Backblaze upload authorization was incomplete."
+        );
+      }
+
+
+      // ---------------------------------------------------
+      // 3. Upload browser directly to Backblaze
+      // ---------------------------------------------------
+
+      addVideoStatus.textContent =
+        `Uploading ${canonicalFilename}…`;
+
+      const uploadResult =
+        await uploadFileToBackblaze({
+          uploadUrl:
+            uploadAuth.uploadUrl,
+
+          authorizationToken:
+            uploadAuth.authorizationToken,
+
+          file:
+            payload.file,
+
+          filename:
+            canonicalFilename,
+
+          sha1
+        });
+
+
+      // ---------------------------------------------------
+      // 4. Upload complete
+      // ---------------------------------------------------
+
+      addVideoProgress.value =
+        100;
+
+      addVideoProgressText.textContent =
+        `100% — ${formatBytes(
+          payload.file.size
+        )}`;
+
+      console.log(
+        "BACKBLAZE UPLOAD COMPLETE",
+        uploadResult
+      );
+
+
+      // ---------------------------------------------------
+      // 5. Construct eventual public URL
+      // ---------------------------------------------------
+
+      const publicUrl =
+        "https://media.zulu-orchid-falcon.co.uk/" +
+        encodeB2Filename(
+          canonicalFilename
+        );
+
+
+      console.log(
+        "ZULU INGEST READY FOR CATALOGUE",
+        {
+          film:
+            payload.film,
+
+          filename:
+            canonicalFilename,
+
+          actors:
+            payload.actors,
+
+          tags:
+            payload.tags,
+
+          url:
+            publicUrl,
+
+          filesize:
+            payload.file.size,
+
+          sha1,
+
+          b2FileId:
+            uploadResult.fileId
+        }
+      );
+
+
+      // ---------------------------------------------------
+      // IMPORTANT:
+      // We intentionally stop here for the first test.
+      // No Supabase rows are created yet.
+      // ---------------------------------------------------
+
+      addVideoStatus.textContent =
+        "✓ Video uploaded successfully to Backblaze.";
+
+    } catch (error) {
+      console.error(
+        "ZULU UPLOAD FAILED:",
+        error
+      );
+
+      addVideoStatus.textContent =
+        `Upload failed: ${
+          error?.message ||
+          "Unknown error"
+        }`;
+
+    } finally {
+      addVideoSubmit.disabled = false;
+      addVideoFile.disabled = false;
+    }
   }
-
-  if (!payload.film) {
-    addVideoStatus.textContent =
-      "Please enter a film title.";
-    return;
-  }
-
-  if (!payload.actors.length) {
-    addVideoStatus.textContent =
-      "Please add at least one actor.";
-    return;
-  }
-
-  if (!payload.filename.toLowerCase().endsWith(".mp4")) {
-    addVideoStatus.textContent =
-      "Only MP4 files are currently supported.";
-    return;
-  }
-
-  console.log("ZULU VIDEO INGEST:", payload);
-
-  addVideoStatus.textContent =
-    "Ready to upload — backend connection is the next step.";
-});
-
+);
 
 
 
