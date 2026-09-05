@@ -845,6 +845,355 @@ async function logVideoView(uid) {
 
 
 /* =================================================================================================================
+   ADD VIDEOS
+==================================================================================================================== */
+
+const addVideoBtn = document.getElementById("add-video-btn");
+const addVideoModal = document.getElementById("add-video-modal");
+const addVideoClose = document.getElementById("add-video-close");
+const addVideoCancel = document.getElementById("add-video-cancel");
+
+const addVideoFile = document.getElementById("add-video-file");
+const addVideoTitle = document.getElementById("add-video-title");
+const addVideoActors = document.getElementById("add-video-actors");
+const addVideoAddActor = document.getElementById("add-video-add-actor");
+const addVideoTags = document.getElementById("add-video-tags");
+
+const addVideoStatus = document.getElementById("add-video-status");
+const addVideoSubmit = document.getElementById("add-video-submit");
+const addVideoFileInfo = document.getElementById("add-video-file-info");
+
+let zuluActorNames = [];
+
+
+/* ---------------------------------------------------------
+   Modal
+--------------------------------------------------------- */
+
+function openAddVideoModal() {
+  addVideoModal.classList.add("open");
+  addVideoModal.setAttribute("aria-hidden", "false");
+
+  if (!addVideoActors.children.length) {
+    addActorRow();
+  }
+
+  loadZuluActorNames();
+}
+
+function closeAddVideoModal() {
+  addVideoModal.classList.remove("open");
+  addVideoModal.setAttribute("aria-hidden", "true");
+}
+
+addVideoBtn?.addEventListener("click", openAddVideoModal);
+addVideoClose?.addEventListener("click", closeAddVideoModal);
+addVideoCancel?.addEventListener("click", closeAddVideoModal);
+
+addVideoModal
+  ?.querySelector(".add-video-backdrop")
+  ?.addEventListener("click", closeAddVideoModal);
+
+
+/* ---------------------------------------------------------
+   Load existing actor names
+--------------------------------------------------------- */
+
+async function loadZuluActorNames() {
+  if (zuluActorNames.length) {
+    return;
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from("zulu_distinct_actors")
+      .select("actor")
+      .order("actor");
+
+    if (error) {
+      throw error;
+    }
+
+    zuluActorNames = [
+      ...new Set(
+        (data || [])
+          .map(row => row.actor?.trim())
+          .filter(Boolean)
+      )
+    ];
+
+    console.log(
+      `Loaded ${zuluActorNames.length} existing actor names`
+    );
+
+  } catch (error) {
+    console.error("Could not load actor catalogue:", error);
+  }
+}
+
+
+/* ---------------------------------------------------------
+   File selection
+--------------------------------------------------------- */
+
+addVideoFile?.addEventListener("change", () => {
+  const file = addVideoFile.files?.[0];
+
+  if (!file) {
+    addVideoFileInfo.textContent = "";
+    return;
+  }
+
+  const filename = file.name;
+
+  const title = filename.replace(/\.mp4$/i, "");
+
+  addVideoTitle.value = title;
+
+  const sizeMB = file.size / (1024 * 1024);
+
+  addVideoFileInfo.textContent =
+    `${filename} — ${sizeMB.toFixed(1)} MB`;
+
+  suggestActorsFromTitle(title);
+});
+
+
+/* ---------------------------------------------------------
+   Actor rows
+--------------------------------------------------------- */
+
+function addActorRow(value = "") {
+  const row = document.createElement("div");
+
+  row.className = "add-video-actor-row";
+
+  const wrapper = document.createElement("div");
+
+  wrapper.className = "add-video-actor-wrapper";
+
+  const input = document.createElement("input");
+
+  input.type = "text";
+  input.className = "add-video-actor-input";
+  input.placeholder = "Actor name";
+  input.autocomplete = "off";
+  input.value = value;
+
+  const suggestions = document.createElement("div");
+
+  suggestions.className = "add-video-actor-suggestions";
+
+  input.addEventListener("input", () => {
+    showActorSuggestions(input, suggestions);
+  });
+
+  input.addEventListener("focus", () => {
+    showActorSuggestions(input, suggestions);
+  });
+
+  wrapper.appendChild(input);
+  wrapper.appendChild(suggestions);
+
+  const remove = document.createElement("button");
+
+  remove.type = "button";
+  remove.className = "add-video-remove-actor";
+  remove.textContent = "×";
+
+  remove.addEventListener("click", () => {
+    row.remove();
+  });
+
+  row.appendChild(wrapper);
+  row.appendChild(remove);
+
+  addVideoActors.appendChild(row);
+}
+
+
+addVideoAddActor?.addEventListener("click", () => {
+  addActorRow();
+
+  const inputs =
+    addVideoActors.querySelectorAll(".add-video-actor-input");
+
+  inputs[inputs.length - 1]?.focus();
+});
+
+
+/* ---------------------------------------------------------
+   Actor autocomplete
+--------------------------------------------------------- */
+
+function showActorSuggestions(input, container) {
+  const value = input.value.trim().toLowerCase();
+
+  container.innerHTML = "";
+
+  if (value.length < 1) {
+    container.classList.remove("open");
+    return;
+  }
+
+  const matches = zuluActorNames
+    .filter(actor =>
+      actor.toLowerCase().includes(value)
+    )
+    .slice(0, 10);
+
+  if (!matches.length) {
+    container.classList.remove("open");
+    return;
+  }
+
+  for (const actor of matches) {
+    const item = document.createElement("div");
+
+    item.className = "add-video-actor-suggestion";
+    item.textContent = actor;
+
+    item.addEventListener("mousedown", event => {
+      event.preventDefault();
+
+      input.value = actor;
+
+      container.innerHTML = "";
+      container.classList.remove("open");
+    });
+
+    container.appendChild(item);
+  }
+
+  container.classList.add("open");
+}
+
+
+/* ---------------------------------------------------------
+   Basic actor suggestions from filename
+
+   Suggestions only.
+   User remains in control of final actor list.
+--------------------------------------------------------- */
+
+function suggestActorsFromTitle(title) {
+  addVideoActors.innerHTML = "";
+
+  let workingTitle = title
+    .replace(/^PREVIEW\s*-\s*/i, "")
+    .trim();
+
+  const actors = [];
+
+  const withMatch =
+    workingTitle.match(/^(.+?)\s+with\s+(.+)$/i);
+
+  if (withMatch) {
+    actors.push(withMatch[1].trim());
+
+    let rest = withMatch[2]
+      .replace(/\s+-\s+.*$/, "")
+      .replace(/\s+#\d+$/, "");
+
+    const others = rest
+      .replace(/\s+and\s+/gi, " & ")
+      .split(/\s*,\s*|\s*&\s*/)
+      .map(value => value.trim())
+      .filter(Boolean);
+
+    actors.push(...others);
+  }
+
+  if (!actors.length) {
+    addActorRow();
+    return;
+  }
+
+  const uniqueActors = [...new Set(actors)];
+
+  for (const actor of uniqueActors) {
+    addActorRow(actor);
+  }
+}
+
+
+/* ---------------------------------------------------------
+   Build final payload
+--------------------------------------------------------- */
+
+function getAddVideoPayload() {
+  const file = addVideoFile.files?.[0];
+
+  const actors = [
+    ...addVideoActors.querySelectorAll(".add-video-actor-input")
+  ]
+    .map(input => input.value.trim())
+    .filter(Boolean);
+
+  const tags = addVideoTags.value
+    .split(",")
+    .map(tag => tag.trim())
+    .filter(Boolean);
+
+  return {
+    file,
+    filename: file?.name || null,
+    film: addVideoTitle.value.trim(),
+    actors: [...new Set(actors)],
+    tags
+  };
+}
+
+
+/* ---------------------------------------------------------
+   Submit
+
+   For now we validate and display the payload.
+   Next stage will replace this with the secure B2 ingest.
+--------------------------------------------------------- */
+
+addVideoSubmit?.addEventListener("click", async () => {
+  const payload = getAddVideoPayload();
+
+  if (!payload.file) {
+    addVideoStatus.textContent =
+      "Please choose an MP4 file.";
+    return;
+  }
+
+  if (!payload.film) {
+    addVideoStatus.textContent =
+      "Please enter a film title.";
+    return;
+  }
+
+  if (!payload.actors.length) {
+    addVideoStatus.textContent =
+      "Please add at least one actor.";
+    return;
+  }
+
+  if (!payload.filename.toLowerCase().endsWith(".mp4")) {
+    addVideoStatus.textContent =
+      "Only MP4 files are currently supported.";
+    return;
+  }
+
+  console.log("ZULU VIDEO INGEST:", payload);
+
+  addVideoStatus.textContent =
+    "Ready to upload — backend connection is the next step.";
+});
+
+
+
+
+
+
+
+
+
+/* =================================================================================================================
    UTILITIES
 ==================================================================================================================== */
 
