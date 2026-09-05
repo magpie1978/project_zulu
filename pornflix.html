@@ -80,7 +80,9 @@
       <script type="module" src="js/zulu-videos2.js"></script>
 
 
-
+        <!-- ======================================================
+             ADD VIDEO MODAL
+        ======================================================= -->
 
         <div id="add-video-modal" class="add-video-modal" aria-hidden="true">
           <div class="add-video-backdrop"></div>
@@ -146,7 +148,22 @@
             </div>
         
             <div id="add-video-status" class="add-video-status"></div>
-        
+
+              
+            <div id="add-video-upload-progress-wrap" style="display:none;">
+              <progress
+                id="add-video-upload-progress"
+                value="0"
+                max="100"
+                style="width:100%;">
+              </progress>
+            
+              <div id="add-video-upload-progress-text">
+                0%
+              </div>
+            </div>
+
+              
             <div class="add-video-actions">
               <button
                 id="add-video-cancel"
