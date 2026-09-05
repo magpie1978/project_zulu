@@ -78,6 +78,95 @@
       </div>
 
       <script type="module" src="js/zulu-videos2.js"></script>
+
+
+
+
+        <div id="add-video-modal" class="add-video-modal" aria-hidden="true">
+          <div class="add-video-backdrop"></div>
+        
+          <div class="add-video-dialog" role="dialog" aria-modal="true">
+            <button
+              id="add-video-close"
+              class="add-video-close"
+              type="button"
+              aria-label="Close"
+            >
+              ×
+            </button>
+        
+            <h2>Add Video</h2>
+        
+            <div class="add-video-field">
+              <label for="add-video-file">Video file</label>
+        
+              <input
+                id="add-video-file"
+                type="file"
+                accept="video/mp4,.mp4"
+              >
+        
+              <div id="add-video-file-info" class="add-video-file-info"></div>
+            </div>
+        
+            <div class="add-video-field">
+              <label for="add-video-title">Film title</label>
+        
+              <input
+                id="add-video-title"
+                type="text"
+                autocomplete="off"
+                placeholder="Film title"
+              >
+            </div>
+        
+            <div class="add-video-field">
+              <label>Actors</label>
+        
+              <div id="add-video-actors"></div>
+        
+              <button
+                id="add-video-add-actor"
+                class="add-video-secondary-btn"
+                type="button"
+              >
+                + Add actor
+              </button>
+            </div>
+        
+            <div class="add-video-field">
+              <label for="add-video-tags">Tags</label>
+        
+              <input
+                id="add-video-tags"
+                type="text"
+                autocomplete="off"
+                placeholder="e.g. threesome, outdoor"
+              >
+            </div>
+        
+            <div id="add-video-status" class="add-video-status"></div>
+        
+            <div class="add-video-actions">
+              <button
+                id="add-video-cancel"
+                class="add-video-secondary-btn"
+                type="button"
+              >
+                Cancel
+              </button>
+        
+              <button
+                id="add-video-submit"
+                class="add-video-primary-btn"
+                type="button"
+              >
+                Upload Video
+              </button>
+            </div>
+          </div>
+        </div>
+
         
     </body>
 </html>
