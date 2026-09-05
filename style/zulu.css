@@ -532,3 +532,168 @@ body {
 
   padding-right: 8px;
 }
+
+
+/* =====================================================
+   ADD VIDEO
+   ===================================================== */
+
+.add-video-btn {
+  padding: 10px 18px;
+  border: 0;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.add-video-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: none;
+  align-items: center;
+  justify-content: center;
+}
+
+.add-video-modal.open {
+  display: flex;
+}
+
+.add-video-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.72);
+  backdrop-filter: blur(4px);
+}
+
+.add-video-dialog {
+  position: relative;
+  z-index: 1;
+  width: min(620px, calc(100vw - 32px));
+  max-height: calc(100vh - 40px);
+  overflow-y: auto;
+  padding: 28px;
+  border-radius: 16px;
+  background: #151515;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.55);
+}
+
+.add-video-dialog h2 {
+  margin: 0 0 24px;
+}
+
+.add-video-close {
+  position: absolute;
+  top: 12px;
+  right: 16px;
+  border: 0;
+  background: none;
+  font-size: 30px;
+  cursor: pointer;
+  color: inherit;
+}
+
+.add-video-field {
+  margin-bottom: 20px;
+}
+
+.add-video-field label {
+  display: block;
+  margin-bottom: 7px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.add-video-field input[type="text"],
+.add-video-field input[type="file"] {
+  box-sizing: border-box;
+  width: 100%;
+}
+
+.add-video-field input[type="text"] {
+  padding: 11px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.06);
+  color: inherit;
+}
+
+.add-video-file-info {
+  margin-top: 8px;
+  opacity: 0.7;
+  font-size: 13px;
+}
+
+.add-video-actor-row {
+  position: relative;
+  display: flex;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.add-video-actor-row input {
+  flex: 1;
+}
+
+.add-video-remove-actor {
+  width: 38px;
+  border: 0;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.add-video-actor-wrapper {
+  position: relative;
+  flex: 1;
+}
+
+.add-video-actor-suggestions {
+  position: absolute;
+  top: calc(100% + 3px);
+  left: 0;
+  right: 0;
+  z-index: 20;
+  display: none;
+  max-height: 220px;
+  overflow-y: auto;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 8px;
+  background: #202020;
+}
+
+.add-video-actor-suggestions.open {
+  display: block;
+}
+
+.add-video-actor-suggestion {
+  padding: 9px 12px;
+  cursor: pointer;
+}
+
+.add-video-actor-suggestion:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.add-video-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 24px;
+}
+
+.add-video-primary-btn,
+.add-video-secondary-btn {
+  padding: 10px 16px;
+  border: 0;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.add-video-primary-btn {
+  font-weight: 700;
+}
+
+.add-video-status {
+  min-height: 20px;
+  font-size: 14px;
+}
