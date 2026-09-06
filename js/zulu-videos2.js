@@ -2317,6 +2317,8 @@ addVideoSubmit?.addEventListener(
              }
            }
          }
+       }
+   );
 
 
 
