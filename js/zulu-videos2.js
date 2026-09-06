@@ -347,6 +347,35 @@ async function extractVideoMetadata(file) {
 
 
 /* =================================================================================================================
+   DUPLICATE FILE CHECK HELPER
+==================================================================================================================== */
+
+async function findDuplicateVideoByFingerprint(
+  fingerprint
+) {
+  if (!fingerprint) {
+    return null;
+  }
+
+  const {
+    data,
+    error
+  } = await supabase
+    .from("zulu_videos")
+    .select("uid, film, url")
+    .eq("fingerprint", fingerprint)
+    .maybeSingle();
+
+  if (error) {
+    throw error;
+  }
+
+  return data || null;
+}
+
+
+
+/* =================================================================================================================
    ACTOR SIDEBAR
 ==================================================================================================================== */
 
@@ -2305,6 +2334,36 @@ addVideoSubmit?.addEventListener(
     // Canonical destination filename
     // -----------------------------------------------------
 
+
+    if (!addVideoMetadata) {
+     addVideoStatus.textContent =
+       "Please wait for video analysis to finish.";
+   
+     return;
+   }
+   
+   addVideoStatus.textContent =
+     "Checking for duplicate…";
+   
+   const duplicateVideo =
+     await findDuplicateVideoByFingerprint(
+       addVideoMetadata.fingerprint
+     );
+   
+   if (duplicateVideo) {
+     addVideoStatus.textContent =
+       `Possible duplicate: "${duplicateVideo.film}" ` +
+       `(UID ${duplicateVideo.uid}). ` +
+       `Nothing has been uploaded.`;
+   
+     console.warn(
+       "DUPLICATE VIDEO DETECTED:",
+       duplicateVideo
+     );
+   
+     return;
+   }
+     
     const canonicalFilename =
       `${payload.film}.mp4`;
 
