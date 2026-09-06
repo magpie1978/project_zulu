@@ -133,6 +133,16 @@ const LARGE_FILE_THRESHOLD =
 const LARGE_FILE_PART_SIZE =
   100 * 1024 * 1024; // 100 MiB
 
+const LARGE_FILE_MAX_RETRIES = 5;
+
+const LARGE_FILE_RETRY_BASE_DELAY = 1500;
+
+// DELAY HELPER
+function sleep(ms) {
+  return new Promise(resolve =>
+    setTimeout(resolve, ms)
+  );
+}
 
 async function calculateBlobSha1(blob) {
   const buffer = await blob.arrayBuffer();
@@ -465,6 +475,11 @@ function uploadPartToBackblaze({
       "application/octet-stream"
     );
 
+
+    // -----------------------------------------------------
+    // Upload progress
+    // -----------------------------------------------------
+
     xhr.upload.addEventListener(
       "progress",
       event => {
@@ -473,10 +488,14 @@ function uploadPartToBackblaze({
         }
 
         const totalUploaded =
-          bytesAlreadyUploaded + event.loaded;
+          bytesAlreadyUploaded +
+          event.loaded;
 
         const percent =
-          (totalUploaded / totalFileSize) * 100;
+          (
+            totalUploaded /
+            totalFileSize
+          ) * 100;
 
         addVideoProgress.value =
           percent;
@@ -488,10 +507,15 @@ function uploadPartToBackblaze({
       }
     );
 
+
+    // -----------------------------------------------------
+    // Response
+    // -----------------------------------------------------
+
     xhr.addEventListener(
       "load",
       () => {
-        let response;
+        let response = {};
 
         try {
           response =
@@ -507,42 +531,127 @@ function uploadPartToBackblaze({
           xhr.status < 300
         ) {
           resolve(response);
-        } else {
-          reject(
-            new Error(
-              response?.message ||
-              response?.code ||
-              `Backblaze returned HTTP ${xhr.status}`
-            )
-          );
+          return;
         }
+
+        const error =
+          new Error(
+            response?.message ||
+            response?.code ||
+            `Backblaze returned HTTP ${xhr.status}`
+          );
+
+        error.status =
+          xhr.status;
+
+        error.code =
+          response?.code || null;
+
+        error.response =
+          response;
+
+        reject(error);
       }
     );
+
+
+    // -----------------------------------------------------
+    // Network failure
+    // -----------------------------------------------------
 
     xhr.addEventListener(
       "error",
       () => {
-        reject(
+        const error =
           new Error(
             `Network error uploading part ${partNumber}.`
-          )
-        );
+          );
+
+        error.networkError = true;
+
+        reject(error);
       }
     );
+
 
     xhr.addEventListener(
       "abort",
       () => {
-        reject(
+        const error =
           new Error(
             `Upload cancelled during part ${partNumber}.`
-          )
-        );
+          );
+
+        error.aborted = true;
+
+        reject(error);
       }
     );
 
+
     xhr.send(blob);
   });
+}
+
+
+async function getFreshPartUploadAuthorization(
+  fileId
+) {
+  const {
+    data,
+    error
+  } = await supabase.functions.invoke(
+    "zulu-upload-authorize",
+    {
+      body: {
+        action: "get-part-url",
+        fileId
+      }
+    }
+  );
+
+  if (error) {
+    throw error;
+  }
+
+  if (
+    !data?.uploadUrl ||
+    !data?.authorizationToken
+  ) {
+    throw new Error(
+      "Backblaze did not return part upload authorization."
+    );
+  }
+
+  return data;
+}
+
+
+function shouldRetryPartUpload(error) {
+  if (error?.aborted) {
+    return false;
+  }
+
+  if (error?.networkError) {
+    return true;
+  }
+
+  if (
+    error?.status === 401 ||
+    error?.status === 408 ||
+    error?.status === 429
+  ) {
+    return true;
+  }
+
+  if (
+    error?.status >= 500 &&
+    error?.status <= 599
+  ) {
+    return true;
+  }
+
+  return false;
 }
 
 
@@ -570,7 +679,8 @@ async function uploadLargeFileToBackblaze(
     {
       body: {
         action: "start-large",
-        filename: canonicalFilename
+        filename:
+          canonicalFilename
       }
     }
   );
@@ -590,38 +700,7 @@ async function uploadLargeFileToBackblaze(
 
 
   // -------------------------------------------------------
-  // 2. Get reusable part upload URL/token
-  // -------------------------------------------------------
-
-  const {
-    data: partAuth,
-    error: partAuthError
-  } = await supabase.functions.invoke(
-    "zulu-upload-authorize",
-    {
-      body: {
-        action: "get-part-url",
-        fileId
-      }
-    }
-  );
-
-  if (partAuthError) {
-    throw partAuthError;
-  }
-
-  if (
-    !partAuth?.uploadUrl ||
-    !partAuth?.authorizationToken
-  ) {
-    throw new Error(
-      "Backblaze part upload authorization was incomplete."
-    );
-  }
-
-
-  // -------------------------------------------------------
-  // 3. Upload one part at a time
+  // 2. Calculate number of parts
   // -------------------------------------------------------
 
   const partSha1Array = [];
@@ -633,6 +712,11 @@ async function uploadLargeFileToBackblaze(
     );
 
   let bytesUploaded = 0;
+
+
+  // -------------------------------------------------------
+  // 3. Upload each part
+  // -------------------------------------------------------
 
   for (
     let partIndex = 0;
@@ -648,12 +732,18 @@ async function uploadLargeFileToBackblaze(
 
     const end =
       Math.min(
-        start + LARGE_FILE_PART_SIZE,
+        start +
+          LARGE_FILE_PART_SIZE,
         file.size
       );
 
     const blob =
       file.slice(start, end);
+
+
+    // -----------------------------------------------------
+    // Hash this part only
+    // -----------------------------------------------------
 
     addVideoStatus.textContent =
       `Hashing part ${partNumber} of ${totalParts}…`;
@@ -663,31 +753,171 @@ async function uploadLargeFileToBackblaze(
 
     partSha1Array.push(sha1);
 
-    addVideoStatus.textContent =
-      `Uploading part ${partNumber} of ${totalParts}…`;
 
-    await uploadPartToBackblaze({
-      uploadUrl:
-        partAuth.uploadUrl,
+    // -----------------------------------------------------
+    // Retry loop for this part
+    // -----------------------------------------------------
 
-      authorizationToken:
-        partAuth.authorizationToken,
+    let uploaded =
+      false;
 
-      blob,
+    let lastError =
+      null;
 
-      partNumber,
+    for (
+      let attempt = 1;
+      attempt <=
+        LARGE_FILE_MAX_RETRIES;
+      attempt++
+    ) {
+      try {
+        // Always obtain a fresh URL/token for an attempt.
+        //
+        // This is deliberately conservative and makes
+        // recovery much simpler.
+        const partAuth =
+          await getFreshPartUploadAuthorization(
+            fileId
+          );
 
-      sha1,
+        if (attempt === 1) {
+          addVideoStatus.textContent =
+            `Uploading part ${partNumber} of ${totalParts}…`;
+        } else {
+          addVideoStatus.textContent =
+            `Retrying part ${partNumber} of ${totalParts} — attempt ${attempt}/${LARGE_FILE_MAX_RETRIES}…`;
+        }
 
-      bytesAlreadyUploaded:
-        bytesUploaded,
+        console.log(
+          `Uploading part ${partNumber}/${totalParts}, attempt ${attempt}`
+        );
 
-      totalFileSize:
-        file.size
-    });
+
+        await uploadPartToBackblaze({
+          uploadUrl:
+            partAuth.uploadUrl,
+
+          authorizationToken:
+            partAuth.authorizationToken,
+
+          blob,
+
+          partNumber,
+
+          sha1,
+
+          bytesAlreadyUploaded:
+            bytesUploaded,
+
+          totalFileSize:
+            file.size
+        });
+
+
+        // -----------------------------------------------
+        // Success
+        // -----------------------------------------------
+
+        uploaded =
+          true;
+
+        break;
+
+      } catch (error) {
+        lastError =
+          error;
+
+        console.warn(
+          `Part ${partNumber} attempt ${attempt} failed:`,
+          error
+        );
+
+
+        // -----------------------------------------------
+        // Don't retry permanent errors
+        // -----------------------------------------------
+
+        if (
+          !shouldRetryPartUpload(error)
+        ) {
+          throw error;
+        }
+
+
+        // -----------------------------------------------
+        // Exhausted attempts
+        // -----------------------------------------------
+
+        if (
+          attempt ===
+          LARGE_FILE_MAX_RETRIES
+        ) {
+          break;
+        }
+
+
+        // -----------------------------------------------
+        // Exponential backoff
+        //
+        // 1.5 sec
+        // 3 sec
+        // 6 sec
+        // 12 sec
+        // -----------------------------------------------
+
+        const delay =
+          LARGE_FILE_RETRY_BASE_DELAY *
+          Math.pow(
+            2,
+            attempt - 1
+          );
+
+        addVideoStatus.textContent =
+          `Part ${partNumber} failed. Retrying in ${Math.round(
+            delay / 1000
+          )} seconds…`;
+
+        await sleep(delay);
+      }
+    }
+
+
+    // -----------------------------------------------------
+    // This part never succeeded
+    // -----------------------------------------------------
+
+    if (!uploaded) {
+      throw new Error(
+        `Part ${partNumber} failed after ${LARGE_FILE_MAX_RETRIES} attempts: ${
+          lastError?.message ||
+          "unknown error"
+        }`
+      );
+    }
+
+
+    // -----------------------------------------------------
+    // Part complete
+    // -----------------------------------------------------
 
     bytesUploaded +=
       blob.size;
+
+    addVideoProgress.value =
+      (
+        bytesUploaded /
+        file.size
+      ) * 100;
+
+    addVideoProgressText.textContent =
+      `${(
+        (
+          bytesUploaded /
+          file.size
+        ) * 100
+      ).toFixed(1)}% — ` +
+      `${formatBytes(bytesUploaded)} / ` +
+      `${formatBytes(file.size)}`;
   }
 
 
@@ -705,8 +935,11 @@ async function uploadLargeFileToBackblaze(
     "zulu-upload-authorize",
     {
       body: {
-        action: "finish-large",
+        action:
+          "finish-large",
+
         fileId,
+
         partSha1Array
       }
     }
@@ -725,7 +958,6 @@ async function uploadLargeFileToBackblaze(
 
   return finishData;
 }
-
 
 
 
