@@ -2234,28 +2234,56 @@ addVideoSubmit?.addEventListener(
            finalizeData
          );
          
+         addVideoCompleted = true;
+         
+         addVideoProgress.value = 100;
+         
+         addVideoProgressText.textContent =
+           `100% — ${formatBytes(payload.file.size)}`;
+         
          addVideoStatus.textContent =
            `✓ Video added successfully. UID ${finalizeData.uid}`;
-                
-    } catch (error) {
-      console.error(
-        "ZULU UPLOAD FAILED:",
-        error
-      );
-
-      addVideoStatus.textContent =
-        `Upload failed: ${
-          error?.message ||
-          "Unknown error"
-        }`;
-
-    } finally {
-      addVideoSubmit.disabled = false;
-      addVideoFile.disabled = false;
-    }
-  }
-);
-
+         
+         addVideoSubmit.textContent =
+           "Uploaded ✓";
+         
+         if (addVideoCancel) {
+           addVideoCancel.textContent = "Close";
+         }
+         
+         
+         } catch (error) {
+           console.error(
+             "ZULU UPLOAD FAILED:",
+             error
+           );
+         
+           addVideoStatus.textContent =
+             `Upload failed: ${
+               error?.message ||
+               "Unknown error"
+             }`;
+         
+         } finally {
+           addVideoUploadInProgress = false;
+           addVideoFile.disabled = false;
+         
+           if (addVideoCompleted) {
+             addVideoSubmit.disabled = true;
+             addVideoSubmit.textContent = "Uploaded ✓";
+         
+             if (addVideoCancel) {
+               addVideoCancel.textContent = "Close";
+             }
+           } else {
+             addVideoSubmit.disabled = false;
+             addVideoSubmit.textContent = "Upload Video";
+         
+             if (addVideoCancel) {
+               addVideoCancel.textContent = "Cancel";
+             }
+           }
+         }
 
 
 
