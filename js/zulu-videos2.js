@@ -377,6 +377,62 @@ async function findDuplicateVideoByFingerprint(
 
 
 
+
+/* =================================================================================================================
+  FORMAT VIDEO QUALITY HELPER
+==================================================================================================================== */
+
+function formatVideoQuality(width, height) {
+  const w = Number(width || 0);
+  const h = Number(height || 0);
+
+  if (!w || !h) {
+    return "";
+  }
+
+  // Use the vertical resolution as the familiar quality label.
+  return `${h}p`;
+}
+
+
+/* =================================================================================================================
+  FORMAT VIDEO DURATION HELPER
+==================================================================================================================== */
+
+function formatVideoDuration(seconds) {
+  const totalSeconds =
+    Math.round(Number(seconds || 0));
+
+  if (!totalSeconds) {
+    return "";
+  }
+
+  const hours =
+    Math.floor(totalSeconds / 3600);
+
+  const minutes =
+    Math.floor(
+      (totalSeconds % 3600) / 60
+    );
+
+  const secs =
+    totalSeconds % 60;
+
+  if (hours > 0) {
+    return [
+      hours,
+      String(minutes).padStart(2, "0"),
+      String(secs).padStart(2, "0")
+    ].join(":");
+  }
+
+  return [
+    minutes,
+    String(secs).padStart(2, "0")
+  ].join(":");
+}
+
+
 /* =================================================================================================================
    ACTOR SIDEBAR
 ==================================================================================================================== */
@@ -578,7 +634,7 @@ async function loadZuluVideos() {
     } = await supabase
       .from("zulu_videos_search")
       .select(
-        "uid, film, url, actors, actor_search, tags"
+        "uid, film, url, actors, actor_search, tags, filesize_bytes, duration_seconds, width, height"
       )
       .order("film", { ascending: true });
 
@@ -1383,6 +1439,31 @@ function renderVideoCard(video) {
   const tagsHtml =
     createTagsHtml(video.tags);
 
+  const quality =
+  formatVideoQuality(
+    video.width,
+    video.height
+  );
+   
+   const fileSize =
+     video.filesize_bytes
+       ? formatBytes(video.filesize_bytes)
+       : "";
+   
+   const duration =
+     formatVideoDuration(
+       video.duration_seconds
+     );
+   
+   const technicalMeta =
+     [
+       quality,
+       fileSize,
+       duration
+     ]
+       .filter(Boolean)
+       .join(" • ");
+
   card.innerHTML = `
     <div class="thumb-wrap">
 
@@ -1408,6 +1489,15 @@ function renderVideoCard(video) {
       <h3>
         ${escapeHTML(title)}
       </h3>
+      
+      ${technicalMeta
+        ? `
+          <div class="video-tech-meta">
+            ${escapeHTML(technicalMeta)}
+          </div>
+        `
+        : ""
+      }
 
       <div class="video-meta">
 
