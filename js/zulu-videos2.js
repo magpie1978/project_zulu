@@ -1720,7 +1720,12 @@ function closeAddVideoModal() {
 
   addVideoModal.classList.remove("open");
   addVideoModal.setAttribute("aria-hidden", "true");
+
+  if (addVideoCompleted) {
+    resetAddVideoForm();
+  }
 }
+
 
 addVideoBtn?.addEventListener(
   "click",
