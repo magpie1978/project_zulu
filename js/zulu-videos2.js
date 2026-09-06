@@ -184,6 +184,165 @@ async function calculateBlobSha1(blob) {
 
 
 
+/* =================================================================================================================
+  ENCRYPTION HELPERS
+==================================================================================================================== */
+
+async function sha256Blob(blob) {
+  const buffer = await blob.arrayBuffer();
+
+  const hashBuffer =
+    await crypto.subtle.digest(
+      "SHA-256",
+      buffer
+    );
+
+  return [...new Uint8Array(hashBuffer)]
+    .map(byte =>
+      byte.toString(16).padStart(2, "0")
+    )
+    .join("");
+}
+
+
+async function extractVideoMetadata(file) {
+  const objectUrl =
+    URL.createObjectURL(file);
+
+  const video =
+    document.createElement("video");
+
+  video.preload = "metadata";
+  video.muted = true;
+  video.playsInline = true;
+  video.src = objectUrl;
+
+  try {
+    await new Promise((resolve, reject) => {
+      video.addEventListener(
+        "loadedmetadata",
+        resolve,
+        { once: true }
+      );
+
+      video.addEventListener(
+        "error",
+        () => reject(
+          new Error(
+            "Could not read video metadata."
+          )
+        ),
+        { once: true }
+      );
+    });
+
+    const durationSeconds =
+      Number(video.duration);
+
+    const width =
+      Number(video.videoWidth);
+
+    const height =
+      Number(video.videoHeight);
+
+    const sampleSize =
+      4 * 1024 * 1024; // 4 MiB
+
+    const firstChunk =
+      file.slice(
+        0,
+        Math.min(
+          sampleSize,
+          file.size
+        )
+      );
+
+    const middleStart =
+      Math.max(
+        0,
+        Math.floor(
+          file.size / 2 -
+          sampleSize / 2
+        )
+      );
+
+    const middleChunk =
+      file.slice(
+        middleStart,
+        Math.min(
+          middleStart + sampleSize,
+          file.size
+        )
+      );
+
+    const lastStart =
+      Math.max(
+        0,
+        file.size - sampleSize
+      );
+
+    const lastChunk =
+      file.slice(
+        lastStart,
+        file.size
+      );
+
+    const [
+      firstSha256,
+      middleSha256,
+      lastSha256
+    ] = await Promise.all([
+      sha256Blob(firstChunk),
+      sha256Blob(middleChunk),
+      sha256Blob(lastChunk)
+    ]);
+
+    const fingerprintSource = [
+      file.size,
+      durationSeconds.toFixed(3),
+      width,
+      height,
+      firstSha256,
+      middleSha256,
+      lastSha256
+    ].join("|");
+
+    const fingerprintBuffer =
+      await crypto.subtle.digest(
+        "SHA-256",
+        new TextEncoder().encode(
+          fingerprintSource
+        )
+      );
+
+    const fingerprint =
+      [...new Uint8Array(fingerprintBuffer)]
+        .map(byte =>
+          byte
+            .toString(16)
+            .padStart(2, "0")
+        )
+        .join("");
+
+    return {
+      filesizeBytes:
+        file.size,
+
+      durationSeconds,
+
+      width,
+
+      height,
+
+      fingerprint
+    };
+
+  } finally {
+    URL.revokeObjectURL(
+      objectUrl
+    );
+  }
+}
 
 
 /* =================================================================================================================
@@ -1884,6 +2043,19 @@ addVideoFile?.addEventListener("change", () => {
       "Could not generate an automatic thumbnail.";
   });
 
+   extractVideoMetadata(file)
+  .then(metadata => {
+    console.log(
+      "VIDEO METADATA:",
+      metadata
+    );
+  })
+  .catch(error => {
+    console.error(
+      "VIDEO METADATA ERROR:",
+      error
+    );
+  });
    
 
 
