@@ -2023,18 +2023,22 @@ addVideoSubmit?.addEventListener(
       `${payload.film}.mp4`;
 
 
-    try {
-      addVideoSubmit.disabled = true;
-      addVideoFile.disabled = true;
-
-      addVideoProgressWrap.style.display =
-        "block";
-
-      addVideoProgress.value = 0;
-
-      addVideoProgressText.textContent =
-        "0%";
-
+   try {
+     addVideoUploadInProgress = true;
+     addVideoCompleted = false;
+   
+     addVideoSubmit.disabled = true;
+     addVideoSubmit.textContent = "Uploading…";
+   
+     addVideoFile.disabled = true;
+   
+     addVideoProgressWrap.style.display =
+       "block";
+   
+     addVideoProgress.value = 0;
+   
+     addVideoProgressText.textContent =
+       "0%";
 
       // ---------------------------------------------------
       // 1–3. Upload to Backblaze
