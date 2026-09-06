@@ -1497,11 +1497,11 @@ function uploadFileToBackblaze({
       encodeB2Filename(filename)
     );
 
-    xhr.setRequestHeader(
-      "Content-Type",
-      "video/mp4"
-    );
-
+   xhr.setRequestHeader(
+     "Content-Type",
+     file.type || "application/octet-stream"
+   );
+     
     xhr.setRequestHeader(
       "X-Bz-Content-Sha1",
       sha1
@@ -2347,16 +2347,16 @@ addVideoSubmit?.addEventListener(
       // ---------------------------------------------------
       
       if (selectedThumbnailBlob) {
-        await uploadThumbnailToGitHub(
+        await uploadThumbnailToBackblaze(
           finalizeData.uid,
           selectedThumbnailBlob
         );
       } else {
-        console.warn(
-          "No thumbnail selected — continuing without thumbnail."
-        );
-      }
-      
+      console.warn(
+             "No thumbnail selected — continuing without thumbnail."
+           );
+         }
+         
       
       // ---------------------------------------------------
       // 8. Everything completed successfully
@@ -2712,7 +2712,7 @@ function blobToBase64(blob) {
 }
 
 // UPLOAD THUMBNAIL HELPER
-async function uploadThumbnailToGitHub(
+async function uploadThumbnailToBackblaze(
   uid,
   thumbnailBlob
 ) {
@@ -2722,51 +2722,92 @@ async function uploadThumbnailToGitHub(
     );
   }
 
+  const filename =
+    `images/${uid}.png`;
+
   addVideoStatus.textContent =
     "Publishing thumbnail…";
 
-  const imageBase64 =
-    await blobToBase64(
+  console.log(
+    "Preparing thumbnail upload:",
+    filename,
+    formatBytes(thumbnailBlob.size)
+  );
+
+
+  // ---------------------------------------------------
+  // Calculate SHA-1 required by Backblaze
+  // ---------------------------------------------------
+
+  const sha1 =
+    await calculateFileSha1(
       thumbnailBlob
     );
 
+
+  // ---------------------------------------------------
+  // Get temporary B2 upload authorization
+  // ---------------------------------------------------
+
   const {
-    data,
-    error
+    data: uploadAuth,
+    error: authError
   } = await supabase.functions.invoke(
-    "zulu-upload-thumbnail",
+    "zulu-upload-authorize",
     {
       body: {
-        uid,
-        imageBase64
+        action: "normal"
       }
     }
   );
 
-  if (error) {
+  if (authError) {
     console.error(
-      "THUMBNAIL UPLOAD ERROR:",
-      error
+      "THUMBNAIL AUTH ERROR:",
+      authError
     );
 
-    throw error;
+    throw authError;
   }
 
-  if (!data?.success) {
+  if (
+    !uploadAuth?.uploadUrl ||
+    !uploadAuth?.authorizationToken
+  ) {
     throw new Error(
-      data?.error ||
-      "Thumbnail could not be published."
+      "Backblaze thumbnail upload authorization was incomplete."
     );
   }
+
+
+  // ---------------------------------------------------
+  // Upload PNG directly from browser to Backblaze
+  // ---------------------------------------------------
+
+  const result =
+    await uploadFileToBackblaze({
+      uploadUrl:
+        uploadAuth.uploadUrl,
+
+      authorizationToken:
+        uploadAuth.authorizationToken,
+
+      file:
+        thumbnailBlob,
+
+      filename,
+
+      sha1
+    });
+
 
   console.log(
-    "THUMBNAIL PUBLISHED:",
-    data
+    "THUMBNAIL PUBLISHED TO BACKBLAZE:",
+    result
   );
 
-  return data;
+  return result;
 }
-
 
 // FRAME TO BLOB HELPER
 function canvasToPngBlob(canvas) {
