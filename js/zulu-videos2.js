@@ -2548,11 +2548,27 @@ addVideoSubmit?.addEventListener(
                film: payload.film,
                url: publicUrl,
                actors: payload.actors,
-               tags: payload.tags
+               tags: payload.tags,
+         
+               filesize_bytes:
+                 addVideoMetadata.filesizeBytes,
+         
+               duration_seconds:
+                 addVideoMetadata.durationSeconds,
+         
+               width:
+                 addVideoMetadata.width,
+         
+               height:
+                 addVideoMetadata.height,
+         
+               fingerprint:
+                 addVideoMetadata.fingerprint
              }
            }
          );
-         
+
+      
          if (finalizeError) {
            console.error(
              "CATALOGUE FINALIZE ERROR:",
