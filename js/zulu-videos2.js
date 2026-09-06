@@ -1184,7 +1184,7 @@ function renderVideoCard(video) {
     video.film || "Untitled video";
 
   const thumbnailUrl =
-    `/images/${video.uid}.png`;
+    `https://media.zulu-orchid-falcon.co.uk/images/${video.uid}.png`;
 
   const views =
     Number(video.views || 0);
@@ -1202,7 +1202,7 @@ function renderVideoCard(video) {
         loading="lazy"
         onerror="
           this.onerror=null;
-          this.src='/images/default.png';
+          this.src='https://media.zulu-orchid-falcon.co.uk/images/default.png';
         "
       >
 
