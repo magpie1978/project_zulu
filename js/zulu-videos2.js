@@ -1504,73 +1504,86 @@ addVideoSubmit?.addEventListener(
         });
 
 
-      // ---------------------------------------------------
-      // 4. Upload complete
-      // ---------------------------------------------------
-
-      addVideoProgress.value =
-        100;
-
-      addVideoProgressText.textContent =
-        `100% — ${formatBytes(
-          payload.file.size
-        )}`;
-
-      console.log(
-        "BACKBLAZE UPLOAD COMPLETE",
-        uploadResult
-      );
-
-
-      // ---------------------------------------------------
-      // 5. Construct eventual public URL
-      // ---------------------------------------------------
-
-      const publicUrl =
-        "https://media.zulu-orchid-falcon.co.uk/" +
-        encodeB2Filename(
-          canonicalFilename
-        );
-
-
-      console.log(
-        "ZULU INGEST READY FOR CATALOGUE",
-        {
-          film:
-            payload.film,
-
-          filename:
-            canonicalFilename,
-
-          actors:
-            payload.actors,
-
-          tags:
-            payload.tags,
-
-          url:
-            publicUrl,
-
-          filesize:
-            payload.file.size,
-
-          sha1,
-
-          b2FileId:
-            uploadResult.fileId
-        }
-      );
-
-
-      // ---------------------------------------------------
-      // IMPORTANT:
-      // We intentionally stop here for the first test.
-      // No Supabase rows are created yet.
-      // ---------------------------------------------------
-
-      addVideoStatus.textContent =
-        "✓ Video uploaded successfully to Backblaze.";
-
+         // ---------------------------------------------------
+         // 4. Backblaze upload complete
+         // ---------------------------------------------------
+         
+         addVideoProgress.value = 100;
+         
+         addVideoProgressText.textContent =
+           `100% — ${formatBytes(payload.file.size)}`;
+         
+         console.log(
+           "BACKBLAZE UPLOAD COMPLETE",
+           uploadResult
+         );
+         
+         
+         // ---------------------------------------------------
+         // 5. Construct canonical public URL
+         // ---------------------------------------------------
+         
+         const publicUrl =
+           "https://media.zulu-orchid-falcon.co.uk/" +
+           encodeB2Filename(canonicalFilename);
+         
+         console.log(
+           "PUBLIC VIDEO URL:",
+           publicUrl
+         );
+         
+         
+         // ---------------------------------------------------
+         // 6. Create catalogue entry
+         // ---------------------------------------------------
+         
+         addVideoStatus.textContent =
+           "Creating catalogue entry…";
+         
+         const {
+           data: finalizeData,
+           error: finalizeError
+         } = await supabase.functions.invoke(
+           "zulu-finalize-video",
+           {
+             body: {
+               film: payload.film,
+               url: publicUrl,
+               actors: payload.actors,
+               tags: payload.tags
+             }
+           }
+         );
+         
+         if (finalizeError) {
+           console.error(
+             "CATALOGUE FINALIZE ERROR:",
+             finalizeError
+           );
+         
+           throw finalizeError;
+         }
+         
+         if (!finalizeData?.success) {
+           throw new Error(
+             finalizeData?.error ||
+             "Could not finalize catalogue entry."
+           );
+         }
+         
+         
+         // ---------------------------------------------------
+         // 7. Everything completed successfully
+         // ---------------------------------------------------
+         
+         console.log(
+           "ZULU VIDEO COMPLETE:",
+           finalizeData
+         );
+         
+         addVideoStatus.textContent =
+           `✓ Video added successfully. UID ${finalizeData.uid}`;
+                
     } catch (error) {
       console.error(
         "ZULU UPLOAD FAILED:",
