@@ -338,11 +338,15 @@ async function extractVideoMetadata(file) {
       fingerprint
     };
 
-  } finally {
-    URL.revokeObjectURL(
-      objectUrl
-    );
-  }
+   finally {
+     video.pause();
+     video.removeAttribute("src");
+     video.load();
+   
+     URL.revokeObjectURL(
+       objectUrl
+     );
+   }
 }
 
 
