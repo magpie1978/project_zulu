@@ -2608,10 +2608,7 @@ function scoreThumbnailFrame(
 
 
 // FRAME TO BLOB HELPER
-function canvasToJpegBlob(
-  canvas,
-  quality = 0.88
-) {
+function canvasToPngBlob(canvas) {
   return new Promise((resolve, reject) => {
     canvas.toBlob(
       blob => {
@@ -2625,12 +2622,10 @@ function canvasToJpegBlob(
           );
         }
       },
-      "image/jpeg",
-      quality
+      "image/png"
     );
   });
 }
-
 
 // CANDIDATE GENERATOR
 async function generateThumbnailCandidates(
@@ -2796,7 +2791,7 @@ async function generateThumbnailCandidates(
         );
 
       const blob =
-        await canvasToJpegBlob(
+        await canvasToPngBlob(
           canvas
         );
 
