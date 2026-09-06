@@ -29,6 +29,10 @@ let activeVideoUid = null;
 let viewTimer = null;
 let viewLogged = false;
 
+// Add Video state
+let addVideoUploadInProgress = false;
+let addVideoCompleted = false;
+
 
 /* =================================================================================================================
    INITIALISATION
@@ -1665,6 +1669,8 @@ let zuluActorNames = [];
 --------------------------------------------------------- */
 
 function openAddVideoModal() {
+  addVideoCompleted = false;
+
   addVideoModal.classList.add("open");
   addVideoModal.setAttribute("aria-hidden", "false");
 
@@ -1676,17 +1682,41 @@ function openAddVideoModal() {
 }
 
 function closeAddVideoModal() {
+  if (addVideoUploadInProgress) {
+    addVideoStatus.textContent =
+      "Upload in progress — please wait for it to finish.";
+    return;
+  }
+
   addVideoModal.classList.remove("open");
   addVideoModal.setAttribute("aria-hidden", "true");
 }
 
-addVideoBtn?.addEventListener("click", openAddVideoModal);
-addVideoClose?.addEventListener("click", closeAddVideoModal);
-addVideoCancel?.addEventListener("click", closeAddVideoModal);
+addVideoBtn?.addEventListener(
+  "click",
+  openAddVideoModal
+);
+
+addVideoClose?.addEventListener(
+  "click",
+  closeAddVideoModal
+);
+
+addVideoCancel?.addEventListener(
+  "click",
+  closeAddVideoModal
+);
 
 addVideoModal
   ?.querySelector(".add-video-backdrop")
-  ?.addEventListener("click", closeAddVideoModal);
+  ?.addEventListener(
+    "click",
+    () => {
+      if (!addVideoUploadInProgress) {
+        closeAddVideoModal();
+      }
+    }
+  );
 
 
 /* ---------------------------------------------------------
