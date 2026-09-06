@@ -45,6 +45,7 @@ let viewLogged = false;
 // Add Video state
 let addVideoUploadInProgress = false;
 let addVideoCompleted = false;
+let addVideoMetadata = null;
 
 // Facial Recognition
 let faceDetector = null;
@@ -1871,6 +1872,7 @@ function openAddVideoModal() {
 
 function resetAddVideoForm() {
   addVideoFile.value = "";
+  addVideoMetadata = null;
   addVideoTitle.value = "";
   addVideoActors.innerHTML = "";
   addVideoTags.value = "";
@@ -2044,13 +2046,17 @@ addVideoFile?.addEventListener("change", () => {
   });
 
    extractVideoMetadata(file)
-  .then(metadata => {
-    console.log(
-      "VIDEO METADATA:",
-      metadata
-    );
-  })
-  .catch(error => {
+     .then(metadata => {
+       addVideoMetadata = metadata;
+   
+       console.log(
+         "VIDEO METADATA:",
+         metadata
+       );
+     })
+
+   
+   .catch(error => {
     console.error(
       "VIDEO METADATA ERROR:",
       error
@@ -2226,6 +2232,7 @@ function suggestActorsFromTitle(title) {
 
 function getAddVideoPayload() {
   const file = addVideoFile.files?.[0];
+   addVideoMetadata = null;
 
   const actors = [
     ...addVideoActors.querySelectorAll(".add-video-actor-input")
