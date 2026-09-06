@@ -1733,6 +1733,37 @@ function resetAddVideoForm() {
   addVideoCompleted = false;
 
   addActorRow();
+
+  thumbnailCandidates = [];
+   selectedThumbnailIndex = 0;
+   selectedThumbnailBlob = null;
+   
+   if (currentThumbnailPreviewUrl) {
+     URL.revokeObjectURL(
+       currentThumbnailPreviewUrl
+     );
+   
+     currentThumbnailPreviewUrl = null;
+   }
+   
+   if (addVideoThumbnailPreview) {
+     addVideoThumbnailPreview.removeAttribute(
+       "src"
+     );
+   
+     addVideoThumbnailPreview.style.display =
+       "none";
+   }
+   
+   if (addVideoThumbnailActions) {
+     addVideoThumbnailActions.style.display =
+       "none";
+   }
+   
+   if (addVideoThumbnailStatus) {
+     addVideoThumbnailStatus.textContent =
+       "Select a video to generate suggestions.";
+   }
 }
 
 
@@ -2305,66 +2336,102 @@ addVideoSubmit?.addEventListener(
          // 7. Everything completed successfully
          // ---------------------------------------------------
          
-         console.log(
-           "ZULU VIDEO COMPLETE:",
-           finalizeData
-         );
-         
-         addVideoCompleted = true;
+      console.log(
+        "ZULU VIDEO CATALOGUE COMPLETE:",
+        finalizeData
+      );
       
-         await loadActorSidebar();
-         await loadZuluVideos();
-         
-         addVideoProgress.value = 100;
-         
-         addVideoProgressText.textContent =
-           `100% — ${formatBytes(payload.file.size)}`;
-         
-         addVideoStatus.textContent =
-           `✓ Video added successfully. UID ${finalizeData.uid}`;
-         
-         addVideoSubmit.textContent =
-           "Uploaded ✓";
-         
-         if (addVideoCancel) {
-           addVideoCancel.textContent = "Close";
-         }
-         
-         
-         } catch (error) {
-           console.error(
-             "ZULU UPLOAD FAILED:",
-             error
-           );
-         
-           addVideoStatus.textContent =
-             `Upload failed: ${
-               error?.message ||
-               "Unknown error"
-             }`;
-         
-         } finally {
-           addVideoUploadInProgress = false;
-           addVideoFile.disabled = false;
-         
-           if (addVideoCompleted) {
-             addVideoSubmit.disabled = true;
-             addVideoSubmit.textContent = "Uploaded ✓";
-         
-             if (addVideoCancel) {
-               addVideoCancel.textContent = "Close";
+      
+      // ---------------------------------------------------
+      // 7. Publish selected thumbnail to GitHub
+      // ---------------------------------------------------
+      
+      if (selectedThumbnailBlob) {
+        await uploadThumbnailToGitHub(
+          finalizeData.uid,
+          selectedThumbnailBlob
+        );
+      } else {
+        console.warn(
+          "No thumbnail selected — continuing without thumbnail."
+        );
+      }
+      
+      
+      // ---------------------------------------------------
+      // 8. Everything completed successfully
+      // ---------------------------------------------------
+      
+      addVideoCompleted = true;
+      
+      await loadActorSidebar();
+      await loadZuluVideos();
+      
+      addVideoProgress.value = 100;
+      
+      addVideoProgressText.textContent =
+        `100% — ${formatBytes(payload.file.size)}`;
+      
+      addVideoStatus.textContent =
+        `✓ Video added successfully. UID ${finalizeData.uid}`;
+      
+      addVideoSubmit.textContent =
+        "Uploaded ✓";
+      
+      if (addVideoCancel) {
+        addVideoCancel.textContent =
+          "Close";
+      }         
+               addVideoProgress.value = 100;
+               
+               addVideoProgressText.textContent =
+                 `100% — ${formatBytes(payload.file.size)}`;
+               
+               addVideoStatus.textContent =
+                 `✓ Video added successfully. UID ${finalizeData.uid}`;
+               
+               addVideoSubmit.textContent =
+                 "Uploaded ✓";
+               
+               if (addVideoCancel) {
+                 addVideoCancel.textContent = "Close";
+               }
+               
+               
+               } catch (error) {
+                 console.error(
+                   "ZULU UPLOAD FAILED:",
+                   error
+                 );
+               
+                 addVideoStatus.textContent =
+                   `Upload failed: ${
+                     error?.message ||
+                     "Unknown error"
+                   }`;
+               
+               } finally {
+                 addVideoUploadInProgress = false;
+                 addVideoFile.disabled = false;
+               
+                 if (addVideoCompleted) {
+                   addVideoSubmit.disabled = true;
+                   addVideoSubmit.textContent = "Uploaded ✓";
+               
+                   if (addVideoCancel) {
+                     addVideoCancel.textContent = "Close";
+                   }
+                 } else {
+                   addVideoSubmit.disabled = false;
+                   addVideoSubmit.textContent = "Upload Video";
+               
+                   if (addVideoCancel) {
+                     addVideoCancel.textContent = "Cancel";
+                   }
+                 }
+               }
              }
-           } else {
-             addVideoSubmit.disabled = false;
-             addVideoSubmit.textContent = "Upload Video";
-         
-             if (addVideoCancel) {
-               addVideoCancel.textContent = "Cancel";
-             }
-           }
-         }
-       }
-   );
+         );
 
 
 
@@ -2605,6 +2672,100 @@ function scoreThumbnailFrame(
 }
 
 
+
+// BASE64 HELPER
+function blobToBase64(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+
+    reader.onload = () => {
+      const result =
+        String(reader.result || "");
+
+      const commaIndex =
+        result.indexOf(",");
+
+      if (commaIndex === -1) {
+        reject(
+          new Error(
+            "Could not convert thumbnail to Base64."
+          )
+        );
+        return;
+      }
+
+      resolve(
+        result.slice(commaIndex + 1)
+      );
+    };
+
+    reader.onerror = () => {
+      reject(
+        new Error(
+          "Could not read thumbnail image."
+        )
+      );
+    };
+
+    reader.readAsDataURL(blob);
+  });
+}
+
+// UPLOAD THUMBNAIL HELPER
+async function uploadThumbnailToGitHub(
+  uid,
+  thumbnailBlob
+) {
+  if (!thumbnailBlob) {
+    throw new Error(
+      "No thumbnail has been selected."
+    );
+  }
+
+  addVideoStatus.textContent =
+    "Publishing thumbnail…";
+
+  const imageBase64 =
+    await blobToBase64(
+      thumbnailBlob
+    );
+
+  const {
+    data,
+    error
+  } = await supabase.functions.invoke(
+    "zulu-upload-thumbnail",
+    {
+      body: {
+        uid,
+        imageBase64
+      }
+    }
+  );
+
+  if (error) {
+    console.error(
+      "THUMBNAIL UPLOAD ERROR:",
+      error
+    );
+
+    throw error;
+  }
+
+  if (!data?.success) {
+    throw new Error(
+      data?.error ||
+      "Thumbnail could not be published."
+    );
+  }
+
+  console.log(
+    "THUMBNAIL PUBLISHED:",
+    data
+  );
+
+  return data;
+}
 
 
 // FRAME TO BLOB HELPER
