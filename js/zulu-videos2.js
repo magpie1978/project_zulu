@@ -297,17 +297,15 @@ async function extractVideoMetadata(file) {
       sha256Blob(middleChunk),
       sha256Blob(lastChunk)
     ]);
+   
+   const fingerprintSource = [
+     file.size,
+     firstSha256,
+     middleSha256,
+     lastSha256
+      ].join("|");
 
-    const fingerprintSource = [
-      file.size,
-      durationSeconds.toFixed(3),
-      width,
-      height,
-      firstSha256,
-      middleSha256,
-      lastSha256
-    ].join("|");
-
+     
     const fingerprintBuffer =
       await crypto.subtle.digest(
         "SHA-256",
