@@ -1681,6 +1681,36 @@ function openAddVideoModal() {
   loadZuluActorNames();
 }
 
+
+
+
+function resetAddVideoForm() {
+  addVideoFile.value = "";
+  addVideoTitle.value = "";
+  addVideoActors.innerHTML = "";
+  addVideoTags.value = "";
+
+  addVideoFileInfo.textContent = "";
+  addVideoStatus.textContent = "";
+
+  addVideoProgress.value = 0;
+  addVideoProgressText.textContent = "";
+  addVideoProgressWrap.style.display = "none";
+
+  addVideoSubmit.disabled = false;
+  addVideoSubmit.textContent = "Upload Video";
+
+  if (addVideoCancel) {
+    addVideoCancel.textContent = "Cancel";
+  }
+
+  addVideoCompleted = false;
+
+  addActorRow();
+}
+
+
+
 function closeAddVideoModal() {
   if (addVideoUploadInProgress) {
     addVideoStatus.textContent =
