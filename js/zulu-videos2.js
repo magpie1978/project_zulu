@@ -2049,6 +2049,10 @@ async function loadZuluActorNames() {
 addVideoFile?.addEventListener("change", () => {
   const file = addVideoFile.files?.[0];
 
+  // A newly selected file must always be analysed
+  // from scratch.
+  addVideoMetadata = null;
+
   if (!file) {
     addVideoFileInfo.textContent = "";
     return;
@@ -2056,43 +2060,80 @@ addVideoFile?.addEventListener("change", () => {
 
   const filename = file.name;
 
-  const title = filename.replace(/\.mp4$/i, "");
+  const title =
+    filename.replace(/\.mp4$/i, "");
 
   addVideoTitle.value = title;
 
-  const sizeMB = file.size / (1024 * 1024);
+  const sizeMB =
+    file.size / (1024 * 1024);
 
   addVideoFileInfo.textContent =
     `${filename} — ${sizeMB.toFixed(1)} MB`;
 
   suggestActorsFromTitle(title);
 
-   (async () => {
-     try {
-       addVideoMetadata =
-         await extractVideoMetadata(file);
-   
-       console.log(
-         "VIDEO METADATA:",
-         addVideoMetadata
-       );
-   
-       await generateThumbnailCandidates(file);
-   
-     } catch (error) {
-       console.error(
-         "VIDEO ANALYSIS ERROR:",
-         error
-       );
-   
-       addVideoThumbnailStatus.textContent =
-         "Could not analyse this video.";
-     }
-   })();   
+
+  // -------------------------------------------------------
+  // Analyse video
+  //
+  // Metadata extraction runs first.
+  // Thumbnail generation starts only after metadata
+  // extraction has completed.
+  // -------------------------------------------------------
+
+  (async () => {
+    try {
+      addVideoThumbnailStatus.textContent =
+        "Reading video metadata…";
+
+      addVideoMetadata =
+        await extractVideoMetadata(file);
+
+      console.log(
+        "VIDEO METADATA:",
+        addVideoMetadata
+      );
 
 
+      // ---------------------------------------------------
+      // Make sure the user has not selected another file
+      // while this analysis was running.
+      // ---------------------------------------------------
+
+      if (
+        addVideoFile.files?.[0] !== file
+      ) {
+        console.log(
+          "Ignoring analysis result for previous file."
+        );
+
+        return;
+      }
+
+
+      // ---------------------------------------------------
+      // Generate face-aware thumbnail candidates
+      // ---------------------------------------------------
+
+      await generateThumbnailCandidates(
+        file
+      );
+
+    } catch (error) {
+      console.error(
+        "VIDEO ANALYSIS ERROR:",
+        error
+      );
+
+      // Don't leave metadata from a failed analysis
+      addVideoMetadata = null;
+
+      addVideoThumbnailStatus.textContent =
+        "Could not analyse this video.";
+    }
+  })();
 });
-
 
 /* ---------------------------------------------------------
    Actor rows
@@ -2258,7 +2299,6 @@ function suggestActorsFromTitle(title) {
 
 function getAddVideoPayload() {
   const file = addVideoFile.files?.[0];
-   addVideoMetadata = null;
 
   const actors = [
     ...addVideoActors.querySelectorAll(".add-video-actor-input")
