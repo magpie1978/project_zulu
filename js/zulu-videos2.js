@@ -2265,6 +2265,9 @@ addVideoSubmit?.addEventListener(
          );
          
          addVideoCompleted = true;
+      
+         await loadActorSidebar();
+         await loadZuluVideos();
          
          addVideoProgress.value = 100;
          
