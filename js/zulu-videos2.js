@@ -303,7 +303,7 @@ async function extractVideoMetadata(file) {
      firstSha256,
      middleSha256,
      lastSha256
-      ].join("|");
+   ].join("|");
 
      
     const fingerprintBuffer =
