@@ -2067,35 +2067,28 @@ addVideoFile?.addEventListener("change", () => {
 
   suggestActorsFromTitle(title);
 
-  generateThumbnailCandidates(file)
-  .catch(error => {
-    console.error(
-      "Thumbnail generation failed:",
-      error
-    );
-
-    addVideoThumbnailStatus.textContent =
-      "Could not generate an automatic thumbnail.";
-  });
-
-   extractVideoMetadata(file)
-     .then(metadata => {
-       addVideoMetadata = metadata;
+   (async () => {
+     try {
+       addVideoMetadata =
+         await extractVideoMetadata(file);
    
        console.log(
          "VIDEO METADATA:",
-         metadata
+         addVideoMetadata
        );
-     })
-
    
-   .catch(error => {
-    console.error(
-      "VIDEO METADATA ERROR:",
-      error
-    );
-  });
+       await generateThumbnailCandidates(file);
    
+     } catch (error) {
+       console.error(
+         "VIDEO ANALYSIS ERROR:",
+         error
+       );
+   
+       addVideoThumbnailStatus.textContent =
+         "Could not analyse this video.";
+     }
+   })();   
 
 
 });
@@ -3274,11 +3267,16 @@ async function generateThumbnailCandidates(
 
     showThumbnailCandidate(0);
 
-  } finally {
-    URL.revokeObjectURL(
-      objectUrl
-    );
-  }
+  } 
+     finally {
+     video.pause();
+     video.removeAttribute("src");
+     video.load();
+   
+     URL.revokeObjectURL(
+       objectUrl
+     );
+   }
 }
 
 // PREVIEW CYCLING FUNCTION
