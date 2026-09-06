@@ -247,7 +247,7 @@ async function extractVideoMetadata(file) {
       Number(video.videoHeight);
 
     const sampleSize =
-      4 * 1024 * 1024; // 4 MiB
+      4 * 1024 * 1024;
 
     const firstChunk =
       file.slice(
@@ -338,17 +338,15 @@ async function extractVideoMetadata(file) {
       fingerprint
     };
 
-   finally {
-     video.pause();
-     video.removeAttribute("src");
-     video.load();
-   
-     URL.revokeObjectURL(
-       objectUrl
-     );
-   }
-}
+  } finally {
+    video.pause();
+    video.removeAttribute("src");
 
+    URL.revokeObjectURL(
+      objectUrl
+    );
+  }
+}
 
 /* =================================================================================================================
    DUPLICATE FILE CHECK HELPER
