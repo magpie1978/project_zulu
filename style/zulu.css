@@ -248,36 +248,48 @@ body {
 
 .video-delete-btn {
   appearance: none;
-  border: 1px solid rgba(255, 255, 255, 0.2);
+
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+
+  width: 28px;
+  height: 28px;
+  padding: 0;
+
+  border: 0;
   border-radius: 6px;
 
-  padding: 4px 8px;
-
   background: transparent;
-  color: rgba(255, 255, 255, 0.65);
-
-  font: inherit;
-  font-size: 0.72rem;
+  color: rgba(255, 255, 255, 0.45);
 
   cursor: pointer;
 
   transition:
     background 0.15s ease,
-    color 0.15s ease,
-    border-color 0.15s ease;
+    color 0.15s ease;
+}
+
+.video-delete-btn svg {
+  width: 15px;
+  height: 15px;
+
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .video-delete-btn:hover {
   background: rgba(220, 38, 38, 0.15);
-  border-color: rgba(220, 38, 38, 0.65);
-  color: #fff;
+  color: #ef5350;
 }
 
 .video-delete-btn:disabled {
-  opacity: 0.5;
+  opacity: 0.4;
   cursor: wait;
 }
-
 
 
 /* =====================================================================
