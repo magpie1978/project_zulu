@@ -742,3 +742,130 @@ body {
   min-height: 20px;
   font-size: 14px;
 }
+
+
+
+/* =====================================================
+   DELETE VIDEO
+   ===================================================== */
+
+.delete-video-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+
+  display: none;
+  align-items: center;
+  justify-content: center;
+
+  padding: 20px;
+
+  background: rgba(0, 0, 0, 0.78);
+  backdrop-filter: blur(4px);
+}
+
+.delete-video-modal.open {
+  display: flex;
+}
+
+.delete-video-dialog {
+  width: min(440px, 100%);
+  padding: 26px;
+
+  background: #171717;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+
+  box-shadow:
+    0 20px 60px rgba(0, 0, 0, 0.65);
+
+  color: #fff;
+}
+
+.delete-video-dialog h2 {
+  margin: 0 0 18px;
+  font-size: 1.35rem;
+}
+
+.delete-video-warning {
+  margin: 0 0 10px;
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.delete-video-dialog ul {
+  margin: 0 0 20px;
+  padding-left: 20px;
+
+  color: rgba(255, 255, 255, 0.7);
+  line-height: 1.6;
+}
+
+.delete-video-details {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+
+  padding: 14px;
+
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 8px;
+}
+
+#deleteVideoTitle {
+  font-size: 0.95rem;
+}
+
+#deleteVideoUid {
+  font-size: 0.78rem;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.delete-video-final-warning {
+  margin: 18px 0;
+
+  font-size: 0.82rem;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.delete-video-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.delete-video-cancel,
+.delete-video-confirm {
+  border: 0;
+  border-radius: 7px;
+
+  padding: 9px 14px;
+
+  font: inherit;
+  font-size: 0.82rem;
+
+  cursor: pointer;
+}
+
+.delete-video-cancel {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+}
+
+.delete-video-cancel:hover {
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.delete-video-confirm {
+  background: #c62828;
+  color: #fff;
+}
+
+.delete-video-confirm:hover {
+  background: #e53935;
+}
+
+.delete-video-confirm:disabled,
+.delete-video-cancel:disabled {
+  opacity: 0.5;
+  cursor: wait;
+}
