@@ -227,6 +227,61 @@
           </div>
         </div>
 
+        <div
+          id="deleteVideoModal"
+          class="delete-video-modal"
+          aria-hidden="true"
+        >
+          <div
+            class="delete-video-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="deleteVideoHeading"
+          >
+            <h2 id="deleteVideoHeading">
+              Delete video?
+            </h2>
+        
+            <p class="delete-video-warning">
+              This will permanently delete:
+            </p>
+        
+            <ul>
+              <li>The video from Backblaze</li>
+              <li>The thumbnail from Backblaze</li>
+              <li>The catalogue record</li>
+              <li>The actor relationships</li>
+            </ul>
+        
+            <div class="delete-video-details">
+              <strong id="deleteVideoTitle"></strong>
+              <span id="deleteVideoUid"></span>
+            </div>
+        
+            <p class="delete-video-final-warning">
+              This cannot be undone.
+            </p>
+        
+            <div class="delete-video-actions">
+              <button
+                type="button"
+                id="deleteVideoCancel"
+                class="delete-video-cancel"
+              >
+                Cancel
+              </button>
+        
+              <button
+                type="button"
+                id="deleteVideoConfirm"
+                class="delete-video-confirm"
+              >
+                Delete permanently
+              </button>
+            </div>
+          </div>
+        </div>
+
         
     </body>
 </html>
