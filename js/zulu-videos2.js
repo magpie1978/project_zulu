@@ -1747,18 +1747,20 @@ function renderVideoCard(video) {
            type="button"
            class="video-delete-btn"
            title="Delete video"
-           aria-label="Delete ${escapeHTML(title)}"
+           aria-label="Delete video"
          >
            <svg
+             class="trash-icon"
              viewBox="0 0 24 24"
              aria-hidden="true"
            >
-             <path
-               d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 10v6M14 10v6"
-             />
+             <path d="M4 7h16" />
+             <path d="M10 11v6" />
+             <path d="M14 11v6" />
+             <path d="M6 7l1 14h10l1-14" />
+             <path d="M9 7V4h6v3" />
            </svg>
-         </button>
-      
+         </button>      
         </div>
       
       </div>
