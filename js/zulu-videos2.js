@@ -432,6 +432,95 @@ function formatVideoDuration(seconds) {
 
 
 /* =================================================================================================================
+   DELETE VIDEO HELPER
+==================================================================================================================== */
+
+async function deleteZuluVideo(
+  video,
+  button
+) {
+  const confirmed =
+    window.confirm(
+      `Permanently delete this video?\n\n` +
+      `${video.film}\n` +
+      `UID ${video.uid}\n\n` +
+      `This will delete:\n` +
+      `• the video from Backblaze\n` +
+      `• the thumbnail from Backblaze\n` +
+      `• the Supabase catalogue record\n` +
+      `• the actor relationships\n\n` +
+      `This cannot be undone.`
+    );
+
+  if (!confirmed) {
+    return;
+  }
+
+  const originalText =
+    button.textContent;
+
+  try {
+    button.disabled = true;
+    button.textContent =
+      "Deleting…";
+
+    const {
+      data,
+      error
+    } = await supabase.functions.invoke(
+      "zulu-delete-video",
+      {
+        body: {
+          uid: video.uid
+        }
+      }
+    );
+
+    if (error) {
+      throw error;
+    }
+
+    if (!data?.success) {
+      throw new Error(
+        data?.error ||
+        "The video could not be deleted."
+      );
+    }
+
+    console.log(
+      "VIDEO DELETED:",
+      data
+    );
+
+    // Refresh counts/sidebar first
+    await loadActorSidebar();
+
+    // Then reload the video grid
+    await loadZuluVideos();
+
+  } catch (error) {
+    console.error(
+      "VIDEO DELETE FAILED:",
+      error
+    );
+
+    alert(
+      `Delete failed: ${
+        error?.message ||
+        "Unknown error"
+      }`
+    );
+
+    button.disabled = false;
+    button.textContent =
+      originalText;
+  }
+}
+
+
+
+
+/* =================================================================================================================
    ACTOR SIDEBAR
 ==================================================================================================================== */
 
@@ -1498,20 +1587,57 @@ function renderVideoCard(video) {
       }
 
       <div class="video-meta">
-
+      
         <div class="video-views">
           👁 ${views.toLocaleString()}
         </div>
-
-        <div class="video-tags">
-          ${tagsHtml}
+      
+        <div class="video-card-actions">
+      
+          <div class="video-tags">
+            ${tagsHtml}
+          </div>
+      
+          <button
+            type="button"
+            class="video-delete-btn"
+            title="Delete video"
+            aria-label="Delete ${escapeHTML(title)}"
+          >
+            Delete
+          </button>
+      
         </div>
-
+      
       </div>
 
     </div>
   `;
 
+
+
+   const deleteButton =
+  card.querySelector(
+    ".video-delete-btn"
+  );
+
+deleteButton?.addEventListener(
+  "click",
+  async event => {
+    event.preventDefault();
+
+    // Critical:
+    // don't let the card click open the video.
+    event.stopPropagation();
+
+    await deleteZuluVideo(
+      video,
+      deleteButton
+    );
+  }
+);
+
+   
   /*
    * IMPORTANT:
    * Clicking a card calls openVideo().
