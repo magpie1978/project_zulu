@@ -169,13 +169,6 @@ const LARGE_FILE_MAX_RETRIES = 5;
 
 const LARGE_FILE_RETRY_BASE_DELAY = 1500;
 
-// DELAY HELPER
-// function sleep(ms) {
-//  return new Promise(resolve =>
-//    setTimeout(resolve, ms)
-//  );
-//}
-
 async function calculateBlobSha1(blob) {
   const buffer = await blob.arrayBuffer();
 
