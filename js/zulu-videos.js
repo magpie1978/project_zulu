@@ -174,7 +174,7 @@ const LARGE_FILE_RETRY_BASE_DELAY = 1500;
 //  return new Promise(resolve =>
 //    setTimeout(resolve, ms)
 //  );
-}
+//}
 
 async function calculateBlobSha1(blob) {
   const buffer = await blob.arrayBuffer();
