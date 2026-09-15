@@ -935,6 +935,25 @@ function getSelectedActor() {
 }
 
 
+function handleUploadStatus(message) {
+  if (addVideoStatus) {
+    addVideoStatus.textContent = message;
+  }
+}
+
+
+function handleUploadProgress({
+  percent,
+  text
+}) {
+  if (addVideoProgress) {
+    addVideoProgress.value = percent;
+  }
+
+  if (addVideoProgressText) {
+    addVideoProgressText.textContent = text;
+  }
+}
 
 /* =================================================================================================================
    PART UPLOAD PROCESS - FOR LARGE FILES
@@ -947,7 +966,8 @@ function uploadPartToBackblaze({
   partNumber,
   sha1,
   bytesAlreadyUploaded,
-  totalFileSize
+  totalFileSize,
+  onProgress
 }) {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
@@ -1000,13 +1020,15 @@ function uploadPartToBackblaze({
             totalFileSize
           ) * 100;
 
-        addVideoProgress.value =
-          percent;
-
-        addVideoProgressText.textContent =
-          `${percent.toFixed(1)}% — ` +
-          `${formatBytes(totalUploaded)} / ` +
-          `${formatBytes(totalFileSize)}`;
+        onProgress?.({
+          percent,
+          loaded: totalUploaded,
+          total: totalFileSize,
+          text:
+            `${percent.toFixed(1)}% — ` +
+            `${formatBytes(totalUploaded)} / ` +
+            `${formatBytes(totalFileSize)}`
+        });      
       }
     );
 
@@ -1163,16 +1185,22 @@ function shouldRetryPartUpload(error) {
    LARGE FILE ORCHESTRATION FUNCTION
 ==================================================================================================================== */
 
-async function uploadLargeFileToBackblaze(
-  file,
-  canonicalFilename
-) {
+  async function uploadLargeFileToBackblaze(
+    file,
+    canonicalFilename,
+    {
+      onProgress,
+      onStatus
+    } = {}
+  ) {
+  
   // -------------------------------------------------------
   // 1. Start large file
   // -------------------------------------------------------
 
-  addVideoStatus.textContent =
-    "Starting large-file upload…";
+ onStatus?.(
+  "Starting large-file upload…"
+  );
 
   const {
     data: startData,
@@ -1247,10 +1275,10 @@ async function uploadLargeFileToBackblaze(
     // -----------------------------------------------------
     // Hash this part only
     // -----------------------------------------------------
-
-    addVideoStatus.textContent =
-      `Hashing part ${partNumber} of ${totalParts}…`;
-
+    
+    onStatus?.(
+      `Hashing part ${partNumber} of ${totalParts}…`
+    );
     const sha1 =
       await calculateBlobSha1(blob);
 
@@ -1284,13 +1312,15 @@ async function uploadLargeFileToBackblaze(
           );
 
         if (attempt === 1) {
-          addVideoStatus.textContent =
-            `Uploading part ${partNumber} of ${totalParts}…`;
+          onStatus?.(
+            `Uploading part ${partNumber} of ${totalParts}…`
+          );
         } else {
-          addVideoStatus.textContent =
-            `Retrying part ${partNumber} of ${totalParts} — attempt ${attempt}/${LARGE_FILE_MAX_RETRIES}…`;
+          onStatus?.(
+            `Retrying part ${partNumber} of ${totalParts} — attempt ${attempt}/${LARGE_FILE_MAX_RETRIES}…`
+          );
         }
-
+        
         console.log(
           `Uploading part ${partNumber}/${totalParts}, attempt ${attempt}`
         );
@@ -1299,21 +1329,23 @@ async function uploadLargeFileToBackblaze(
         await uploadPartToBackblaze({
           uploadUrl:
             partAuth.uploadUrl,
-
+        
           authorizationToken:
             partAuth.authorizationToken,
-
+        
           blob,
-
+        
           partNumber,
-
+        
           sha1,
-
+        
           bytesAlreadyUploaded:
             bytesUploaded,
-
+        
           totalFileSize:
-            file.size
+            file.size,
+        
+          onProgress
         });
 
 
@@ -1375,11 +1407,12 @@ async function uploadLargeFileToBackblaze(
             attempt - 1
           );
 
-        addVideoStatus.textContent =
-          `Part ${partNumber} failed. Retrying in ${Math.round(
-            delay / 1000
-          )} seconds…`;
-
+          onStatus?.(
+            `Part ${partNumber} failed. Retrying in ${Math.round(
+              delay / 1000
+            )} seconds…`
+          );
+        
         await sleep(delay);
       }
     }
@@ -1405,64 +1438,74 @@ async function uploadLargeFileToBackblaze(
 
     bytesUploaded +=
       blob.size;
-
-    addVideoProgress.value =
-      (
-        bytesUploaded /
-        file.size
-      ) * 100;
-
-    addVideoProgressText.textContent =
-      `${(
-        (
-          bytesUploaded /
-          file.size
-        ) * 100
-      ).toFixed(1)}% — ` +
-      `${formatBytes(bytesUploaded)} / ` +
-      `${formatBytes(file.size)}`;
+    
+    const percent =
+      (bytesUploaded / file.size) * 100;
+    
+    onProgress?.({
+      percent,
+      loaded: bytesUploaded,
+      total: file.size,
+      text:
+        `${percent.toFixed(1)}% — ` +
+        `${formatBytes(bytesUploaded)} / ` +
+        `${formatBytes(file.size)}`
+    });
   }
 
 
-  // -------------------------------------------------------
-  // 4. Finish large file
-  // -------------------------------------------------------
+// -------------------------------------------------------
+// 4. Finish large file
+// -------------------------------------------------------
 
-  addVideoStatus.textContent =
-    "Finalizing large file…";
+onStatus?.(
+  "Finalizing large file…"
+);
 
-  const {
-    data: finishData,
-    error: finishError
-  } = await supabase.functions.invoke(
-    "zulu-upload-authorize",
-    {
-      body: {
-        action:
-          "finish-large",
+const {
+  data: finishData,
+  error: finishError
+} = await supabase.functions.invoke(
+  "zulu-upload-authorize",
+  {
+    body: {
+      action:
+        "finish-large",
 
-        fileId,
+      fileId,
 
-        partSha1Array
-      }
+      partSha1Array
     }
-  );
-
-  if (finishError) {
-    throw finishError;
   }
+);
 
-  if (!finishData?.success) {
-    throw new Error(
-      finishData?.error ||
-      "Could not finish Backblaze large file."
-    );
-  }
-
-  return finishData;
+if (finishError) {
+  throw finishError;
 }
 
+if (!finishData?.success) {
+  throw new Error(
+    finishData?.error ||
+    "Backblaze could not finalize the large file."
+  );
+}
 
+onProgress?.({
+  percent: 100,
+  loaded: file.size,
+  total: file.size,
+  text:
+    `100.0% — ` +
+    `${formatBytes(file.size)} / ` +
+    `${formatBytes(file.size)}`
+});
+
+onStatus?.(
+  "Large-file upload complete."
+);
+
+return finishData;
+}
 
 
 
@@ -2815,12 +2858,16 @@ addVideoSubmit?.addEventListener(
           formatBytes(payload.file.size)
         );
 
-        uploadResult =
-          await uploadLargeFileToBackblaze(
-            payload.file,
-            canonicalFilename
-          );
-
+uploadResult =
+  await uploadLargeFileToBackblaze(
+    payload.file,
+    canonicalFilename,
+    {
+      onProgress: handleUploadProgress,
+      onStatus: handleUploadStatus
+    }
+  );
+        
       } else {
         // -------------------------------------------------
         // SMALLER FILE
