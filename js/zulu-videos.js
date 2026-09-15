@@ -1009,29 +1009,21 @@ function uploadPartToBackblaze({
         if (!event.lengthComputable) {
           return;
         }
-
-        const totalUploaded =
-          bytesAlreadyUploaded +
-          event.loaded;
-
+    
         const percent =
-          (
-            totalUploaded /
-            totalFileSize
-          ) * 100;
-
+          (event.loaded / event.total) * 100;
+    
         onProgress?.({
           percent,
-          loaded: totalUploaded,
-          total: totalFileSize,
+          loaded: event.loaded,
+          total: event.total,
           text:
             `${percent.toFixed(1)}% — ` +
-            `${formatBytes(totalUploaded)} / ` +
-            `${formatBytes(totalFileSize)}`
-        });      
+            `${formatBytes(event.loaded)} / ` +
+            `${formatBytes(event.total)}`
+        });
       }
     );
-
 
     // -----------------------------------------------------
     // Response
@@ -2079,7 +2071,8 @@ function uploadFileToBackblaze({
   authorizationToken,
   file,
   filename,
-  sha1
+  sha1,
+  onProgress
 }) {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
@@ -2126,20 +2119,21 @@ function uploadFileToBackblaze({
         if (!event.lengthComputable) {
           return;
         }
-
+    
         const percent =
           (event.loaded / event.total) * 100;
-
-        addVideoProgress.value =
-          percent;
-
-        addVideoProgressText.textContent =
-          `${percent.toFixed(1)}% — ` +
-          `${formatBytes(event.loaded)} / ` +
-          `${formatBytes(event.total)}`;
+    
+        onProgress?.({
+          percent,
+          loaded: event.loaded,
+          total: event.total,
+          text:
+            `${percent.toFixed(1)}% — ` +
+            `${formatBytes(event.loaded)} / ` +
+            `${formatBytes(event.total)}`
+        });
       }
     );
-
 
     // -----------------------------------------------------
     // Successful request
@@ -2863,8 +2857,11 @@ uploadResult =
     payload.file,
     canonicalFilename,
     {
-      onProgress: handleUploadProgress,
-      onStatus: handleUploadStatus
+      onProgress:
+        handleUploadProgress,
+
+      onStatus:
+        handleUploadStatus
     }
   );
         
@@ -2945,9 +2942,12 @@ uploadResult =
 
             filename:
               canonicalFilename,
-
-            sha1
-          });
+            
+            sha1,
+            
+            onProgress:
+              handleUploadProgress
+            });      
       }
 
 
