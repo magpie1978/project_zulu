@@ -170,10 +170,10 @@ const LARGE_FILE_MAX_RETRIES = 5;
 const LARGE_FILE_RETRY_BASE_DELAY = 1500;
 
 // DELAY HELPER
-function sleep(ms) {
-  return new Promise(resolve =>
-    setTimeout(resolve, ms)
-  );
+// function sleep(ms) {
+//  return new Promise(resolve =>
+//    setTimeout(resolve, ms)
+//  );
 }
 
 async function calculateBlobSha1(blob) {
@@ -388,55 +388,55 @@ async function findDuplicateVideoByFingerprint(
   FORMAT VIDEO QUALITY HELPER
 ==================================================================================================================== */
 
-function formatVideoQuality(width, height) {
-  const w = Number(width || 0);
-  const h = Number(height || 0);
+//function formatVideoQuality(width, height) {
+//  const w = Number(width || 0);
+//  const h = Number(height || 0);
 
-  if (!w || !h) {
-    return "";
-  }
+//  if (!w || !h) {
+//    return "";
+//  }
 
   // Use the vertical resolution as the familiar quality label.
-  return `${h}p`;
-}
+//  return `${h}p`;
+// }
 
 
 /* =================================================================================================================
   FORMAT VIDEO DURATION HELPER
 ==================================================================================================================== */
 
-function formatVideoDuration(seconds) {
-  const totalSeconds =
-    Math.round(Number(seconds || 0));
+//function formatVideoDuration(seconds) {
+//  const totalSeconds =
+//    Math.round(Number(seconds || 0));
 
-  if (!totalSeconds) {
-    return "";
-  }
+//  if (!totalSeconds) {
+//    return "";
+//  }
 
-  const hours =
-    Math.floor(totalSeconds / 3600);
+//  const hours =
+//    Math.floor(totalSeconds / 3600);
 
-  const minutes =
-    Math.floor(
-      (totalSeconds % 3600) / 60
-    );
+//  const minutes =
+//    Math.floor(
+//      (totalSeconds % 3600) / 60
+//    );
 
-  const secs =
-    totalSeconds % 60;
+//  const secs =
+//    totalSeconds % 60;
 
-  if (hours > 0) {
-    return [
-      hours,
-      String(minutes).padStart(2, "0"),
-      String(secs).padStart(2, "0")
-    ].join(":");
-  }
+//  if (hours > 0) {
+//    return [
+//      hours,
+//      String(minutes).padStart(2, "0"),
+//      String(secs).padStart(2, "0")
+//    ].join(":");
+//  }
 
-  return [
-    minutes,
-    String(secs).padStart(2, "0")
-  ].join(":");
-}
+//  return [
+//    minutes,
+//    String(secs).padStart(2, "0")
+//  ].join(":");
+// }
 
 
 /* =================================================================================================================
@@ -2004,32 +2004,32 @@ async function calculateFileSha1(file) {
 }
 
 
-function formatBytes(bytes) {
-  if (!bytes) {
-    return "0 B";
-  }
+//function formatBytes(bytes) {
+//  if (!bytes) {
+//    return "0 B";
+//  }
 
-  const units = [
-    "B",
-    "KB",
-    "MB",
-    "GB",
-    "TB"
-  ];
+//  const units = [
+//    "B",
+//    "KB",
+//    "MB",
+//    "GB",
+//    "TB"
+//  ];
 
-  let value = bytes;
-  let unit = 0;
+//  let value = bytes;
+//  let unit = 0;
 
-  while (
-    value >= 1024 &&
-    unit < units.length - 1
-  ) {
-    value /= 1024;
-    unit++;
-  }
+//  while (
+//    value >= 1024 &&
+//    unit < units.length - 1
+//  ) {
+//    value /= 1024;
+//    unit++;
+//  }
 
-  return `${value.toFixed(1)} ${units[unit]}`;
-}
+//  return `${value.toFixed(1)} ${units[unit]}`;
+//}
 
 
 
@@ -3123,14 +3123,14 @@ function getTagColor(tag) {
 }
 
 
-function escapeHTML(value) {
-  return String(value ?? "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#039;");
-}
+//function escapeHTML(value) {
+//  return String(value ?? "")
+//    .replace(/&/g, "&amp;")
+//    .replace(/</g, "&lt;")
+//    .replace(/>/g, "&gt;")
+//    .replace(/"/g, "&quot;")
+//    .replace(/'/g, "&#039;");
+//}
 
 
 
