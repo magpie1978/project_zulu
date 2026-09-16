@@ -2304,20 +2304,6 @@ uploadResult =
         addVideoCancel.textContent =
           "Close";
       }         
-               addVideoProgress.value = 100;
-               
-               addVideoProgressText.textContent =
-                 `100% — ${formatBytes(payload.file.size)}`;
-               
-               addVideoStatus.textContent =
-                 `✓ Video added successfully. UID ${finalizeData.uid}`;
-               
-               addVideoSubmit.textContent =
-                 "Uploaded ✓";
-               
-               if (addVideoCancel) {
-                 addVideoCancel.textContent = "Close";
-               }
                
                
                } catch (error) {
