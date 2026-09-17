@@ -23,15 +23,15 @@ body {
 ========================================================= */
 
 .site-header {
-  height: 128px;
-  min-height: 128px;
+  height: 150px;
+  min-height: 150px;
 
   display: grid;
-  grid-template-columns: 360px 1fr 360px;
+  grid-template-columns: 400px 1fr 400px;
   align-items: center;
 
   width: 100%;
-  padding: 0 18px;
+  padding: 0 22px;
 
   background: #111;
   border-bottom: 1px solid #222;
@@ -41,8 +41,7 @@ body {
 /* LOGO */
 
 .header-logo {
-  width: 360px;
-  height: 128px;
+  height: 150px;
 
   display: flex;
   align-items: center;
@@ -54,11 +53,13 @@ body {
 .header-logo img {
   display: block;
 
-  width: 360px;
-  height: auto;
-  object-fit: contain;
-  object-position: left center;
+  width: auto;
+  height: 120px;
 
+  max-width: none;
+  max-height: none;
+
+  object-fit: contain;
   transform: none;
 }
 
@@ -67,7 +68,6 @@ body {
 .header-search {
   width: 100%;
   max-width: 600px;
-
   justify-self: center;
 }
 
@@ -654,7 +654,7 @@ body {
 .page-layout {
   display: flex;
 
-  height: calc(100vh - 90px);
+  height: calc(100vh - 150px);
   min-height: 0;
 
   overflow: hidden;
