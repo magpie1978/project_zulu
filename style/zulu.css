@@ -242,7 +242,7 @@ body {
 .video-card-actions {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   margin-left: auto;
 }
 
@@ -287,6 +287,31 @@ body {
   cursor: wait;
 }
 
+.video-card-details {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.video-meta-pill {
+  display: inline-flex;
+  align-items: center;
+
+  min-height: 28px;
+  padding: 4px 10px;
+
+  border-radius: 999px;
+
+  background: #262626;
+  color: #bdbdbd;
+
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1;
+
+  white-space: nowrap;
+}
 
 
 /* =====================================================================
@@ -360,17 +385,11 @@ body {
 
 .video-meta {
   display: flex;
+  align-items: center;
   justify-content: space-between;
-  align-items: flex-end;
-  gap: 8px;
-  margin-top: 6px;
-}
 
-
-.video-views {
-  color: #aaa;
-  font-size: 12px;
-  white-space: nowrap;
+  gap: 12px;
+  margin-top: 12px;
 }
 
 
