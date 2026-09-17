@@ -29,6 +29,80 @@ const logoutButton =
   );
 
 
+const headerMenuButton =
+  document.getElementById(
+    "header-menu-button"
+  );
+
+const headerMenu =
+  document.getElementById(
+    "header-menu"
+  );
+
+
+headerMenuButton?.addEventListener(
+  "click",
+  event => {
+    event.stopPropagation();
+
+    const isOpen =
+      !headerMenu.hidden;
+
+    headerMenu.hidden =
+      isOpen;
+
+    headerMenuButton.setAttribute(
+      "aria-expanded",
+      String(!isOpen)
+    );
+  }
+);
+
+
+headerMenu?.addEventListener(
+  "click",
+  event => {
+    event.stopPropagation();
+  }
+);
+
+
+document.addEventListener(
+  "click",
+  () => {
+    if (!headerMenu) {
+      return;
+    }
+
+    headerMenu.hidden = true;
+
+    headerMenuButton?.setAttribute(
+      "aria-expanded",
+      "false"
+    );
+  }
+);
+
+
+document.addEventListener(
+  "keydown",
+  event => {
+    if (
+      event.key !== "Escape" ||
+      !headerMenu
+    ) {
+      return;
+    }
+
+    headerMenu.hidden = true;
+
+    headerMenuButton?.setAttribute(
+      "aria-expanded",
+      "false"
+    );
+  }
+);
+
 /* =================================================================================================================
    INITIALISATION
 ==================================================================================================================== */
