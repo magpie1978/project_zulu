@@ -364,6 +364,20 @@ function renderVideoCard(video) {
       video.duration_seconds
     );
 
+  const uploadedDate =
+  video.ingested_at
+    ? new Date(
+        video.ingested_at
+      ).toLocaleDateString(
+        "en-GB",
+        {
+          day: "numeric",
+          month: "short",
+          year: "numeric"
+        }
+      )
+    : "";
+
   const technicalMeta =
     [
       quality,
