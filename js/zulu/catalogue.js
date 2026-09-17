@@ -256,25 +256,23 @@ function sortVideos(videos) {
           );
 
         case "uploaded-desc":
-          return (
-            new Date(
-              b.ingested_at || 0
-            ).getTime() -
-            new Date(
-              a.ingested_at || 0
-            ).getTime()
+          return String(
+            b.ingested_at || ""
+          ).localeCompare(
+            String(
+              a.ingested_at || ""
+            )
           );
-
+        
         case "uploaded-asc":
-          return (
-            new Date(
-              a.ingested_at || 0
-            ).getTime() -
-            new Date(
-              b.ingested_at || 0
-            ).getTime()
+          return String(
+            a.ingested_at || ""
+          ).localeCompare(
+            String(
+              b.ingested_at || ""
+            )
           );
-
+          
         case "views-desc":
           return (
             Number(
