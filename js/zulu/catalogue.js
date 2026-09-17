@@ -435,7 +435,7 @@ function renderVideoCard(video) {
               uploadedDate
                 ? `
                   <span class="video-meta-pill">
-                    Uploaded ${escapeHTML(uploadedDate)}
+                    ${escapeHTML(uploadedDate)}
                   </span>
                 `
                 : ""
