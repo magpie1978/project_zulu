@@ -3,7 +3,6 @@ import { supabase } from "../supabaseClient.js";
 
 export async function deleteZuluVideo(
   video,
-  button,
   {
     onDeleted
   } = {}
@@ -33,6 +32,7 @@ export async function deleteZuluVideo(
       "deleteVideoConfirm"
     );
 
+
   if (
     !modal ||
     !titleElement ||
@@ -47,13 +47,27 @@ export async function deleteZuluVideo(
     return;
   }
 
+
+  // Reset the persistent modal controls every time
+  // the delete modal is opened.
+
+  confirmButton.disabled = false;
+  cancelButton.disabled = false;
+
+  confirmButton.textContent =
+    "Delete permanently";
+
+
   titleElement.textContent =
     video.film;
 
   uidElement.textContent =
     `UID ${video.uid}`;
 
-  modal.classList.add("open");
+
+  modal.classList.add(
+    "open"
+  );
 
   modal.setAttribute(
     "aria-hidden",
@@ -62,9 +76,11 @@ export async function deleteZuluVideo(
 
   confirmButton.focus();
 
+
   return new Promise(resolve => {
 
     let deleting = false;
+
 
     function closeModal() {
       if (deleting) {
@@ -130,11 +146,15 @@ export async function deleteZuluVideo(
     async function confirmDelete() {
       deleting = true;
 
-      confirmButton.disabled = true;
-      cancelButton.disabled = true;
+      confirmButton.disabled =
+        true;
+
+      cancelButton.disabled =
+        true;
 
       confirmButton.textContent =
         "Deleting…";
+
 
       try {
         const {
@@ -151,9 +171,11 @@ export async function deleteZuluVideo(
             }
           );
 
+
         if (error) {
           throw error;
         }
+
 
         if (!data?.success) {
           throw new Error(
@@ -162,10 +184,15 @@ export async function deleteZuluVideo(
           );
         }
 
+
         console.log(
           "VIDEO DELETED:",
           data
         );
+
+
+        // The actual deletion succeeded.
+        // Close the modal immediately.
 
         modal.classList.remove(
           "open"
@@ -178,14 +205,31 @@ export async function deleteZuluVideo(
 
         cleanup();
 
-        if (typeof onDeleted === "function") {
-          await onDeleted({
-            video,
-            data
-          });
-        }
-
         resolve(true);
+
+
+        // Refreshing the catalogue/sidebar is separate
+        // from the actual deletion operation.
+
+        if (
+          typeof onDeleted ===
+          "function"
+        ) {
+          try {
+            await onDeleted({
+              video,
+              data
+            });
+
+          } catch (
+            refreshError
+          ) {
+            console.error(
+              "POST-DELETE REFRESH FAILED:",
+              refreshError
+            );
+          }
+        }
 
       } catch (error) {
         console.error(
