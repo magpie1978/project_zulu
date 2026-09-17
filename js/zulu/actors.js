@@ -64,16 +64,6 @@ export async function loadActorSidebar() {
           "actor"
       });
 
-    console.log(
-      "ACTOR DEBUG:",
-      {
-        rowCount:
-          rows.length,
-
-        firstFiveRows:
-          rows.slice(0, 5)
-      }
-    );
 
     const actorCounts =
       new Map();
