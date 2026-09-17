@@ -255,6 +255,26 @@ function sortVideos(videos) {
             a.film || ""
           );
 
+        case "uploaded-desc":
+          return (
+            new Date(
+              b.ingested_at || 0
+            ).getTime() -
+            new Date(
+              a.ingested_at || 0
+            ).getTime()
+          );
+
+        case "uploaded-asc":
+          return (
+            new Date(
+              a.ingested_at || 0
+            ).getTime() -
+            new Date(
+              b.ingested_at || 0
+            ).getTime()
+          );
+
         case "views-desc":
           return (
             Number(
@@ -286,7 +306,6 @@ function sortVideos(videos) {
     }
   );
 }
-
 
 /* =================================================================================================================
    VIDEO RENDERING
