@@ -16,32 +16,66 @@
     </head>
     
     <body>
-      <header class="site-header">
-          <div class="header-logo">
-              <img src="PORNFLIX.png" alt="Pornflix">
-          </div>
-          <div class="header-search">
-              <input
-                  type="text"
-                  id="searchInput"
-                  placeholder="Search actors or videos..."
-                  autocomplete="off">
-          </div>
+<header class="site-header">
 
-          <div>
-              <button id="add-video-btn" class="add-video-btn" type="button">
-                  + Add Video
-              </button>
-          </div>
-          
-          <div class="header-actions">
-              <button id="logoutButton" class="logout-button">
-                  Logout
-              </button>
-          </div>
-      </header>
+  <div class="header-logo">
+    <img src="PORNFLIX.png" alt="Pornflix">
+  </div>
+
+  <div class="header-search">
+    <input
+      type="text"
+      id="searchInput"
+      placeholder="Search actors or videos..."
+      autocomplete="off"
+    >
+  </div>
+
+  <div class="header-actions">
+    <button
+      type="button"
+      id="header-menu-button"
+      class="header-menu-button"
+      aria-label="Menu"
+      aria-expanded="false"
+    >
+      <i data-lucide="more-vertical"></i>
+    </button>
+
+    <div
+      id="header-menu"
+      class="header-menu"
+      hidden
+    >
+
+      <button
+        type="button"
+        id="add-video-btn"
+        class="header-menu-item"
+      >
+        <i data-lucide="plus"></i>
+        <span>Add Video</span>
+      </button>
+
+      <div class="header-menu-divider"></div>
+
+      <button
+        type="button"
+        id="logoutButton"
+        class="header-menu-item header-menu-logout"
+      >
+        <i data-lucide="log-out"></i>
+        <span>Logout</span>
+      </button>
+
+    </div>
       
-      <main class="page-layout">
+  </div>
+    
+</header>      
+      
+        
+    <main class="page-layout">
         <aside class="actor-sidebar">
           <h2>Actors</h2>
     
