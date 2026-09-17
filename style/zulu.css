@@ -23,8 +23,8 @@ body {
 ========================================================= */
 
 .site-header {
-  height: 50px;
-  min-height: 50px;
+  height: 64px;
+  min-height: 64px;
 
   display: grid;
   grid-template-columns: 180px minmax(250px, 600px) 180px;
@@ -37,18 +37,23 @@ body {
   border-bottom: 1px solid #222;
 }
 
-
 /* LOGO */
 
 .header-logo {
+  height: 100%;
+
   display: flex;
   align-items: center;
 }
 
 .header-logo img {
   display: block;
-  max-height: 30px;
+
   width: auto;
+  height: auto;
+
+  max-height: 52px;
+  max-width: 160px;
 }
 
 
@@ -1023,4 +1028,27 @@ body {
 .delete-video-cancel:disabled {
   opacity: 0.5;
   cursor: wait;
+}
+
+
+/* =========================================================
+   PAGE HEIGHT / VIDEO GRID
+========================================================= */
+
+.page-layout {
+  height: auto;
+  min-height: calc(100vh - 64px);
+  align-items: flex-start;
+}
+
+.main-content {
+  height: auto;
+  min-height: 0;
+  overflow: visible;
+}
+
+.video-grid {
+  height: auto;
+  max-height: none;
+  overflow: visible;
 }
