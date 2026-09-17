@@ -423,52 +423,54 @@ function renderVideoCard(video) {
           : ""
       }
 
-      <div class="video-meta">
-
-      <div class="video-views">
-        👁 ${views.toLocaleString()}
-      
-        ${
-          uploadedDate
-            ? `
-              <span class="video-uploaded-date">
-                • Uploaded ${escapeHTML(uploadedDate)}
-              </span>
-            `
-            : ""
-        }
-      </div>
-
-      
-        <div class="video-card-actions">
-
-          <div class="video-tags">
-            ${tagsHtml}
+        <div class="video-meta">
+        
+          <div class="video-card-details">
+        
+            <span class="video-meta-pill">
+              👁 ${views.toLocaleString()}
+            </span>
+        
+            ${
+              uploadedDate
+                ? `
+                  <span class="video-meta-pill">
+                    Uploaded ${escapeHTML(uploadedDate)}
+                  </span>
+                `
+                : ""
+            }
+        
           </div>
-
-          <button
-            type="button"
-            class="video-delete-btn"
-            title="Delete video"
-            aria-label="Delete video"
-          >
-            <svg
-              class="trash-icon"
-              viewBox="0 0 24 24"
-              aria-hidden="true"
+        
+          <div class="video-card-actions">
+        
+            <div class="video-tags">
+              ${tagsHtml}
+            </div>
+        
+            <button
+              type="button"
+              class="video-delete-btn"
+              title="Delete video"
+              aria-label="Delete video"
             >
-              <path d="M4 7h16" />
-              <path d="M10 11v6" />
-              <path d="M14 11v6" />
-              <path d="M6 7l1 14h10l1-14" />
-              <path d="M9 7V4h6v3" />
-            </svg>
-          </button>
-
+              <svg
+                class="trash-icon"
+                viewBox="0 0 24 24"
+                aria-hidden="true"
+              >
+                <path d="M4 7h16" />
+                <path d="M10 11v6" />
+                <path d="M14 11v6" />
+                <path d="M6 7l1 14h10l1-14" />
+                <path d="M9 7V4h6v3" />
+              </svg>
+            </button>
+        
+          </div>
+        
         </div>
-
-      </div>
-
     </div>
   `;
 
