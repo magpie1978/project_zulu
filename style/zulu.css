@@ -297,20 +297,26 @@ body {
 .video-meta-pill {
   display: inline-flex;
   align-items: center;
+  gap: 5px;
 
-  min-height: 28px;
-  padding: 4px 10px;
+  min-height: 24px;
+  padding: 4px 9px;
 
   border-radius: 999px;
 
   background: #262626;
   color: #bdbdbd;
 
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
   line-height: 1;
 
   white-space: nowrap;
+}
+
+.video-meta-pill svg {
+  width: 14px;
+  height: 14px;
 }
 
 
@@ -363,7 +369,7 @@ body {
 ===================================================================== */
 
 .video-info {
-  min-height: 76px;
+  min-height: 0;
   padding: 8px 10px 12px;
   display: flex;
   flex-direction: column;
@@ -389,7 +395,7 @@ body {
   justify-content: space-between;
 
   gap: 12px;
-  margin-top: 12px;
+  margin-top: 8px;
 }
 
 
