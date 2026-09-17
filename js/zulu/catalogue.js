@@ -86,7 +86,7 @@ export async function loadZuluVideos() {
           "zulu_videos_search"
         )
         .select(
-          "uid, film, url, actors, actor_search, tags, filesize_bytes, duration_seconds, width, height"
+          "uid, film, url, actors, actor_search, tags, filesize_bytes, duration_seconds, width, height, ingested_at"
         )
         .order(
           "film",
