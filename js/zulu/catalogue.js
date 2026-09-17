@@ -435,7 +435,8 @@ function renderVideoCard(video) {
               uploadedDate
                 ? `
                   <span class="video-meta-pill">
-                    ${escapeHTML(uploadedDate)}
+                    <i data-lucide="eye"></i>
+                    ${views.toLocaleString()}
                   </span>
                 `
                 : ""
