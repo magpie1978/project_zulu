@@ -426,22 +426,22 @@ function renderVideoCard(video) {
         <div class="video-meta">
         
           <div class="video-card-details">
-        
+          
             <span class="video-meta-pill">
-              👁 ${views.toLocaleString()}
+              <i data-lucide="eye"></i>
+              ${views.toLocaleString()}
             </span>
-        
+          
             ${
               uploadedDate
                 ? `
                   <span class="video-meta-pill">
-                    <i data-lucide="eye"></i>
-                    ${views.toLocaleString()}
+                    ${escapeHTML(uploadedDate)}
                   </span>
                 `
                 : ""
             }
-        
+          
           </div>
         
           <div class="video-card-actions">
