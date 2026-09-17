@@ -50,10 +50,9 @@ body {
   display: block;
 
   width: auto;
-  height: auto;
+  height: 52px;
 
-  max-height: 52px;
-  max-width: 160px;
+  object-fit: contain;
 }
 
 
@@ -685,7 +684,7 @@ body.modal-open {
 
 /* =====================================================
    INDEPENDENT SIDEBAR / VIDEO SCROLLING
-   ===================================================== */
+===================================================== */
 
 html,
 body {
@@ -695,11 +694,12 @@ body {
 }
 
 
-/* Area beneath the 300px header */
+/* Area beneath the header */
+
 .page-layout {
   display: flex;
 
-  height: calc(100vh - 300px);
+  height: calc(100vh - 64px);
   min-height: 0;
 
   overflow: hidden;
@@ -710,6 +710,7 @@ body {
 
 
 /* Actor column gets its own scrollbar */
+
 .actor-sidebar {
   width: 240px;
   height: 100%;
@@ -726,8 +727,10 @@ body {
 
 
 /* Video column gets its own scrollbar */
+
 .main-content {
   flex: 1;
+
   min-width: 0;
   min-height: 0;
   height: 100%;
@@ -737,7 +740,6 @@ body {
 
   padding-right: 8px;
 }
-
 
 /* =====================================================
    ADD VIDEO
@@ -1028,27 +1030,4 @@ body {
 .delete-video-cancel:disabled {
   opacity: 0.5;
   cursor: wait;
-}
-
-
-/* =========================================================
-   PAGE HEIGHT / VIDEO GRID
-========================================================= */
-
-.page-layout {
-  height: auto;
-  min-height: calc(100vh - 64px);
-  align-items: flex-start;
-}
-
-.main-content {
-  height: auto;
-  min-height: 0;
-  overflow: visible;
-}
-
-.video-grid {
-  height: auto;
-  max-height: none;
-  overflow: visible;
 }
