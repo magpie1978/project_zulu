@@ -26,6 +26,10 @@ import {
   deleteZuluVideo
 } from "./zulu/delete-video.js";
 
+import {
+  openVideo,
+  attachPlaybackEvents
+} from "./zulu/playback.js";
 
 
 /* =================================================================================================================
@@ -38,10 +42,6 @@ const actorSort = document.getElementById("actor-sort");
 const searchInput = document.getElementById("searchInput");
 const videoSort = document.getElementById("video-sort");
 
-const modal = document.getElementById("videoModal");
-const modalVideo = document.getElementById("modalVideo");
-const closeModal = document.getElementById("closeModal");
-
 const logoutButton = document.getElementById("logoutButton");
 
 
@@ -52,10 +52,6 @@ const logoutButton = document.getElementById("logoutButton");
 let allVideos = [];
 let actorSidebarData = [];
 let totalVideoCount = 0;
-
-let activeVideoUid = null;
-let viewTimer = null;
-let viewLogged = false;
 
 // Add Video state
 let addVideoUploadInProgress = false;
@@ -87,7 +83,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   await loadActorSidebar();
   await loadZuluVideos();
 
-  attachModalEvents();
+  attachPlaybackEvents();
   attachFilterEvents();
 });
 
@@ -719,83 +715,6 @@ function sortVideos(videos) {
 }
 
 
-/* =================================================================================================================
-   SIGNED VIDEO URL
-==================================================================================================================== */
-
-/*
- * Requests a temporary signed media URL from
- * the zulu-sign-media Supabase Edge Function.
- *
- * The permanent URL stored in the database is
- * used only to identify the requested file.
- *
- * The permanent URL is NEVER passed directly
- * to the <video> element.
- */
-async function getSignedVideoUrl(originalUrl) {
-  if (!originalUrl) {
-    throw new Error(
-      "No video URL supplied."
-    );
-  }
-
-  let path;
-
-  try {
-    const parsedUrl =
-      new URL(originalUrl);
-
-    path = parsedUrl.pathname;
-
-  } catch {
-    path = originalUrl.startsWith("/")
-      ? originalUrl
-      : `/${originalUrl}`;
-  }
-
-  console.log(
-    "Requesting signed URL for:",
-    path
-  );
-
-  const { data, error } =
-    await supabase.functions.invoke(
-      "zulu-sign-media",
-      {
-        body: {
-          path
-        }
-      }
-    );
-
-  if (error) {
-    console.error(
-      "Signed URL error:",
-      error
-    );
-
-    throw error;
-  }
-
-  if (!data?.url) {
-    console.error(
-      "Signing response:",
-      data
-    );
-
-    throw new Error(
-      "Signing service did not return a video URL."
-    );
-  }
-
-  console.log(
-    "Signed video URL received."
-  );
-
-  return data.url;
-}
-
 
 /* =================================================================================================================
    VIDEO RENDERING
@@ -1003,184 +922,6 @@ function createTagsHtml(tagsString) {
 }
 
 
-/* =================================================================================================================
-   VIDEO MODAL
-==================================================================================================================== */
-
-async function openVideo(url, uid) {
-  if (!url) {
-    console.warn(
-      "No video URL found."
-    );
-
-    return;
-  }
-
-  if (!modal || !modalVideo) {
-    return;
-  }
-
-  activeVideoUid = uid;
-  viewLogged = false;
-
-  clearViewTimer();
-  resetModalSources();
-
-  modal.classList.add("open");
-
-  document.body.classList.add(
-    "modal-open"
-  );
-
-  try {
-
-    /*
-     * Ask Supabase for an authorised
-     * temporary URL.
-     */
-    const signedUrl =
-      await getSignedVideoUrl(url);
-
-    /*
-     * ONLY the signed URL is assigned
-     * to the video player.
-     */
-    modalVideo.src = signedUrl;
-
-    modalVideo.style.display =
-      "block";
-
-    await modalVideo.play();
-
-    startViewTimer();
-
-  } catch (error) {
-
-    console.error(
-      "Video could not be opened:",
-      error
-    );
-
-    resetModalSources();
-
-    modal.classList.remove("open");
-
-    document.body.classList.remove(
-      "modal-open"
-    );
-  }
-}
-
-
-/* =================================================================================================================
-   MODAL EVENTS
-==================================================================================================================== */
-
-function attachModalEvents() {
-  closeModal?.addEventListener(
-    "click",
-    event => {
-      event.preventDefault();
-      event.stopPropagation();
-
-      closeVideoModal();
-    }
-  );
-
-  modal?.addEventListener(
-    "click",
-    event => {
-      if (event.target === modal) {
-        closeVideoModal();
-      }
-    }
-  );
-
-  document.addEventListener(
-    "keydown",
-    event => {
-      if (event.key === "Escape") {
-        closeVideoModal();
-      }
-    }
-  );
-}
-
-
-function closeVideoModal() {
-  modal?.classList.remove("open");
-
-  document.body.classList.remove(
-    "modal-open"
-  );
-
-  clearViewTimer();
-  resetModalSources();
-
-  activeVideoUid = null;
-  viewLogged = false;
-}
-
-
-function resetModalSources() {
-  if (!modalVideo) return;
-
-  try {
-    modalVideo.pause();
-  } catch {
-    // Ignore pause errors
-  }
-
-  modalVideo.removeAttribute("src");
-
-  modalVideo.load();
-
-  modalVideo.style.display = "none";
-}
-
-
-/* =================================================================================================================
-   VIEW LOGGING
-==================================================================================================================== */
-
-function startViewTimer() {
-  clearViewTimer();
-
-  viewTimer = setTimeout(() => {
-    logVideoView(activeVideoUid);
-  }, 15000);
-}
-
-
-function clearViewTimer() {
-  if (viewTimer) {
-    clearTimeout(viewTimer);
-    viewTimer = null;
-  }
-}
-
-
-async function logVideoView(uid) {
-  if (!uid || viewLogged) {
-    return;
-  }
-
-  viewLogged = true;
-
-  const { error } = await supabase
-    .from("zulu_video_views")
-    .insert({
-      video_uid: uid,
-      watch_seconds: 15
-    });
-
-  if (error) {
-    console.error(
-      "Error logging video view:",
-      error
-    );
-  }
-}
 
 
 /* =================================================================================================================
