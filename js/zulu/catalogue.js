@@ -425,10 +425,21 @@ function renderVideoCard(video) {
 
       <div class="video-meta">
 
-        <div class="video-views">
-          👁 ${views.toLocaleString()}
-        </div>
+      <div class="video-views">
+        👁 ${views.toLocaleString()}
+      
+        ${
+          uploadedDate
+            ? `
+              <span class="video-uploaded-date">
+                • Uploaded ${escapeHTML(uploadedDate)}
+              </span>
+            `
+            : ""
+        }
+      </div>
 
+      
         <div class="video-card-actions">
 
           <div class="video-tags">
