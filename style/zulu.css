@@ -56,8 +56,6 @@ body {
 
   width: 360px;
   height: auto;
-
-  max-height: 84px;
   object-fit: contain;
   object-position: left center;
 
