@@ -32,32 +32,6 @@ import {
    ===================================================================== */
 
 
-/* =====================================================================
-   01. CONFIGURATION
-===================================================================== */
-
-const RECENT_INGESTION_LIMIT =
-  50;
-
-
-/*
- * States which represent a currently unfinished ingestion.
- *
- * complete, complete_without_thumbnail, failed, cancelled and duplicate
- * are all terminal states and therefore deliberately excluded.
- */
-const INCOMPLETE_INGESTION_STATUSES =
-  new Set([
-    "pending",
-    "analysing",
-    "ready",
-    "uploading",
-    "video_uploaded",
-    "cataloguing",
-    "catalogued",
-    "thumbnail_uploading"
-  ]);
-
 
 /* =====================================================================
    02. DOM REFERENCES
@@ -225,11 +199,18 @@ async function requireAuthenticatedUser() {
 
 
 /* =====================================================================
-   05. REFRESH
+   05. DASHBOARD DATA
 ===================================================================== */
 
 /**
- * Reloads every dashboard dataset.
+ * Reloads the complete Admin dashboard.
+ *
+ * All dashboard data is now retrieved through the protected
+ * zulu-admin-dashboard Edge Function.
+ *
+ * The browser does NOT query zulu_ingestions directly. This allows that
+ * table to remain protected by RLS while the Edge Function performs the
+ * privileged read using the Supabase service-role key.
  */
 async function refreshAdmin() {
 
@@ -246,6 +227,13 @@ async function refreshAdmin() {
 
   try {
 
+    /*
+     * First confirm that the browser still has an authenticated
+     * Supabase user.
+     *
+     * This is primarily a UI convenience. The Edge Function performs
+     * its own authentication and administrator authorization.
+     */
     const user =
       await requireAuthenticatedUser();
 
@@ -259,42 +247,49 @@ async function refreshAdmin() {
 
 
     /*
-     * These datasets are independent, so request them concurrently.
+     * Retrieve the complete dashboard snapshot from the protected
+     * Edge Function.
      */
-    const [
-      videos,
-      actors,
-      views,
-      ingestions
-    ] =
-      await Promise.all([
-        loadVideoCount(),
-        loadActorCount(),
-        loadViewCount(),
-        loadIngestions()
-      ]);
+    const dashboard =
+      await loadAdminDashboard();
 
 
-    renderLibrarySummary({
-      videos,
-      actors,
-      views,
-      ingestions
-    });
+    /*
+     * Render the four top-level library counters.
+     */
+    renderLibrarySummary(
+      dashboard.library
+    );
 
 
+    /*
+     * Health totals are calculated server-side from the complete
+     * ingestion journal, rather than from the limited recent rows.
+     */
     renderIngestionHealth(
-      ingestions.rows
+      dashboard.health
     );
 
 
+    /*
+     * The Edge Function already limits this collection to the most
+     * recent ingestion records.
+     */
     renderRecentIngestions(
-      ingestions.rows
+      dashboard.recent_ingestions || []
     );
 
 
-    const now =
-      new Date();
+    /*
+     * Prefer the server-generated timestamp so the displayed refresh
+     * time corresponds to the actual dashboard snapshot.
+     */
+    const refreshedAt =
+      dashboard.generated_at
+        ? new Date(
+            dashboard.generated_at
+          )
+        : new Date();
 
 
     if (
@@ -302,7 +297,7 @@ async function refreshAdmin() {
     ) {
 
       adminLastRefreshed.textContent =
-        `Updated ${now.toLocaleTimeString(
+        `Updated ${refreshedAt.toLocaleTimeString(
           [],
           {
             hour:
@@ -354,36 +349,27 @@ async function refreshAdmin() {
 }
 
 
-/* =====================================================================
-   06. VIDEO COUNT
-===================================================================== */
-
 /**
- * Returns the total number of catalogue videos.
+ * Retrieves the complete Admin dashboard snapshot from the protected
+ * zulu-admin-dashboard Edge Function.
  *
- * head:true prevents Supabase from returning all video rows simply to
- * calculate the count.
+ * Supabase automatically supplies the current authenticated session to
+ * the function invocation. The Edge Function then independently verifies
+ * the JWT and administrator identity before using its service-role client
+ * to read protected data.
  */
-async function loadVideoCount() {
+async function loadAdminDashboard() {
 
   const {
-    count,
+    data,
     error
   } =
-    await supabase
-      .from(
-        "zulu_videos"
-      )
-      .select(
-        "*",
-        {
-          count:
-            "exact",
-
-          head:
-            true
-        }
-      );
+    await supabase.functions.invoke(
+      "zulu-admin-dashboard",
+      {
+        body: {}
+      }
+    );
 
 
   if (
@@ -391,108 +377,49 @@ async function loadVideoCount() {
   ) {
 
     throw new Error(
-      `Could not count videos: ${error.message}`
+      `Could not load Admin dashboard: ${
+        error.message ||
+        "Edge Function request failed"
+      }`
     );
   }
-
-
-  return count || 0;
-}
-
-
-/* =====================================================================
-   07. ACTOR COUNT
-===================================================================== */
-
-/**
- * Returns the number of distinct actors.
- *
- * zulu_distinct_actors already represents the distinct actor catalogue,
- * so an exact row count gives us the required value.
- */
-async function loadActorCount() {
-
-  const {
-    count,
-    error
-  } =
-    await supabase
-      .from(
-        "zulu_distinct_actors"
-      )
-      .select(
-        "*",
-        {
-          count:
-            "exact",
-
-          head:
-            true
-        }
-      );
 
 
   if (
-    error
+    !data
   ) {
 
     throw new Error(
-      `Could not count actors: ${error.message}`
+      "The Admin dashboard returned no data."
     );
   }
-
-
-  return count || 0;
-}
-
-
-/* =====================================================================
-   08. VIEW COUNT
-===================================================================== */
-
-/**
- * Calculates total recorded views.
- *
- * zulu_video_views currently stores individual view records, therefore
- * the number of rows represents total recorded views.
- *
- * If this table later changes to an aggregated counter model, this
- * function is the only part of the dashboard that needs to change.
- */
-async function loadViewCount() {
-
-  const {
-    count,
-    error
-  } =
-    await supabase
-      .from(
-        "zulu_video_views"
-      )
-      .select(
-        "*",
-        {
-          count:
-            "exact",
-
-          head:
-            true
-        }
-      );
 
 
   if (
-    error
+    data.success !== true
   ) {
 
     throw new Error(
-      `Could not count views: ${error.message}`
+      data.error ||
+      "The Admin dashboard request was unsuccessful."
     );
   }
 
 
-  return count || 0;
+  if (
+    !data.library ||
+    !data.health
+  ) {
+
+    throw new Error(
+      "The Admin dashboard returned an invalid response."
+    );
+  }
+
+
+  return data;
 }
+
 
 
 /* =====================================================================
@@ -579,11 +506,12 @@ async function loadIngestions() {
 
 
 /* =====================================================================
-   10. LIBRARY SUMMARY
+   06. LIBRARY SUMMARY
 ===================================================================== */
 
 /**
- * Renders the four primary library counters.
+ * Renders the four primary library counters returned by the
+ * zulu-admin-dashboard Edge Function.
  */
 function renderLibrarySummary({
   videos,
@@ -612,145 +540,61 @@ function renderLibrarySummary({
 
   setNumber(
     statIngestions,
-    ingestions.count
+    ingestions
   );
 }
 
 
 /* =====================================================================
-   11. INGESTION HEALTH
+   07. INGESTION HEALTH
 ===================================================================== */
 
 /**
- * Calculates health statistics from the ingestion journal.
+ * Renders ingestion-health totals calculated by the protected
+ * zulu-admin-dashboard Edge Function.
+ *
+ * These figures cover the complete ingestion journal and are therefore
+ * independent of the recent-ingestions table limit.
  */
 function renderIngestionHealth(
-  rows
+  health
 ) {
-
-  let complete =
-    0;
-
-
-  let withoutThumbnail =
-    0;
-
-
-  let failed =
-    0;
-
-
-  let incomplete =
-    0;
-
-
-  let cancelled =
-    0;
-
-
-  let duplicates =
-    0;
-
-
-  for (
-    const ingestion of rows
-  ) {
-
-    switch (
-      ingestion.status
-    ) {
-
-      case "complete":
-
-        complete +=
-          1;
-
-        break;
-
-
-      case "complete_without_thumbnail":
-
-        withoutThumbnail +=
-          1;
-
-        break;
-
-
-      case "failed":
-
-        failed +=
-          1;
-
-        break;
-
-
-      case "cancelled":
-
-        cancelled +=
-          1;
-
-        break;
-
-
-      case "duplicate":
-
-        duplicates +=
-          1;
-
-        break;
-
-
-      default:
-
-        if (
-          INCOMPLETE_INGESTION_STATUSES.has(
-            ingestion.status
-          )
-        ) {
-
-          incomplete +=
-            1;
-        }
-    }
-  }
-
 
   setNumber(
     healthComplete,
-    complete
+    health.complete
   );
 
 
   setNumber(
     healthNoThumbnail,
-    withoutThumbnail
+    health.complete_without_thumbnail
   );
 
 
   setNumber(
     healthFailed,
-    failed
+    health.failed
   );
 
 
   setNumber(
     healthIncomplete,
-    incomplete
+    health.incomplete
   );
 
 
   setNumber(
     healthCancelled,
-    cancelled
+    health.cancelled
   );
 
 
   setNumber(
     healthDuplicates,
-    duplicates
+    health.duplicate
   );
 }
-
 
 /* =====================================================================
    12. RECENT INGESTIONS TABLE
@@ -774,13 +618,11 @@ function renderRecentIngestions(
   adminIngestionsBody.innerHTML =
     "";
 
-
+  
   const recentRows =
-    rows.slice(
-      0,
-      RECENT_INGESTION_LIMIT
-    );
-
+    Array.isArray(rows)
+      ? rows
+      : [];
 
   if (
     !recentRows.length
