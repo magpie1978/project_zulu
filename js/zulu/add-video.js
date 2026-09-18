@@ -1414,10 +1414,75 @@ async function analyseSelectedFile(
     }
 
 
+/* -----------------------------------------------------------------
+   GENERATE THUMBNAIL CANDIDATES
+   -----------------------------------------------------------------
+
+   Thumbnail generation is an OPTIONAL part of ingestion.
+
+   The video's metadata, fingerprint, duplicate detection and Backblaze
+   upload are more important than automatically generating a thumbnail.
+
+   Thumbnail generation depends on several browser/external components:
+
+       - MediaPipe Tasks Vision;
+       - the MediaPipe WASM runtime;
+       - the BlazeFace model;
+       - browser video seeking;
+       - canvas frame extraction.
+
+   A temporary failure in any of these components must therefore NOT
+   prevent an otherwise valid MP4 from being added to the catalogue.
+
+   If thumbnail generation fails:
+
+       - log the full error for debugging;
+       - reset any partially generated thumbnail state;
+       - show a non-fatal status message;
+       - continue with the rest of video ingestion.
+
+   getSelectedThumbnailBlob() will subsequently return null, allowing
+   the submission stage to skip thumbnail publishing.
+----------------------------------------------------------------- */
+
+try {
+
     await generateThumbnailCandidates(
       file
     );
-
+  
+  } catch (thumbnailError) {
+  
+    console.error(
+      "Thumbnail generation failed:",
+      thumbnailError
+    );
+  
+  
+    /*
+     * Remove any partial candidates or preview state that may have been
+     * created before thumbnail generation failed.
+     *
+     * The cached MediaPipe detector itself is deliberately retained by
+     * resetThumbnailState().
+     */
+    resetThumbnailState();
+  
+  
+    /*
+     * This is informational only.
+     *
+     * Do NOT throw thumbnailError here. Throwing it would make thumbnail
+     * generation a fatal dependency of the complete ingestion process.
+     */
+    if (
+      addVideoThumbnailStatus
+    ) {
+  
+      addVideoThumbnailStatus.textContent =
+        "Thumbnail generation failed — video can still be uploaded.";
+    }
+  }
   } catch (error) {
 
     console.error(
@@ -2147,43 +2212,75 @@ async function handleSubmit() {
     );
 
 
-    /* ---------------------------------------------------------------
-       STEP 8: UPLOAD SELECTED THUMBNAIL
-    --------------------------------------------------------------- */
+/* ---------------------------------------------------------------
+   STEP 8: UPLOAD SELECTED THUMBNAIL
+   ---------------------------------------------------------------
 
-    const selectedThumbnailBlob =
+   Thumbnail publishing is OPTIONAL.
+
+   Normally getSelectedThumbnailBlob() contains the best thumbnail
+   generated during video analysis.
+
+   However, thumbnail generation may have failed because MediaPipe,
+   WASM, the BlazeFace model, video seeking or canvas processing was
+   unavailable.
+
+   Likewise, the thumbnail itself may fail to upload to Backblaze.
+
+   Neither situation should cause the completed video ingestion to
+   fail because, at this point:
+
+       - the MP4 has already been uploaded successfully;
+       - the catalogue entry has already been created successfully.
+
+   The video can therefore remain in the catalogue and use the site's
+   normal fallback/default thumbnail.
+----------------------------------------------------------------- */
+    
+    const thumbnailBlob =
       getSelectedThumbnailBlob();
-
-
-    if (
-      selectedThumbnailBlob
-    ) {
-
-      /*
-       * The UID returned by zulu-finalize-video is used to associate
-       * the thumbnail with the newly created catalogue entry.
-       */
-      await uploadThumbnailToBackblaze(
-        finalizeData.uid,
-        selectedThumbnailBlob,
-        {
-          onStatus:
-            handleUploadStatus
-        }
-      );
-
+    
+    
+    if (thumbnailBlob) {
+    
+      try {
+    
+        await uploadThumbnailToBackblaze(
+          finalizeData.uid,
+          thumbnailBlob,
+          {
+            onStatus:
+              handleUploadStatus
+          }
+        );
+    
+      } catch (thumbnailUploadError) {
+    
+        /*
+         * Thumbnail publishing failed, but the video itself has already
+         * been successfully ingested.
+         *
+         * Log the failure for debugging but deliberately do NOT rethrow it.
+         */
+        console.error(
+          "Thumbnail upload failed:",
+          thumbnailUploadError
+        );
+      }
+    
     } else {
-
+    
       /*
-       * Thumbnail absence does not invalidate an otherwise successful
-       * video ingestion.
+       * Thumbnail generation produced no usable thumbnail.
+       *
+       * This is non-fatal. The catalogue can display its normal fallback
+       * thumbnail instead.
        */
       console.warn(
-        "No thumbnail selected — continuing without thumbnail."
+        "No thumbnail available for video UID:",
+        finalizeData.uid
       );
     }
-
-
     /* ---------------------------------------------------------------
        STEP 9: NOTIFY PARENT APPLICATION
     --------------------------------------------------------------- */
