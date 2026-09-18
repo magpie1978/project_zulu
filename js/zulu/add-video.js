@@ -27,59 +27,45 @@ import {
    PURPOSE
    -------
 
-   This module controls the complete "Add Video" workflow for the
-   Zulu Videos catalogue.
+   Controls the complete Add Video ingestion workflow.
 
-   It coordinates several parts of the ingestion pipeline:
+   The workflow is now persistent. A zulu_ingestions record is created
+   as soon as a local MP4 is selected and is updated as the video moves
+   through:
 
-   1. Opens and manages the Add Video modal.
-   2. Accepts a local MP4 file selected by the user.
-   3. Derives the initial film title from the filename.
-   4. Attempts to identify actor names from the title.
-   5. Provides autocomplete using the existing actor catalogue.
-   6. Reads local video metadata:
-        - file size
-        - duration
-        - width
-        - height
-   7. Creates a lightweight content fingerprint for duplicate detection.
-   8. Checks Supabase for an existing video with that fingerprint.
-   9. Generates thumbnail candidates.
-   10. Uploads the MP4 to Backblaze B2:
-        - normal upload for smaller files
-        - multipart upload for large files
-   11. Builds the public media URL.
-   12. Calls the zulu-finalize-video Supabase Edge Function to create
-       the catalogue/database records.
-   13. Uploads the selected thumbnail.
-   14. Notifies the parent application when ingestion is complete.
+       pending
+       analysing
+       ready
+       uploading
+       video_uploaded
+       cataloguing
+       catalogued
+       thumbnail_uploading
+       complete
 
-   IMPORTANT
-   ---------
+   Non-fatal thumbnail problems may instead finish as:
 
-   This module coordinates the workflow but delegates specialised work
-   to other modules:
+       complete_without_thumbnail
 
-       upload.js
-           Backblaze upload mechanics, checksums and filename encoding.
+   Fatal failures are recorded with:
 
-       thumbnails.js
-           Thumbnail generation, selection and upload.
+       status = failed
+       failed_stage
+       error_message
 
-       utils.js
-           General formatting helpers.
+   The browser controls the pre/post catalogue stages through the
+   zulu-ingestion-status Edge Function.
 
-       supabaseClient.js
-           Shared Supabase client.
+   zulu-finalize-video controls:
+
+       cataloguing
+       catalogued
 
    ===================================================================== */
 
 
 /* =====================================================================
    01. DOM REFERENCES
-   =====================================================================
-
-   Cache all Add Video interface elements used by this module.
 ===================================================================== */
 
 const addVideoBtn =
@@ -165,34 +151,41 @@ const addVideoThumbnailStatus =
 
 /* =====================================================================
    02. MODULE STATE
-   =====================================================================
-
-   addVideoUploadInProgress
-       Prevents the modal being closed while a video is uploading.
-
-   addVideoCompleted
-       Records whether the current ingestion completed successfully.
-       This controls the modal's final button state and form reset.
-
-   addVideoMetadata
-       Metadata and fingerprint extracted from the currently selected
-       local MP4.
-
-   zuluActorNames
-       Cached list of existing actors used by autocomplete.
-
-   onVideoAdded
-       Optional callback supplied by the parent application. Called
-       after a new video has been successfully added to the catalogue.
 ===================================================================== */
 
-let addVideoUploadInProgress = false;
-let addVideoCompleted = false;
-let addVideoMetadata = null;
+let addVideoUploadInProgress =
+  false;
 
-let zuluActorNames = [];
+let addVideoCompleted =
+  false;
 
-let onVideoAdded = null;
+let addVideoMetadata =
+  null;
+
+
+/*
+ * UUID of the persistent zulu_ingestions record associated with the
+ * currently selected MP4.
+ */
+let addVideoIngestionId =
+  null;
+
+
+/*
+ * Incremented whenever file selection changes.
+ *
+ * This prevents asynchronous analysis belonging to an older file from
+ * overwriting the state of a newer selection.
+ */
+let addVideoAnalysisToken =
+  0;
+
+
+let zuluActorNames =
+  [];
+
+let onVideoAdded =
+  null;
 
 
 /* =====================================================================
@@ -200,10 +193,7 @@ let onVideoAdded = null;
 ===================================================================== */
 
 /**
- * Attaches all event listeners required by the Add Video interface.
- *
- * The optional onAdded callback allows the parent application to
- * refresh the catalogue/sidebar after a successful upload.
+ * Attaches all Add Video event listeners.
  *
  * @param {Object} options
  * @param {Function} [options.onAdded]
@@ -236,10 +226,6 @@ export function attachAddVideoEvents({
   );
 
 
-  /*
-   * Clicking the backdrop closes the modal, but never while an
-   * upload is in progress.
-   */
   addVideoModal
     ?.querySelector(
       ".add-video-backdrop"
@@ -251,34 +237,25 @@ export function attachAddVideoEvents({
         if (
           !addVideoUploadInProgress
         ) {
+
           closeAddVideoModal();
         }
       }
     );
 
 
-  /*
-   * Selecting a local MP4 begins metadata analysis and thumbnail
-   * generation.
-   */
   addVideoFile?.addEventListener(
     "change",
     handleFileSelection
   );
 
 
-  /*
-   * Allows additional actors to be entered manually.
-   */
   addVideoAddActor?.addEventListener(
     "click",
     handleAddActor
   );
 
 
-  /*
-   * Begins validation, duplicate checking and upload.
-   */
   addVideoSubmit?.addEventListener(
     "click",
     handleSubmit
@@ -292,17 +269,17 @@ export function attachAddVideoEvents({
 
 /**
  * Opens the Add Video modal.
- *
- * Ensures at least one actor input exists and loads the existing actor
- * catalogue for autocomplete.
  */
 function openAddVideoModal() {
 
-  addVideoCompleted = false;
+  addVideoCompleted =
+    false;
+
 
   addVideoModal?.classList.add(
     "open"
   );
+
 
   addVideoModal?.setAttribute(
     "aria-hidden",
@@ -314,14 +291,11 @@ function openAddVideoModal() {
     addVideoActors &&
     !addVideoActors.children.length
   ) {
+
     addActorRow();
   }
 
 
-  /*
-   * Actor names are cached after the first successful load, so this
-   * normally results in only one Supabase request per page session.
-   */
   loadZuluActorNames();
 }
 
@@ -329,11 +303,7 @@ function openAddVideoModal() {
 /**
  * Closes the Add Video modal.
  *
- * Closing is deliberately blocked during an active upload so that the
- * interface cannot accidentally abandon an upload in progress.
- *
- * After a successful upload, closing also resets the form ready for
- * the next video.
+ * Closing is blocked while an actual upload is in progress.
  */
 function closeAddVideoModal() {
 
@@ -341,7 +311,10 @@ function closeAddVideoModal() {
     addVideoUploadInProgress
   ) {
 
-    if (addVideoStatus) {
+    if (
+      addVideoStatus
+    ) {
+
       addVideoStatus.textContent =
         "Upload in progress — please wait for it to finish.";
     }
@@ -354,13 +327,17 @@ function closeAddVideoModal() {
     "open"
   );
 
+
   addVideoModal?.setAttribute(
     "aria-hidden",
     "true"
   );
 
 
-  if (addVideoCompleted) {
+  if (
+    addVideoCompleted
+  ) {
+
     resetAddVideoForm();
   }
 }
@@ -368,85 +345,123 @@ function closeAddVideoModal() {
 
 /**
  * Restores the Add Video form to its initial state.
- *
- * Clears:
- *   - selected file
- *   - metadata
- *   - title
- *   - actors
- *   - tags
- *   - status messages
- *   - upload progress
- *   - thumbnail state
- *
- * A fresh blank actor row is added at the end.
  */
 function resetAddVideoForm() {
 
-  if (addVideoFile) {
-    addVideoFile.value = "";
+  if (
+    addVideoFile
+  ) {
+
+    addVideoFile.value =
+      "";
   }
 
 
-  addVideoMetadata = null;
+  addVideoMetadata =
+    null;
+
+  addVideoIngestionId =
+    null;
+
+  addVideoAnalysisToken +=
+    1;
 
 
-  if (addVideoTitle) {
-    addVideoTitle.value = "";
+  if (
+    addVideoTitle
+  ) {
+
+    addVideoTitle.value =
+      "";
   }
 
 
-  if (addVideoActors) {
-    addVideoActors.innerHTML = "";
+  if (
+    addVideoActors
+  ) {
+
+    addVideoActors.innerHTML =
+      "";
   }
 
 
-  if (addVideoTags) {
-    addVideoTags.value = "";
+  if (
+    addVideoTags
+  ) {
+
+    addVideoTags.value =
+      "";
   }
 
 
-  if (addVideoFileInfo) {
-    addVideoFileInfo.textContent = "";
+  if (
+    addVideoFileInfo
+  ) {
+
+    addVideoFileInfo.textContent =
+      "";
   }
 
 
-  if (addVideoStatus) {
-    addVideoStatus.textContent = "";
+  if (
+    addVideoStatus
+  ) {
+
+    addVideoStatus.textContent =
+      "";
   }
 
 
-  if (addVideoProgress) {
-    addVideoProgress.value = 0;
+  if (
+    addVideoProgress
+  ) {
+
+    addVideoProgress.value =
+      0;
   }
 
 
-  if (addVideoProgressText) {
-    addVideoProgressText.textContent = "";
+  if (
+    addVideoProgressText
+  ) {
+
+    addVideoProgressText.textContent =
+      "";
   }
 
 
-  if (addVideoProgressWrap) {
+  if (
+    addVideoProgressWrap
+  ) {
+
     addVideoProgressWrap.style.display =
       "none";
   }
 
 
-  if (addVideoSubmit) {
-    addVideoSubmit.disabled = false;
+  if (
+    addVideoSubmit
+  ) {
+
+    addVideoSubmit.disabled =
+      false;
 
     addVideoSubmit.textContent =
       "Upload Video";
   }
 
 
-  if (addVideoCancel) {
+  if (
+    addVideoCancel
+  ) {
+
     addVideoCancel.textContent =
       "Cancel";
   }
 
 
-  addVideoCompleted = false;
+  addVideoCompleted =
+    false;
 
 
   addActorRow();
@@ -460,19 +475,14 @@ function resetAddVideoForm() {
 ===================================================================== */
 
 /**
- * Loads the existing actor catalogue from Supabase.
- *
- * zulu_distinct_actors returns the unique actor names already present
- * in zulu_actors. These names power the actor autocomplete fields in
- * the Add Video form.
- *
- * Results are cached in zuluActorNames. Once successfully loaded, the
- * function does not query Supabase again during the current page
- * session.
+ * Loads existing actor names for autocomplete.
  */
 async function loadZuluActorNames() {
 
-  if (zuluActorNames.length) {
+  if (
+    zuluActorNames.length
+  ) {
+
     return;
   }
 
@@ -495,15 +505,14 @@ async function loadZuluActorNames() {
         );
 
 
-    if (error) {
+    if (
+      error
+    ) {
+
       throw error;
     }
 
 
-    /*
-     * Trim names, discard blank values and defensively remove
-     * duplicates before storing the autocomplete catalogue.
-     */
     zuluActorNames =
       [
         ...new Set(
@@ -537,15 +546,7 @@ async function loadZuluActorNames() {
 ===================================================================== */
 
 /**
- * Adds an actor input row to the form.
- *
- * Each row contains:
- *   - actor text input
- *   - autocomplete results container
- *   - remove button
- *
- * An optional value can pre-populate the field, which is used when
- * actor names have been inferred from the filename.
+ * Adds an actor input row.
  *
  * @param {string} value
  */
@@ -553,7 +554,10 @@ function addActorRow(
   value = ""
 ) {
 
-  if (!addVideoActors) {
+  if (
+    !addVideoActors
+  ) {
+
     return;
   }
 
@@ -562,6 +566,7 @@ function addActorRow(
     document.createElement(
       "div"
     );
+
 
   row.className =
     "add-video-actor-row";
@@ -572,6 +577,7 @@ function addActorRow(
       "div"
     );
 
+
   wrapper.className =
     "add-video-actor-wrapper";
 
@@ -581,7 +587,9 @@ function addActorRow(
       "input"
     );
 
-  input.type = "text";
+
+  input.type =
+    "text";
 
   input.className =
     "add-video-actor-input";
@@ -596,13 +604,11 @@ function addActorRow(
     value;
 
 
-  /*
-   * Each actor field owns its own autocomplete results container.
-   */
   const suggestions =
     document.createElement(
       "div"
     );
+
 
   suggestions.className =
     "add-video-actor-suggestions";
@@ -636,6 +642,7 @@ function addActorRow(
     input
   );
 
+
   wrapper.appendChild(
     suggestions
   );
@@ -645,6 +652,7 @@ function addActorRow(
     document.createElement(
       "button"
     );
+
 
   remove.type =
     "button";
@@ -659,6 +667,7 @@ function addActorRow(
   remove.addEventListener(
     "click",
     () => {
+
       row.remove();
     }
   );
@@ -667,6 +676,7 @@ function addActorRow(
   row.appendChild(
     wrapper
   );
+
 
   row.appendChild(
     remove
@@ -680,10 +690,7 @@ function addActorRow(
 
 
 /**
- * Handles the Add Actor button.
- *
- * Creates another blank actor field and moves keyboard focus directly
- * into the newly created input.
+ * Adds another blank actor row and focuses it.
  */
 function handleAddActor() {
 
@@ -709,17 +716,6 @@ function handleAddActor() {
 
 /**
  * Displays matching existing actors beneath an actor input.
- *
- * Matching:
- *   - is case-insensitive;
- *   - matches anywhere within the actor name;
- *   - is limited to the first 10 results.
- *
- * Selecting a suggestion inserts the canonical existing actor name
- * into the input.
- *
- * @param {HTMLInputElement} input
- * @param {HTMLElement} container
  */
 function showActorSuggestions(
   input,
@@ -732,10 +728,13 @@ function showActorSuggestions(
       .toLowerCase();
 
 
-  container.innerHTML = "";
+  container.innerHTML =
+    "";
 
 
-  if (value.length < 1) {
+  if (
+    value.length < 1
+  ) {
 
     container.classList.remove(
       "open"
@@ -751,7 +750,9 @@ function showActorSuggestions(
         actor =>
           actor
             .toLowerCase()
-            .includes(value)
+            .includes(
+              value
+            )
       )
       .slice(
         0,
@@ -759,7 +760,9 @@ function showActorSuggestions(
       );
 
 
-  if (!matches.length) {
+  if (
+    !matches.length
+  ) {
 
     container.classList.remove(
       "open"
@@ -778,6 +781,7 @@ function showActorSuggestions(
         "div"
       );
 
+
     item.className =
       "add-video-actor-suggestion";
 
@@ -785,21 +789,20 @@ function showActorSuggestions(
       actor;
 
 
-    /*
-     * mousedown is used rather than click so selection occurs before
-     * the input potentially loses focus.
-     */
     item.addEventListener(
       "mousedown",
       event => {
 
         event.preventDefault();
 
+
         input.value =
           actor;
 
+
         container.innerHTML =
           "";
+
 
         container.classList.remove(
           "open"
@@ -825,50 +828,24 @@ function showActorSuggestions(
 ===================================================================== */
 
 /**
- * Attempts to infer actor names from the proposed film title.
- *
- * The expected naming convention is broadly:
+ * Attempts to infer actor names from:
  *
  *     Actor A with Actor B
  *
- * It also understands multiple secondary actors separated by:
- *
- *     &
- *     and
- *     ,
- *
- * Examples:
- *
- *     Actor A with Actor B
- *     Actor A with Actor B & Actor C
- *     Actor A with Actor B and Actor C
- *
- * It also removes:
- *
- *     PREVIEW -
- *
- * from the beginning of a title and strips some trailing title
- * annotations such as:
- *
- *     - description
- *     #2
- *
- * If no actors can be inferred, a single blank actor row is created.
- *
- * @param {string} title
+ * and similar filename conventions.
  */
 function suggestActorsFromTitle(
   title
 ) {
 
-  if (!addVideoActors) {
+  if (
+    !addVideoActors
+  ) {
+
     return;
   }
 
 
-  /*
-   * Replace any existing actor rows whenever a new file is selected.
-   */
   addVideoActors.innerHTML =
     "";
 
@@ -882,32 +859,25 @@ function suggestActorsFromTitle(
       .trim();
 
 
-  const actors = [];
+  const actors =
+    [];
 
 
-  /*
-   * Split the title around the first "with".
-   *
-   * Group 1 = primary actor
-   * Group 2 = remaining actor section
-   */
   const withMatch =
     workingTitle.match(
       /^(.+?)\s+with\s+(.+)$/i
     );
 
 
-  if (withMatch) {
+  if (
+    withMatch
+  ) {
 
     actors.push(
       withMatch[1].trim()
     );
 
 
-    /*
-     * Remove trailing descriptive/title markers from the secondary
-     * actor portion before splitting it into individual names.
-     */
     let rest =
       withMatch[2]
         .replace(
@@ -920,10 +890,6 @@ function suggestActorsFromTitle(
         );
 
 
-    /*
-     * Normalise "and" to "&", then accept comma or ampersand as
-     * actor separators.
-     */
     const others =
       rest
         .replace(
@@ -946,11 +912,9 @@ function suggestActorsFromTitle(
   }
 
 
-  /*
-   * If the filename does not match the expected naming convention,
-   * leave the user with a normal blank actor field.
-   */
-  if (!actors.length) {
+  if (
+    !actors.length
+  ) {
 
     addActorRow();
 
@@ -958,9 +922,6 @@ function suggestActorsFromTitle(
   }
 
 
-  /*
-   * Prevent the same actor being suggested twice.
-   */
   const uniqueActors =
     [
       ...new Set(
@@ -981,21 +942,233 @@ function suggestActorsFromTitle(
 
 
 /* =====================================================================
-   09. FILE SELECTION
+   09. INGESTION JOURNAL HELPERS
+===================================================================== */
+
+/**
+ * Calls zulu-ingestion-status.
+ *
+ * The browser never writes directly to zulu_ingestions.
+ */
+async function invokeIngestionStatus(
+  body
+) {
+
+  const {
+    data,
+    error
+  } =
+    await supabase
+      .functions
+      .invoke(
+        "zulu-ingestion-status",
+        {
+          body
+        }
+      );
+
+
+  if (
+    error
+  ) {
+
+    throw error;
+  }
+
+
+  if (
+    !data?.success
+  ) {
+
+    throw new Error(
+      data?.error ||
+      "Could not update ingestion status."
+    );
+  }
+
+
+  return data.ingestion;
+}
+
+
+/**
+ * Creates a persistent ingestion record immediately after a file is
+ * selected.
+ */
+async function createIngestionForFile(
+  file
+) {
+
+  const ingestion =
+    await invokeIngestionStatus({
+      action:
+        "create",
+
+      original_filename:
+        file.name,
+
+      filesize_bytes:
+        file.size
+    });
+
+
+  return ingestion.id;
+}
+
+
+/**
+ * Updates a browser-controlled ingestion stage.
+ */
+async function updateIngestionStatus(
+  ingestionId,
+  status,
+  extra = {}
+) {
+
+  if (
+    !ingestionId
+  ) {
+
+    return null;
+  }
+
+
+  return invokeIngestionStatus({
+    action:
+      "update",
+
+    ingestion_id:
+      ingestionId,
+
+    status,
+
+    ...extra
+  });
+}
+
+
+/**
+ * Records a fatal ingestion failure.
+ *
+ * This is deliberately best-effort so failure to update the journal
+ * never hides the original problem.
+ */
+async function markIngestionFailed(
+  ingestionId,
+  failedStage,
+  error
+) {
+
+  if (
+    !ingestionId
+  ) {
+
+    return;
+  }
+
+
+  try {
+
+    await invokeIngestionStatus({
+      action:
+        "fail",
+
+      ingestion_id:
+        ingestionId,
+
+      failed_stage:
+        failedStage,
+
+      error_message:
+        error?.message ||
+        String(
+          error ||
+          "Unknown ingestion error"
+        )
+    });
+
+  } catch (journalError) {
+
+    console.error(
+      "Could not record ingestion failure:",
+      journalError
+    );
+  }
+}
+
+
+/**
+ * Marks an abandoned pre-upload ingestion as cancelled.
+ */
+async function cancelIngestion(
+  ingestionId
+) {
+
+  if (
+    !ingestionId
+  ) {
+
+    return;
+  }
+
+
+  try {
+
+    await updateIngestionStatus(
+      ingestionId,
+      "cancelled"
+    );
+
+  } catch (error) {
+
+    console.error(
+      "Could not cancel previous ingestion:",
+      error
+    );
+  }
+}
+
+
+/**
+ * Marks an ingestion complete after catalogue creation and thumbnail
+ * handling have finished.
+ */
+async function completeIngestion(
+  ingestionId,
+  thumbnailStatus
+) {
+
+  if (
+    !ingestionId
+  ) {
+
+    return null;
+  }
+
+
+  return invokeIngestionStatus({
+    action:
+      "complete",
+
+    ingestion_id:
+      ingestionId,
+
+    thumbnail_status:
+      thumbnailStatus
+  });
+}
+
+
+/* =====================================================================
+   10. FILE SELECTION
 ===================================================================== */
 
 /**
  * Handles selection of a local MP4.
  *
- * Immediately:
- *
- *   1. clears metadata from any previously selected file;
- *   2. derives the proposed film title from the filename;
- *   3. displays the filename and file size;
- *   4. attempts to identify actors from the title;
- *   5. starts asynchronous video analysis.
+ * The ingestion record is created BEFORE video analysis begins.
  */
-function handleFileSelection() {
+async function handleFileSelection() {
 
   const file =
     addVideoFile
@@ -1003,14 +1176,50 @@ function handleFileSelection() {
 
 
   /*
-   * Metadata from a previous file must never be reused.
+   * Invalidate any older asynchronous analysis immediately.
    */
-  addVideoMetadata = null;
+  const analysisToken =
+    ++addVideoAnalysisToken;
 
 
-  if (!file) {
+  addVideoMetadata =
+    null;
 
-    if (addVideoFileInfo) {
+
+  resetThumbnailState();
+
+
+  /*
+   * If another file had already created an ingestion but had not begun
+   * uploading, preserve that history by marking it cancelled.
+   */
+  const previousIngestionId =
+    addVideoIngestionId;
+
+
+  addVideoIngestionId =
+    null;
+
+
+  if (
+    previousIngestionId &&
+    !addVideoUploadInProgress
+  ) {
+
+    await cancelIngestion(
+      previousIngestionId
+    );
+  }
+
+
+  if (
+    !file
+  ) {
+
+    if (
+      addVideoFileInfo
+    ) {
+
       addVideoFileInfo.textContent =
         "";
     }
@@ -1023,10 +1232,6 @@ function handleFileSelection() {
     file.name;
 
 
-  /*
-   * The initial catalogue title is simply the filename without
-   * its .mp4 extension. The user can edit it before upload.
-   */
   const title =
     filename.replace(
       /\.mp4$/i,
@@ -1034,7 +1239,10 @@ function handleFileSelection() {
     );
 
 
-  if (addVideoTitle) {
+  if (
+    addVideoTitle
+  ) {
+
     addVideoTitle.value =
       title;
   }
@@ -1045,7 +1253,9 @@ function handleFileSelection() {
     (1024 * 1024);
 
 
-  if (addVideoFileInfo) {
+  if (
+    addVideoFileInfo
+  ) {
 
     addVideoFileInfo.textContent =
       `${filename} — ${sizeMB.toFixed(1)} MB`;
@@ -1058,29 +1268,97 @@ function handleFileSelection() {
 
 
   /*
-   * Metadata extraction and thumbnail generation can take time, so
-   * they run asynchronously after the immediate UI updates above.
+   * Create the persistent journal before analysis starts.
    */
-  analyseSelectedFile(
-    file
-  );
+  try {
+
+    handleUploadStatus(
+      "Creating ingestion record…"
+    );
+
+
+    const ingestionId =
+      await createIngestionForFile(
+        file
+      );
+
+
+    /*
+     * The user may have selected another file while the Edge Function
+     * request was running.
+     */
+    if (
+      analysisToken !==
+        addVideoAnalysisToken ||
+      addVideoFile?.files?.[0] !==
+        file
+    ) {
+
+      await cancelIngestion(
+        ingestionId
+      );
+
+      return;
+    }
+
+
+    addVideoIngestionId =
+      ingestionId;
+
+
+    /*
+     * Analysis has now officially started.
+     */
+    await updateIngestionStatus(
+      ingestionId,
+      "analysing",
+      {
+        thumbnail_status:
+          "generating"
+      }
+    );
+
+
+    await analyseSelectedFile(
+      file,
+      ingestionId,
+      analysisToken
+    );
+
+  } catch (error) {
+
+    console.error(
+      "Could not start video ingestion:",
+      error
+    );
+
+
+    if (
+      analysisToken ===
+        addVideoAnalysisToken
+    ) {
+
+      handleUploadStatus(
+        `Could not start ingestion: ${
+          error?.message ||
+          "Unknown error"
+        }`
+      );
+    }
+  }
 }
 
 
 /* =====================================================================
-   10. VIDEO ANALYSIS / FINGERPRINTING
+   11. VIDEO ANALYSIS / FINGERPRINTING
 ===================================================================== */
 
 /**
  * Calculates a SHA-256 hash for a Blob.
- *
- * Used by the fingerprinting system to hash selected chunks of the
- * video without hashing the entire potentially multi-gigabyte file.
- *
- * @param {Blob} blob
- * @returns {Promise<string>} Lowercase hexadecimal SHA-256 hash.
  */
-async function sha256Blob(blob) {
+async function sha256Blob(
+  blob
+) {
 
   const buffer =
     await blob.arrayBuffer();
@@ -1102,41 +1380,21 @@ async function sha256Blob(blob) {
       byte =>
         byte
           .toString(16)
-          .padStart(2, "0")
+          .padStart(
+            2,
+            "0"
+          )
     )
     .join("");
 }
 
 
 /**
- * Reads metadata from the selected local video and creates a content
- * fingerprint used for duplicate detection.
- *
- * Native browser video metadata supplies:
- *
- *   duration
- *   width
- *   height
- *
- * The fingerprint uses:
- *
- *   file size
- *   SHA-256 of first 4 MB
- *   SHA-256 of middle 4 MB
- *   SHA-256 of final 4 MB
- *
- * Those values are combined and SHA-256 hashed again to produce one
- * compact fingerprint.
- *
- * This avoids reading/hashing the entire video while still producing
- * a strong identifier based on several parts of the file.
- *
- * The temporary object URL is always revoked in the finally block.
- *
- * @param {File} file
- * @returns {Promise<Object>}
+ * Reads video metadata and generates a lightweight content fingerprint.
  */
-async function extractVideoMetadata(file) {
+async function extractVideoMetadata(
+  file
+) {
 
   const objectUrl =
     URL.createObjectURL(
@@ -1153,24 +1411,30 @@ async function extractVideoMetadata(file) {
   video.preload =
     "metadata";
 
-  video.muted = true;
-  video.playsInline = true;
-  video.src = objectUrl;
+  video.muted =
+    true;
+
+  video.playsInline =
+    true;
+
+  video.src =
+    objectUrl;
 
 
   try {
 
-    /*
-     * Wait until the browser has read the MP4 metadata.
-     */
     await new Promise(
-      (resolve, reject) => {
+      (
+        resolve,
+        reject
+      ) => {
 
         video.addEventListener(
           "loadedmetadata",
           resolve,
           {
-            once: true
+            once:
+              true
           }
         );
 
@@ -1184,7 +1448,8 @@ async function extractVideoMetadata(file) {
               )
             ),
           {
-            once: true
+            once:
+              true
           }
         );
       }
@@ -1196,10 +1461,12 @@ async function extractVideoMetadata(file) {
         video.duration
       );
 
+
     const width =
       Number(
         video.videoWidth
       );
+
 
     const height =
       Number(
@@ -1208,14 +1475,11 @@ async function extractVideoMetadata(file) {
 
 
     /*
-     * Fingerprint three 4 MB samples rather than hashing the complete
-     * video file.
+     * Fingerprint first, middle and final 4 MB.
      */
     const sampleSize =
       4 * 1024 * 1024;
 
-
-    /* First 4 MB */
 
     const firstChunk =
       file.slice(
@@ -1227,8 +1491,6 @@ async function extractVideoMetadata(file) {
       );
 
 
-    /* Middle 4 MB */
-
     const middleStart =
       Math.max(
         0,
@@ -1237,6 +1499,7 @@ async function extractVideoMetadata(file) {
           sampleSize / 2
         )
       );
+
 
     const middleChunk =
       file.slice(
@@ -1249,14 +1512,13 @@ async function extractVideoMetadata(file) {
       );
 
 
-    /* Final 4 MB */
-
     const lastStart =
       Math.max(
         0,
         file.size -
           sampleSize
       );
+
 
     const lastChunk =
       file.slice(
@@ -1265,9 +1527,6 @@ async function extractVideoMetadata(file) {
       );
 
 
-    /*
-     * Hash all three samples concurrently.
-     */
     const [
       firstSha256,
       middleSha256,
@@ -1277,26 +1536,27 @@ async function extractVideoMetadata(file) {
         sha256Blob(
           firstChunk
         ),
+
         sha256Blob(
           middleChunk
         ),
+
         sha256Blob(
           lastChunk
         )
       ]);
 
 
-    /*
-     * File size is included so two files containing identical sampled
-     * chunks but different overall lengths do not share a fingerprint.
-     */
     const fingerprintSource =
       [
         file.size,
         firstSha256,
         middleSha256,
         lastSha256
-      ].join("|");
+      ]
+        .join(
+          "|"
+        );
 
 
     const fingerprintBuffer =
@@ -1342,14 +1602,13 @@ async function extractVideoMetadata(file) {
 
   } finally {
 
-    /*
-     * Always release the temporary video resources.
-     */
     video.pause();
+
 
     video.removeAttribute(
       "src"
     );
+
 
     URL.revokeObjectURL(
       objectUrl
@@ -1359,19 +1618,12 @@ async function extractVideoMetadata(file) {
 
 
 /**
- * Coordinates analysis of the currently selected file.
- *
- * First extracts metadata/fingerprint, then generates thumbnail
- * candidates.
- *
- * The selected file is checked again after metadata extraction. This
- * prevents a slower analysis of an old file from overwriting state if
- * the user selects another file before the first analysis finishes.
- *
- * @param {File} file
+ * Coordinates local metadata analysis and thumbnail generation.
  */
 async function analyseSelectedFile(
-  file
+  file,
+  ingestionId,
+  analysisToken
 ) {
 
   try {
@@ -1398,12 +1650,16 @@ async function analyseSelectedFile(
 
 
     /*
-     * The user may have selected another file while metadata extraction
-     * was running. Ignore this result if it is now stale.
+     * Ignore stale analysis results.
      */
     if (
       addVideoFile
-        ?.files?.[0] !== file
+        ?.files?.[0] !==
+          file ||
+      analysisToken !==
+        addVideoAnalysisToken ||
+      ingestionId !==
+        addVideoIngestionId
     ) {
 
       console.log(
@@ -1414,75 +1670,68 @@ async function analyseSelectedFile(
     }
 
 
-/* -----------------------------------------------------------------
-   GENERATE THUMBNAIL CANDIDATES
-   -----------------------------------------------------------------
-
-   Thumbnail generation is an OPTIONAL part of ingestion.
-
-   The video's metadata, fingerprint, duplicate detection and Backblaze
-   upload are more important than automatically generating a thumbnail.
-
-   Thumbnail generation depends on several browser/external components:
-
-       - MediaPipe Tasks Vision;
-       - the MediaPipe WASM runtime;
-       - the BlazeFace model;
-       - browser video seeking;
-       - canvas frame extraction.
-
-   A temporary failure in any of these components must therefore NOT
-   prevent an otherwise valid MP4 from being added to the catalogue.
-
-   If thumbnail generation fails:
-
-       - log the full error for debugging;
-       - reset any partially generated thumbnail state;
-       - show a non-fatal status message;
-       - continue with the rest of video ingestion.
-
-   getSelectedThumbnailBlob() will subsequently return null, allowing
-   the submission stage to skip thumbnail publishing.
------------------------------------------------------------------ */
-
-try {
-
-    await generateThumbnailCandidates(
-      file
-    );
-  
-  } catch (thumbnailError) {
-  
-    console.error(
-      "Thumbnail generation failed:",
-      thumbnailError
-    );
-  
-  
     /*
-     * Remove any partial candidates or preview state that may have been
-     * created before thumbnail generation failed.
-     *
-     * The cached MediaPipe detector itself is deliberately retained by
-     * resetThumbnailState().
+     * Thumbnail generation remains OPTIONAL.
      */
-    resetThumbnailState();
-  
-  
-    /*
-     * This is informational only.
-     *
-     * Do NOT throw thumbnailError here. Throwing it would make thumbnail
-     * generation a fatal dependency of the complete ingestion process.
-     */
-    if (
-      addVideoThumbnailStatus
-    ) {
-  
-      addVideoThumbnailStatus.textContent =
-        "Thumbnail generation failed — video can still be uploaded.";
+    try {
+
+      await generateThumbnailCandidates(
+        file
+      );
+
+
+      await updateIngestionStatus(
+        ingestionId,
+        "analysing",
+        {
+          thumbnail_status:
+            "ready"
+        }
+      );
+
+    } catch (thumbnailError) {
+
+      console.error(
+        "Thumbnail generation failed:",
+        thumbnailError
+      );
+
+
+      resetThumbnailState();
+
+
+      if (
+        addVideoThumbnailStatus
+      ) {
+
+        addVideoThumbnailStatus.textContent =
+          "Thumbnail generation failed — video can still be uploaded.";
+      }
+
+
+      /*
+       * Thumbnail failure is non-fatal.
+       */
+      try {
+
+        await updateIngestionStatus(
+          ingestionId,
+          "analysing",
+          {
+            thumbnail_status:
+              "failed"
+          }
+        );
+
+      } catch (journalError) {
+
+        console.error(
+          "Could not record thumbnail-generation failure:",
+          journalError
+        );
+      }
     }
-  }
+
   } catch (error) {
 
     console.error(
@@ -1491,7 +1740,15 @@ try {
     );
 
 
-    addVideoMetadata = null;
+    addVideoMetadata =
+      null;
+
+
+    await markIngestionFailed(
+      ingestionId,
+      "analysing",
+      error
+    );
 
 
     if (
@@ -1506,24 +1763,20 @@ try {
 
 
 /* =====================================================================
-   11. DUPLICATE DETECTION
+   12. DUPLICATE DETECTION
 ===================================================================== */
 
 /**
- * Looks for an existing catalogue record with the same video
- * fingerprint.
- *
- * A matching fingerprint is treated as a possible duplicate and stops
- * the upload before any file is sent to Backblaze.
- *
- * @param {string} fingerprint
- * @returns {Promise<Object|null>}
+ * Looks for an existing catalogue record with the same fingerprint.
  */
 async function findDuplicateVideoByFingerprint(
   fingerprint
 ) {
 
-  if (!fingerprint) {
+  if (
+    !fingerprint
+  ) {
+
     return null;
   }
 
@@ -1546,32 +1799,25 @@ async function findDuplicateVideoByFingerprint(
       .maybeSingle();
 
 
-  if (error) {
+  if (
+    error
+  ) {
+
     throw error;
   }
 
 
-  return data || null;
+  return data ||
+    null;
 }
 
 
 /* =====================================================================
-   12. BUILD SUBMISSION PAYLOAD
+   13. BUILD SUBMISSION PAYLOAD
 ===================================================================== */
 
 /**
- * Collects the current Add Video form values into a single normalised
- * object for validation and upload.
- *
- * Actor names are:
- *   - trimmed;
- *   - blank values removed;
- *   - deduplicated.
- *
- * Tags are expected as comma-separated text and converted into an
- * array of trimmed non-empty values.
- *
- * @returns {Object}
+ * Collects and normalises the Add Video form values.
  */
 function getAddVideoPayload() {
 
@@ -1586,7 +1832,8 @@ function getAddVideoPayload() {
         addVideoActors
           ?.querySelectorAll(
             ".add-video-actor-input"
-          ) || []
+          ) ||
+        []
       )
     ]
       .map(
@@ -1597,8 +1844,13 @@ function getAddVideoPayload() {
 
 
   const tags =
-    (addVideoTags?.value || "")
-      .split(",")
+    (
+      addVideoTags?.value ||
+      ""
+    )
+      .split(
+        ","
+      )
       .map(
         tag =>
           tag.trim()
@@ -1610,12 +1862,14 @@ function getAddVideoPayload() {
     file,
 
     filename:
-      file?.name || null,
+      file?.name ||
+      null,
 
     film:
       addVideoTitle
         ?.value
-        .trim() || "",
+        .trim() ||
+      "",
 
     actors:
       [
@@ -1630,22 +1884,19 @@ function getAddVideoPayload() {
 
 
 /* =====================================================================
-   13. STATUS / PROGRESS HELPERS
+   14. STATUS / PROGRESS HELPERS
 ===================================================================== */
 
 /**
- * Displays a workflow/status message in the Add Video modal.
- *
- * This function is also passed to upload helpers as an onStatus
- * callback.
- *
- * @param {string} message
+ * Displays the current workflow message.
  */
 function handleUploadStatus(
   message
 ) {
 
-  if (addVideoStatus) {
+  if (
+    addVideoStatus
+  ) {
 
     addVideoStatus.textContent =
       message;
@@ -1654,28 +1905,25 @@ function handleUploadStatus(
 
 
 /**
- * Updates the upload progress bar and its accompanying text.
- *
- * This function is passed to the Backblaze upload helpers as their
- * onProgress callback.
- *
- * @param {Object} progress
- * @param {number} progress.percent
- * @param {string} progress.text
+ * Updates the Backblaze upload progress bar.
  */
 function handleUploadProgress({
   percent,
   text
 }) {
 
-  if (addVideoProgress) {
+  if (
+    addVideoProgress
+  ) {
 
     addVideoProgress.value =
       percent;
   }
 
 
-  if (addVideoProgressText) {
+  if (
+    addVideoProgressText
+  ) {
 
     addVideoProgressText.textContent =
       text;
@@ -1684,42 +1932,33 @@ function handleUploadProgress({
 
 
 /* =====================================================================
-   14. SUBMISSION / INGESTION PIPELINE
+   15. SUBMISSION / INGESTION PIPELINE
    =====================================================================
 
-   handleSubmit() is the main orchestration function for ingestion.
+   Workflow:
 
-   The workflow is:
+       Validate
+           ↓
+       Duplicate check
+           ↓
+       ready
+           ↓
+       uploading
+           ↓
+       video_uploaded
+           ↓
+       zulu-finalize-video
+           ↓
+       catalogued
+           ↓
+       thumbnail_uploading
+           ↓
+       complete / complete_without_thumbnail
 
-       Validate form
-           ↓
-       Verify metadata analysis completed
-           ↓
-       Check fingerprint for duplicate
-           ↓
-       Build canonical filename
-           ↓
-       Lock upload UI
-           ↓
-       Upload MP4 to Backblaze
-           ↓
-       Build public media URL
-           ↓
-       Call zulu-finalize-video
-           ↓
-       Upload selected thumbnail
-           ↓
-       Notify parent application
-           ↓
-       Mark upload complete
 ===================================================================== */
 
 /**
- * Validates and processes the complete Add Video submission.
- *
- * This is intentionally an orchestration function: lower-level upload,
- * fingerprinting and thumbnail operations are delegated to specialised
- * helpers/modules.
+ * Processes the complete Add Video submission.
  */
 async function handleSubmit() {
 
@@ -1731,7 +1970,9 @@ async function handleSubmit() {
      STEP 1: VALIDATE FORM
   ----------------------------------------------------------------- */
 
-  if (!payload.file) {
+  if (
+    !payload.file
+  ) {
 
     handleUploadStatus(
       "Please choose an MP4 file."
@@ -1741,7 +1982,9 @@ async function handleSubmit() {
   }
 
 
-  if (!payload.film) {
+  if (
+    !payload.film
+  ) {
 
     handleUploadStatus(
       "Please enter a film title."
@@ -1751,7 +1994,9 @@ async function handleSubmit() {
   }
 
 
-  if (!payload.actors.length) {
+  if (
+    !payload.actors.length
+  ) {
 
     handleUploadStatus(
       "Please add at least one actor."
@@ -1764,7 +2009,9 @@ async function handleSubmit() {
   if (
     !payload.filename
       .toLowerCase()
-      .endsWith(".mp4")
+      .endsWith(
+        ".mp4"
+      )
   ) {
 
     handleUploadStatus(
@@ -1776,13 +2023,33 @@ async function handleSubmit() {
 
 
   /*
-   * File analysis must complete before upload because its metadata and
-   * fingerprint are required later in the ingestion pipeline.
+   * Analysis must have completed successfully.
    */
-  if (!addVideoMetadata) {
+  if (
+    !addVideoMetadata
+  ) {
 
     handleUploadStatus(
       "Please wait for video analysis to finish."
+    );
+
+    return;
+  }
+
+
+  /*
+   * Every upload now requires its persistent ingestion record.
+   */
+  const ingestionId =
+    addVideoIngestionId;
+
+
+  if (
+    !ingestionId
+  ) {
+
+    handleUploadStatus(
+      "This video has no ingestion record. Please reselect the MP4."
     );
 
     return;
@@ -1817,10 +2084,13 @@ async function handleSubmit() {
     );
 
 
-    /*
-     * Do not continue with an upload if duplicate detection itself
-     * failed. It is safer to stop than risk creating a duplicate.
-     */
+    await markIngestionFailed(
+      ingestionId,
+      "duplicate_check",
+      error
+    );
+
+
     handleUploadStatus(
       `Duplicate check failed: ${
         error?.message ||
@@ -1832,7 +2102,9 @@ async function handleSubmit() {
   }
 
 
-  if (duplicateVideo) {
+  if (
+    duplicateVideo
+  ) {
 
     handleUploadStatus(
       `Possible duplicate: "${duplicateVideo.film}" ` +
@@ -1847,30 +2119,73 @@ async function handleSubmit() {
     );
 
 
+    /*
+     * Record this as a deliberate duplicate rather than a generic
+     * failure.
+     */
+    try {
+
+      await updateIngestionStatus(
+        ingestionId,
+        "duplicate",
+        {
+          film:
+            payload.film,
+
+          canonical_filename:
+            `${payload.film}.mp4`,
+
+          fingerprint:
+            addVideoMetadata.fingerprint
+        }
+      );
+
+    } catch (journalError) {
+
+      console.error(
+        "Could not record duplicate ingestion:",
+        journalError
+      );
+    }
+
+
     return;
   }
 
 
   /* -----------------------------------------------------------------
-     STEP 3: BUILD CANONICAL BACKBLAZE FILENAME
+     STEP 3: BUILD CANONICAL FILENAME
   ----------------------------------------------------------------- */
 
-  /*
-   * The catalogue film title becomes the canonical stored filename.
-   *
-   * Example:
-   *
-   *     Hugo Dupre with Eduell Levine
-   *
-   * becomes:
-   *
-   *     Hugo Dupre with Eduell Levine.mp4
-   */
   const canonicalFilename =
     `${payload.film}.mp4`;
 
 
+  let currentStage =
+    "ready";
+
+
   try {
+
+    /*
+     * Persist the final title and analysis-derived fingerprint.
+     */
+    await updateIngestionStatus(
+      ingestionId,
+      "ready",
+      {
+        film:
+          payload.film,
+
+        canonical_filename:
+          canonicalFilename,
+
+        fingerprint:
+          addVideoMetadata
+            .fingerprint
+      }
+    );
+
 
     /* ---------------------------------------------------------------
        STEP 4: LOCK UPLOAD UI
@@ -1879,11 +2194,14 @@ async function handleSubmit() {
     addVideoUploadInProgress =
       true;
 
+
     addVideoCompleted =
       false;
 
 
-    if (addVideoSubmit) {
+    if (
+      addVideoSubmit
+    ) {
 
       addVideoSubmit.disabled =
         true;
@@ -1893,33 +2211,39 @@ async function handleSubmit() {
     }
 
 
-    if (addVideoFile) {
+    if (
+      addVideoFile
+    ) {
 
       addVideoFile.disabled =
         true;
     }
 
 
-    if (addVideoProgressWrap) {
-
+    if (
       addVideoProgressWrap
-        .style.display =
-          "block";
+    ) {
+
+      addVideoProgressWrap.style.display =
+        "block";
     }
 
 
-    if (addVideoProgress) {
+    if (
+      addVideoProgress
+    ) {
 
       addVideoProgress.value =
         0;
     }
 
 
-    if (addVideoProgressText) {
-
+    if (
       addVideoProgressText
-        .textContent =
-          "0%";
+    ) {
+
+      addVideoProgressText.textContent =
+        "0%";
     }
 
 
@@ -1927,14 +2251,21 @@ async function handleSubmit() {
        STEP 5: UPLOAD VIDEO TO BACKBLAZE
     --------------------------------------------------------------- */
 
+    currentStage =
+      "uploading";
+
+
+    await updateIngestionStatus(
+      ingestionId,
+      "uploading"
+    );
+
+
     let uploadResult;
 
 
     /*
-     * Large files use Backblaze multipart upload.
-     *
-     * uploadLargeFileToBackblaze() handles the multipart mechanics
-     * internally and reports progress/status through callbacks.
+     * Large files use multipart upload.
      */
     if (
       isLargeFile(
@@ -1967,8 +2298,7 @@ async function handleSubmit() {
     } else {
 
       /*
-       * Normal Backblaze uploads require a SHA-1 checksum of the
-       * complete file.
+       * Normal Backblaze uploads require a complete-file SHA-1.
        */
       handleUploadStatus(
         "Calculating checksum…"
@@ -1994,9 +2324,7 @@ async function handleSubmit() {
 
 
       /*
-       * Request a short-lived Backblaze upload URL/token from the
-       * server-side Edge Function. Backblaze credentials therefore do
-       * not need to be exposed directly in the browser.
+       * Obtain a temporary Backblaze upload URL/token.
        */
       handleUploadStatus(
         "Preparing secure Backblaze upload…"
@@ -2004,8 +2332,11 @@ async function handleSubmit() {
 
 
       const {
-        data: uploadAuth,
-        error: authError
+        data:
+          uploadAuth,
+
+        error:
+          authError
       } =
         await supabase
           .functions
@@ -2020,7 +2351,10 @@ async function handleSubmit() {
           );
 
 
-      if (authError) {
+      if (
+        authError
+      ) {
+
         throw authError;
       }
 
@@ -2068,20 +2402,23 @@ async function handleSubmit() {
 
 
     /*
-     * At this point the MP4 itself has successfully reached Backblaze.
+     * The MP4 has successfully reached Backblaze.
      */
-    if (addVideoProgress) {
+    if (
+      addVideoProgress
+    ) {
 
       addVideoProgress.value =
         100;
     }
 
 
-    if (addVideoProgressText) {
-
+    if (
       addVideoProgressText
-        .textContent =
-          `100% — ${formatBytes(payload.file.size)}`;
+    ) {
+
+      addVideoProgressText.textContent =
+        `100% — ${formatBytes(payload.file.size)}`;
     }
 
 
@@ -2095,10 +2432,6 @@ async function handleSubmit() {
        STEP 6: BUILD PUBLIC MEDIA URL
     --------------------------------------------------------------- */
 
-    /*
-     * The site's Cloudflare media hostname is used rather than exposing
-     * the raw Backblaze B2 URL.
-     */
     const publicUrl =
       "https://media.zulu-orchid-falcon.co.uk/" +
       encodeB2Filename(
@@ -2112,9 +2445,49 @@ async function handleSubmit() {
     );
 
 
+    /*
+     * Record successful storage.
+     *
+     * This journal write is best-effort because the MP4 is already
+     * safely stored. A temporary journal failure must not cause the UI
+     * to claim that the MP4 itself failed to upload.
+     */
+    try {
+
+      await updateIngestionStatus(
+        ingestionId,
+        "video_uploaded",
+        {
+          public_url:
+            publicUrl,
+
+          ...(
+            uploadResult?.fileId
+              ? {
+                  backblaze_file_id:
+                    uploadResult.fileId
+                }
+              : {}
+          )
+        }
+      );
+
+    } catch (journalError) {
+
+      console.error(
+        "Video uploaded but ingestion journal could not record it:",
+        journalError
+      );
+    }
+
+
     /* ---------------------------------------------------------------
-       STEP 7: CREATE CATALOGUE RECORDS
+       STEP 7: CREATE CATALOGUE RECORD
     --------------------------------------------------------------- */
+
+    currentStage =
+      "cataloguing";
+
 
     handleUploadStatus(
       "Creating catalogue entry…"
@@ -2122,23 +2495,18 @@ async function handleSubmit() {
 
 
     /*
-     * zulu-finalize-video performs the server-side database work after
-     * the MP4 has successfully uploaded.
+     * zulu-finalize-video now receives ingestion_id.
      *
-     * It receives:
+     * That function owns:
      *
-     *   film title
-     *   public media URL
-     *   actors
-     *   tags
-     *   file size
-     *   duration
-     *   dimensions
-     *   duplicate-detection fingerprint
+     *     video_uploaded → cataloguing → catalogued
      */
     const {
-      data: finalizeData,
-      error: finalizeError
+      data:
+        finalizeData,
+
+      error:
+        finalizeError
     } =
       await supabase
         .functions
@@ -2146,6 +2514,9 @@ async function handleSubmit() {
           "zulu-finalize-video",
           {
             body: {
+
+              ingestion_id:
+                ingestionId,
 
               film:
                 payload.film,
@@ -2183,13 +2554,19 @@ async function handleSubmit() {
         );
 
 
-    if (finalizeError) {
+    if (
+      finalizeError
+    ) {
 
       console.error(
         "CATALOGUE FINALIZE ERROR:",
         finalizeError
       );
 
+
+      /*
+       * zulu-finalize-video records catalogue-stage failures itself.
+       */
       throw finalizeError;
     }
 
@@ -2212,39 +2589,49 @@ async function handleSubmit() {
     );
 
 
-/* ---------------------------------------------------------------
-   STEP 8: UPLOAD SELECTED THUMBNAIL
-   ---------------------------------------------------------------
+    /* ---------------------------------------------------------------
+       STEP 8: THUMBNAIL
+       ---------------------------------------------------------------
 
-   Thumbnail publishing is OPTIONAL.
+       Thumbnail publishing remains OPTIONAL.
 
-   Normally getSelectedThumbnailBlob() contains the best thumbnail
-   generated during video analysis.
+       At this point:
 
-   However, thumbnail generation may have failed because MediaPipe,
-   WASM, the BlazeFace model, video seeking or canvas processing was
-   unavailable.
+           MP4       ✓
+           Catalogue ✓
 
-   Likewise, the thumbnail itself may fail to upload to Backblaze.
+       Therefore a thumbnail problem must not undo or invalidate the
+       successful video ingestion.
+    --------------------------------------------------------------- */
 
-   Neither situation should cause the completed video ingestion to
-   fail because, at this point:
-
-       - the MP4 has already been uploaded successfully;
-       - the catalogue entry has already been created successfully.
-
-   The video can therefore remain in the catalogue and use the site's
-   normal fallback/default thumbnail.
------------------------------------------------------------------ */
-    
     const thumbnailBlob =
       getSelectedThumbnailBlob();
-    
-    
-    if (thumbnailBlob) {
-    
+
+
+    let finalThumbnailStatus =
+      "skipped";
+
+
+    if (
+      thumbnailBlob
+    ) {
+
       try {
-    
+
+        currentStage =
+          "thumbnail_uploading";
+
+
+        await updateIngestionStatus(
+          ingestionId,
+          "thumbnail_uploading",
+          {
+            thumbnail_status:
+              "uploading"
+          }
+        );
+
+
         await uploadThumbnailToBackblaze(
           finalizeData.uid,
           thumbnailBlob,
@@ -2253,43 +2640,69 @@ async function handleSubmit() {
               handleUploadStatus
           }
         );
-    
+
+
+        finalThumbnailStatus =
+          "uploaded";
+
       } catch (thumbnailUploadError) {
-    
-        /*
-         * Thumbnail publishing failed, but the video itself has already
-         * been successfully ingested.
-         *
-         * Log the failure for debugging but deliberately do NOT rethrow it.
-         */
+
         console.error(
           "Thumbnail upload failed:",
           thumbnailUploadError
         );
+
+
+        /*
+         * Do not throw.
+         *
+         * The MP4 and catalogue entry are already valid.
+         */
+        finalThumbnailStatus =
+          "failed";
       }
-    
+
     } else {
-    
-      /*
-       * Thumbnail generation produced no usable thumbnail.
-       *
-       * This is non-fatal. The catalogue can display its normal fallback
-       * thumbnail instead.
-       */
+
       console.warn(
         "No thumbnail available for video UID:",
         finalizeData.uid
       );
+
+
+      finalThumbnailStatus =
+        "skipped";
     }
+
+
     /* ---------------------------------------------------------------
-       STEP 9: NOTIFY PARENT APPLICATION
+       STEP 9: COMPLETE INGESTION
+       ---------------------------------------------------------------
+
+       uploaded
+           → complete
+
+       failed / skipped
+           → complete_without_thumbnail
+    --------------------------------------------------------------- */
+
+    await completeIngestion(
+      ingestionId,
+      finalThumbnailStatus
+    );
+
+
+    /* ---------------------------------------------------------------
+       STEP 10: NOTIFY PARENT APPLICATION
     --------------------------------------------------------------- */
 
     addVideoCompleted =
       true;
 
 
-    if (onVideoAdded) {
+    if (
+      onVideoAdded
+    ) {
 
       await onVideoAdded({
         uid:
@@ -2302,37 +2715,57 @@ async function handleSubmit() {
 
 
     /* ---------------------------------------------------------------
-       STEP 10: DISPLAY SUCCESS STATE
+       STEP 11: DISPLAY SUCCESS
     --------------------------------------------------------------- */
 
-    if (addVideoProgress) {
+    if (
+      addVideoProgress
+    ) {
 
       addVideoProgress.value =
         100;
     }
 
 
-    if (addVideoProgressText) {
-
+    if (
       addVideoProgressText
-        .textContent =
-          `100% — ${formatBytes(payload.file.size)}`;
+    ) {
+
+      addVideoProgressText.textContent =
+        `100% — ${formatBytes(payload.file.size)}`;
     }
 
 
-    handleUploadStatus(
-      `✓ Video added successfully. UID ${finalizeData.uid}`
-    );
+    if (
+      finalThumbnailStatus ===
+        "uploaded"
+    ) {
+
+      handleUploadStatus(
+        `✓ Video added successfully. UID ${finalizeData.uid}`
+      );
+
+    } else {
+
+      handleUploadStatus(
+        `✓ Video added successfully. UID ${finalizeData.uid} — ` +
+        `using default thumbnail.`
+      );
+    }
 
 
-    if (addVideoSubmit) {
+    if (
+      addVideoSubmit
+    ) {
 
       addVideoSubmit.textContent =
         "Uploaded ✓";
     }
 
 
-    if (addVideoCancel) {
+    if (
+      addVideoCancel
+    ) {
 
       addVideoCancel.textContent =
         "Close";
@@ -2341,7 +2774,7 @@ async function handleSubmit() {
   } catch (error) {
 
     /* ---------------------------------------------------------------
-       UPLOAD / INGESTION FAILURE
+       INGESTION FAILURE
     --------------------------------------------------------------- */
 
     console.error(
@@ -2350,6 +2783,32 @@ async function handleSubmit() {
     );
 
 
+    /*
+     * Pre-catalogue failures are recorded here.
+     *
+     * Catalogue-stage failures are already recorded by
+     * zulu-finalize-video.
+     */
+    if (
+      currentStage ===
+        "ready" ||
+      currentStage ===
+        "uploading"
+    ) {
+
+      await markIngestionFailed(
+        ingestionId,
+        currentStage,
+        error
+      );
+    }
+
+
+    /*
+     * Once catalogue creation has succeeded, thumbnail/completion
+     * journal errors must not rewrite the ingestion as a generic
+     * upload failure.
+     */
     handleUploadStatus(
       `Upload failed: ${
         error?.message ||
@@ -2367,25 +2826,22 @@ async function handleSubmit() {
       false;
 
 
-    if (addVideoFile) {
+    if (
+      addVideoFile
+    ) {
 
       addVideoFile.disabled =
         false;
     }
 
 
-    /*
-     * Successful upload:
-     *
-     * Keep Upload disabled and turn Cancel into Close.
-     *
-     * Failed upload:
-     *
-     * Restore controls so the user can correct/retry the upload.
-     */
-    if (addVideoCompleted) {
+    if (
+      addVideoCompleted
+    ) {
 
-      if (addVideoSubmit) {
+      if (
+        addVideoSubmit
+      ) {
 
         addVideoSubmit.disabled =
           true;
@@ -2395,7 +2851,9 @@ async function handleSubmit() {
       }
 
 
-      if (addVideoCancel) {
+      if (
+        addVideoCancel
+      ) {
 
         addVideoCancel.textContent =
           "Close";
@@ -2403,7 +2861,9 @@ async function handleSubmit() {
 
     } else {
 
-      if (addVideoSubmit) {
+      if (
+        addVideoSubmit
+      ) {
 
         addVideoSubmit.disabled =
           false;
@@ -2413,7 +2873,9 @@ async function handleSubmit() {
       }
 
 
-      if (addVideoCancel) {
+      if (
+        addVideoCancel
+      ) {
 
         addVideoCancel.textContent =
           "Cancel";
