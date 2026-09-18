@@ -1,0 +1,839 @@
+/* =====================================================================
+   PORNFLIX ADMIN
+   ===================================================================== */
+
+
+/* =====================================================================
+   01. RESET / BASE
+===================================================================== */
+
+* {
+  box-sizing: border-box;
+}
+
+
+html {
+  min-height: 100%;
+}
+
+
+body {
+  min-height: 100vh;
+  margin: 0;
+
+  background: #0b0c0e;
+  color: #fff;
+
+  font-family:
+    Arial,
+    Helvetica,
+    sans-serif;
+}
+
+
+button,
+input,
+select {
+  font: inherit;
+}
+
+
+button,
+a {
+  -webkit-tap-highlight-color: transparent;
+}
+
+
+/* =====================================================================
+   02. HEADER
+===================================================================== */
+
+.admin-header {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 30px;
+
+  min-height: 100px;
+  padding: 16px 40px;
+
+  background: rgba(17, 17, 17, 0.96);
+  border-bottom: 1px solid #282828;
+
+  backdrop-filter: blur(10px);
+}
+
+
+.admin-header-brand {
+  display: flex;
+  align-items: center;
+  gap: 22px;
+
+  min-width: 0;
+}
+
+
+.admin-logo-link {
+  display: flex;
+  align-items: center;
+
+  flex: 0 0 auto;
+}
+
+
+.admin-logo {
+  display: block;
+
+  width: auto;
+  height: 62px;
+  max-width: 220px;
+
+  object-fit: contain;
+}
+
+
+.admin-header-title {
+  min-width: 0;
+}
+
+
+.admin-header-kicker,
+.admin-section-kicker {
+  color: #777;
+
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+}
+
+
+.admin-header-title h1 {
+  margin: 4px 0 0;
+
+  font-size: 25px;
+  line-height: 1.1;
+}
+
+
+.admin-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+
+  flex: 0 0 auto;
+}
+
+
+/* =====================================================================
+   03. BUTTONS
+===================================================================== */
+
+.admin-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+
+  min-height: 38px;
+  padding: 8px 13px;
+
+  border: 1px solid #333;
+  border-radius: 7px;
+
+  background: #1c1c1c;
+  color: #ddd;
+
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+
+  cursor: pointer;
+}
+
+
+.admin-button:hover {
+  background: #292929;
+  color: #fff;
+}
+
+
+.admin-button svg {
+  width: 16px;
+  height: 16px;
+}
+
+
+.admin-button:disabled {
+  opacity: 0.5;
+  cursor: wait;
+}
+
+
+.admin-button.loading svg {
+  animation: admin-spin 0.9s linear infinite;
+}
+
+
+@keyframes admin-spin {
+
+  to {
+    transform: rotate(360deg);
+  }
+
+}
+
+
+/* =====================================================================
+   04. MAIN PAGE
+===================================================================== */
+
+.admin-main {
+  width: min(1500px, calc(100% - 64px));
+
+  margin: 0 auto;
+  padding: 34px 0 70px;
+}
+
+
+/* =====================================================================
+   05. PAGE STATUS
+===================================================================== */
+
+.admin-status {
+  min-height: 42px;
+  margin-bottom: 24px;
+  padding: 12px 15px;
+
+  border: 1px solid #292929;
+  border-radius: 8px;
+
+  background: #141414;
+  color: #aaa;
+
+  font-size: 13px;
+}
+
+
+.admin-status-loading {
+  color: #aaa;
+}
+
+
+.admin-status-success {
+  border-color: rgba(76, 175, 80, 0.3);
+  color: #81c784;
+}
+
+
+.admin-status-error {
+  border-color: rgba(229, 9, 20, 0.45);
+  color: #ef777d;
+}
+
+
+/* =====================================================================
+   06. SECTIONS
+===================================================================== */
+
+.admin-section {
+  margin-bottom: 42px;
+}
+
+
+.admin-section-heading {
+  margin-bottom: 17px;
+}
+
+
+.admin-section-heading-row {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+
+.admin-section h2 {
+  margin: 5px 0 0;
+
+  font-size: 22px;
+}
+
+
+.admin-last-refreshed {
+  color: #777;
+
+  font-size: 12px;
+}
+
+
+/* =====================================================================
+   07. LIBRARY STAT CARDS
+===================================================================== */
+
+.admin-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+}
+
+
+.admin-stat-card {
+  display: flex;
+  align-items: center;
+  gap: 17px;
+
+  min-height: 112px;
+  padding: 20px;
+
+  background: #141414;
+
+  border: 1px solid #292929;
+  border-radius: 10px;
+}
+
+
+.admin-stat-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  width: 46px;
+  height: 46px;
+
+  flex: 0 0 46px;
+
+  border-radius: 9px;
+
+  background: rgba(229, 9, 20, 0.1);
+  color: #e50914;
+}
+
+
+.admin-stat-icon svg {
+  width: 22px;
+  height: 22px;
+}
+
+
+.admin-stat-label {
+  margin-bottom: 4px;
+
+  color: #888;
+
+  font-size: 12px;
+  font-weight: 600;
+}
+
+
+.admin-stat-value {
+  color: #fff;
+
+  font-size: 29px;
+  font-weight: 700;
+}
+
+
+/* =====================================================================
+   08. HEALTH CARDS
+===================================================================== */
+
+.admin-health-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+
+.admin-health-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+
+  min-height: 84px;
+  padding: 16px 18px;
+
+  background: #141414;
+
+  border: 1px solid #292929;
+  border-radius: 9px;
+}
+
+
+.admin-health-symbol {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  width: 32px;
+  height: 32px;
+
+  flex: 0 0 32px;
+
+  border-radius: 50%;
+
+  font-size: 17px;
+  font-weight: 700;
+}
+
+
+.admin-health-good {
+  background: rgba(76, 175, 80, 0.12);
+  color: #66bb6a;
+}
+
+
+.admin-health-warning {
+  background: rgba(240, 173, 78, 0.12);
+  color: #f0ad4e;
+}
+
+
+.admin-health-bad {
+  background: rgba(229, 9, 20, 0.12);
+  color: #ef5350;
+}
+
+
+.admin-health-muted {
+  background: #222;
+  color: #777;
+}
+
+
+.admin-health-label {
+  margin-bottom: 3px;
+
+  color: #999;
+
+  font-size: 12px;
+}
+
+
+.admin-health-value {
+  font-size: 22px;
+  font-weight: 700;
+}
+
+
+/* =====================================================================
+   09. INGESTION TABLE
+===================================================================== */
+
+.admin-table-wrap {
+  width: 100%;
+
+  overflow-x: auto;
+
+  background: #141414;
+
+  border: 1px solid #292929;
+  border-radius: 10px;
+}
+
+
+.admin-table {
+  width: 100%;
+  min-width: 1050px;
+
+  border-collapse: collapse;
+}
+
+
+.admin-table th {
+  padding: 13px 15px;
+
+  border-bottom: 1px solid #303030;
+
+  background: #181818;
+  color: #777;
+
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-align: left;
+  text-transform: uppercase;
+}
+
+
+.admin-table td {
+  padding: 14px 15px;
+
+  border-bottom: 1px solid #242424;
+
+  color: #ccc;
+
+  font-size: 13px;
+
+  vertical-align: middle;
+}
+
+
+.admin-ingestion-row:last-child td {
+  border-bottom: 0;
+}
+
+
+.admin-ingestion-row:hover td {
+  background: #181818;
+}
+
+
+/* =====================================================================
+   10. FILM / DATE CELLS
+===================================================================== */
+
+.admin-film-cell {
+  min-width: 260px;
+}
+
+
+.admin-film-cell strong {
+  display: block;
+
+  margin-bottom: 4px;
+
+  color: #fff;
+
+  font-size: 13px;
+}
+
+
+.admin-film-cell span {
+  display: block;
+
+  max-width: 360px;
+
+  overflow: hidden;
+
+  color: #777;
+
+  font-size: 11px;
+
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+
+.admin-date-cell {
+  white-space: nowrap;
+}
+
+
+/* =====================================================================
+   11. STATUS BADGES
+===================================================================== */
+
+.admin-status-badge {
+  display: inline-flex;
+  align-items: center;
+
+  padding: 5px 8px;
+
+  border-radius: 999px;
+
+  font-size: 11px;
+  font-weight: 700;
+
+  white-space: nowrap;
+}
+
+
+.admin-status-good {
+  background: rgba(76, 175, 80, 0.12);
+  color: #66bb6a;
+}
+
+
+.admin-status-warning {
+  background: rgba(240, 173, 78, 0.12);
+  color: #f0ad4e;
+}
+
+
+.admin-status-bad {
+  background: rgba(229, 9, 20, 0.12);
+  color: #ef5350;
+}
+
+
+.admin-status-muted {
+  background: #242424;
+  color: #888;
+}
+
+
+.admin-status-active {
+  background: rgba(33, 150, 243, 0.12);
+  color: #64b5f6;
+}
+
+
+/* =====================================================================
+   12. VIDEO / CATALOGUE / THUMBNAIL STATES
+===================================================================== */
+
+.admin-component-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+
+  white-space: nowrap;
+}
+
+
+.admin-component-symbol {
+  font-weight: 700;
+}
+
+
+.admin-component-good {
+  color: #66bb6a;
+}
+
+
+.admin-component-bad {
+  color: #ef5350;
+}
+
+
+.admin-component-warning {
+  color: #f0ad4e;
+}
+
+
+.admin-component-active {
+  color: #64b5f6;
+}
+
+
+.admin-component-muted {
+  color: #666;
+}
+
+
+/* =====================================================================
+   13. EXPAND BUTTON
+===================================================================== */
+
+.admin-expand-cell {
+  width: 50px;
+  text-align: right;
+}
+
+
+.admin-expand-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+
+  width: 30px;
+  height: 30px;
+  padding: 0;
+
+  border: 0;
+  border-radius: 6px;
+
+  background: transparent;
+  color: #777;
+
+  cursor: pointer;
+}
+
+
+.admin-expand-button:hover {
+  background: #282828;
+  color: #fff;
+}
+
+
+.admin-expand-button svg {
+  width: 17px;
+  height: 17px;
+
+  transition: transform 0.15s ease;
+}
+
+
+.admin-expand-button.open svg {
+  transform: rotate(180deg);
+}
+
+
+/* =====================================================================
+   14. EXPANDED INGESTION DETAILS
+===================================================================== */
+
+.admin-ingestion-detail-row[hidden] {
+  display: none;
+}
+
+
+.admin-ingestion-detail-row td {
+  padding: 0;
+
+  background: #101010;
+
+  border-bottom: 1px solid #303030;
+}
+
+
+.admin-ingestion-details {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0;
+
+  padding: 18px 20px;
+}
+
+
+.admin-detail-item {
+  min-width: 0;
+  padding: 10px 14px;
+
+  border-bottom: 1px solid #202020;
+}
+
+
+.admin-detail-label {
+  margin-bottom: 5px;
+
+  color: #666;
+
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+
+.admin-detail-value {
+  overflow-wrap: anywhere;
+
+  color: #bbb;
+
+  font-family:
+    ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    Monaco,
+    Consolas,
+    monospace;
+
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+
+/* =====================================================================
+   15. TABLE STATES
+===================================================================== */
+
+.admin-table-loading,
+.admin-table-empty,
+.admin-table-error {
+  padding: 30px !important;
+
+  color: #777 !important;
+
+  text-align: center;
+}
+
+
+.admin-table-error {
+  color: #ef777d !important;
+}
+
+
+/* =====================================================================
+   16. RESPONSIVE
+===================================================================== */
+
+@media (max-width: 1050px) {
+
+  .admin-stat-grid {
+    grid-template-columns:
+      repeat(2, minmax(0, 1fr));
+  }
+
+
+  .admin-health-grid {
+    grid-template-columns:
+      repeat(2, minmax(0, 1fr));
+  }
+
+
+  .admin-ingestion-details {
+    grid-template-columns:
+      repeat(2, minmax(0, 1fr));
+  }
+
+}
+
+
+@media (max-width: 700px) {
+
+  .admin-header {
+    position: static;
+
+    align-items: flex-start;
+    flex-direction: column;
+
+    padding: 15px 18px;
+  }
+
+
+  .admin-header-brand {
+    gap: 14px;
+  }
+
+
+  .admin-logo {
+    height: 45px;
+    max-width: 160px;
+  }
+
+
+  .admin-header-title h1 {
+    font-size: 20px;
+  }
+
+
+  .admin-header-actions {
+    width: 100%;
+  }
+
+
+  .admin-header-actions .admin-button {
+    flex: 1;
+  }
+
+
+  .admin-main {
+    width: calc(100% - 30px);
+
+    padding-top: 24px;
+  }
+
+
+  .admin-stat-grid,
+  .admin-health-grid {
+    grid-template-columns: 1fr;
+  }
+
+
+  .admin-section-heading-row {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+
+  .admin-ingestion-details {
+    grid-template-columns: 1fr;
+  }
+
+}
