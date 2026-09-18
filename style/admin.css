@@ -1619,6 +1619,121 @@ a {
   font-size: 10px;
 }
 
+/* =========================================================
+   THUMBNAIL REPAIR — MANUAL CANDIDATE SELECTION
+   ========================================================= */
+
+.admin-thumbnail-repair-picker {
+  width: 100%;
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.admin-thumbnail-repair-preview-wrap {
+  display: flex;
+  justify-content: center;
+  width: 100%;
+}
+
+.admin-thumbnail-repair-preview {
+  display: block;
+  width: 100%;
+  max-width: 640px;
+  max-height: 360px;
+  object-fit: contain;
+  border-radius: 8px;
+  background: #000;
+}
+
+.admin-thumbnail-repair-navigation {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  margin-top: 14px;
+}
+
+.admin-thumbnail-picker-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  border: 1px solid #444;
+  border-radius: 6px;
+  background: #202020;
+  color: #eee;
+  cursor: pointer;
+}
+
+.admin-thumbnail-picker-button:hover {
+  background: #292929;
+}
+
+.admin-thumbnail-picker-button svg {
+  width: 15px;
+  height: 15px;
+}
+
+.admin-thumbnail-repair-counter {
+  min-width: 70px;
+  text-align: center;
+  color: #aaa;
+  font-size: 13px;
+}
+
+.admin-thumbnail-repair-candidate-detail {
+  margin-top: 10px;
+  text-align: center;
+  color: #aaa;
+  font-size: 13px;
+}
+
+.admin-thumbnail-repair-confirm-actions {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.admin-thumbnail-upload-selected,
+.admin-thumbnail-cancel-selection {
+  border-radius: 6px;
+  padding: 9px 14px;
+  cursor: pointer;
+}
+
+.admin-thumbnail-upload-selected {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid #555;
+  background: #f0f0f0;
+  color: #111;
+  font-weight: 700;
+}
+
+.admin-thumbnail-upload-selected:hover {
+  background: #fff;
+}
+
+.admin-thumbnail-upload-selected svg {
+  width: 15px;
+  height: 15px;
+}
+
+.admin-thumbnail-cancel-selection {
+  border: 1px solid #444;
+  background: transparent;
+  color: #aaa;
+}
+
+.admin-thumbnail-cancel-selection:hover {
+  color: #fff;
+  border-color: #666;
+}
+
 
 /* =====================================================================
    19. INGESTION TABLE
