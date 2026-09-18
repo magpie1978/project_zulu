@@ -339,7 +339,7 @@ a {
 
 
 /* =====================================================================
-   08. INGESTION HEALTH CARDS
+   08. HEALTH CARDS
 ===================================================================== */
 
 .admin-health-grid {
@@ -943,7 +943,11 @@ a {
   background: #141414;
   color: #fff;
 
+  font: inherit;
   text-align: left;
+
+  appearance: none;
+  -webkit-appearance: none;
 
   transition:
     background 0.15s ease,
@@ -1095,35 +1099,6 @@ a {
   color: #bbb;
 }
 
-.admin-video-health-card {
-  position: relative;
-
-  display: flex;
-  align-items: center;
-  gap: 14px;
-
-  min-width: 0;
-  min-height: 92px;
-  padding: 16px 17px;
-
-  border: 1px solid #292929;
-  border-radius: 9px;
-
-  background: #141414;
-  color: #fff;
-
-  font: inherit;
-  text-align: left;
-
-  appearance: none;
-  -webkit-appearance: none;
-
-  transition:
-    background 0.15s ease,
-    border-color 0.15s ease,
-    opacity 0.15s ease;
-}
-
 
 /* =====================================================================
    13. VIDEO STORAGE HEALTH — RESULTS
@@ -1199,7 +1174,10 @@ a {
 
 
 .admin-video-health-results-body {
+  max-height: 600px;
   padding: 8px 19px 18px;
+
+  overflow-y: auto;
 }
 
 
@@ -1237,6 +1215,9 @@ a {
 
 
 .admin-video-health-result-meta {
+  display: grid;
+  gap: 4px;
+
   color: #888;
 
   font-size: 11px;
@@ -1251,11 +1232,9 @@ a {
 
 .admin-video-health-path,
 .admin-video-health-file-id {
-  margin-top: 7px;
-
   overflow-wrap: anywhere;
 
-  color: #666;
+  color: #777;
 
   font-family:
     ui-monospace,
@@ -1266,7 +1245,6 @@ a {
     monospace;
 
   font-size: 10px;
-  line-height: 1.5;
 }
 
 
@@ -1281,10 +1259,6 @@ a {
 }
 
 
-/*
- * Both informational <article> cards and interactive <button> cards
- * share the same base appearance.
- */
 .admin-thumbnail-card {
   position: relative;
 
@@ -1302,7 +1276,11 @@ a {
   background: #141414;
   color: #fff;
 
+  font: inherit;
   text-align: left;
+
+  appearance: none;
+  -webkit-appearance: none;
 
   transition:
     background 0.15s ease,
@@ -1311,9 +1289,6 @@ a {
 }
 
 
-/*
- * Interactive cards need additional right-hand room for the chevron.
- */
 .admin-thumbnail-card-action {
   padding-right: 42px;
 
@@ -1768,33 +1743,41 @@ a {
 }
 
 
-.admin-status-good {
+.admin-status-badge.complete {
   background: rgba(76, 175, 80, 0.12);
   color: #66bb6a;
 }
 
 
-.admin-status-warning {
+.admin-status-badge.warning {
   background: rgba(240, 173, 78, 0.12);
   color: #f0ad4e;
 }
 
 
-.admin-status-bad {
+.admin-status-badge.failed {
   background: rgba(229, 9, 20, 0.12);
   color: #ef5350;
 }
 
 
-.admin-status-muted {
+.admin-status-badge.cancelled,
+.admin-status-badge.duplicate,
+.admin-status-badge.pending {
   background: #242424;
   color: #888;
 }
 
 
-.admin-status-active {
+.admin-status-badge.active {
   background: rgba(33, 150, 243, 0.12);
   color: #64b5f6;
+}
+
+
+.admin-status-badge.ready {
+  background: rgba(156, 39, 176, 0.12);
+  color: #ce93d8;
 }
 
 
@@ -1816,27 +1799,27 @@ a {
 }
 
 
-.admin-component-good {
+.admin-component-state.good {
   color: #66bb6a;
 }
 
 
-.admin-component-bad {
+.admin-component-state.bad {
   color: #ef5350;
 }
 
 
-.admin-component-warning {
+.admin-component-state.warning {
   color: #f0ad4e;
 }
 
 
-.admin-component-active {
+.admin-component-state.active {
   color: #64b5f6;
 }
 
 
-.admin-component-muted {
+.admin-component-state.muted {
   color: #666;
 }
 
@@ -2045,9 +2028,6 @@ a {
   }
 
 
-  /*
-   * Keep the three summary cards on one line where possible.
-   */
   .admin-video-health-grid-primary {
     grid-template-columns:
       repeat(
@@ -2057,9 +2037,6 @@ a {
   }
 
 
-  /*
-   * Five diagnostic cards are too cramped at this width.
-   */
   .admin-video-health-grid-diagnostics {
     grid-template-columns:
       repeat(
