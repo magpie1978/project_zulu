@@ -1816,6 +1816,99 @@ export function getSelectedThumbnailBlob() {
 }
 
 
+/* =================================================================================================================
+   ADMIN THUMBNAIL CANDIDATE API
+=================================================================================================================== */
+
+/**
+ * Returns information about the thumbnail candidate currently selected.
+ *
+ * The Blob itself remains available through getSelectedThumbnailBlob().
+ */
+export function getSelectedThumbnailCandidate() {
+
+  if (
+    !thumbnailCandidates.length
+  ) {
+    return null;
+  }
+
+
+  const candidate =
+    thumbnailCandidates[
+      selectedThumbnailIndex
+    ];
+
+
+  return {
+    index:
+      selectedThumbnailIndex,
+
+    number:
+      selectedThumbnailIndex + 1,
+
+    count:
+      thumbnailCandidates.length,
+
+    time:
+      candidate.time,
+
+    score:
+      candidate.score,
+
+    faceCount:
+      candidate.faceCount,
+
+    combinedFaceRatio:
+      candidate.combinedFaceRatio,
+
+    blob:
+      candidate.blob
+  };
+}
+
+
+/**
+ * Selects a particular generated candidate.
+ *
+ * This reuses the same selection mechanism used by Add Video, so
+ * selectedThumbnailBlob always stays in sync.
+ */
+export function selectThumbnailCandidate(
+  index
+) {
+
+  showThumbnailCandidate(
+    index
+  );
+
+
+  return getSelectedThumbnailCandidate();
+}
+
+
+/**
+ * Selects the previous generated candidate.
+ */
+export function selectPreviousThumbnailCandidate() {
+
+  return selectThumbnailCandidate(
+    selectedThumbnailIndex - 1
+  );
+}
+
+
+/**
+ * Selects the next generated candidate.
+ */
+export function selectNextThumbnailCandidate() {
+
+  return selectThumbnailCandidate(
+    selectedThumbnailIndex + 1
+  );
+}
+
+
 /* =====================================================================
    11. RESET THUMBNAIL STATE
 ===================================================================== */
