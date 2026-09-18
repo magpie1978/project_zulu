@@ -163,7 +163,8 @@ body {
 
 /* Menu items */
 
-.header-menu-item {
+.header-menu-item,
+a.header-menu-item {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -179,7 +180,7 @@ body {
 
   font-size: 13px;
   text-align: left;
-  text-decoration: none;
+  text-decoration: none !important;
 
   cursor: pointer;
 }
