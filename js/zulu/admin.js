@@ -12,7 +12,8 @@ import {
 
    Powers the PornFlix Library Health / Admin dashboard.
 
-   Version 1 deliberately reads only from Supabase.
+   All protected dashboard data is retrieved through the
+   zulu-admin-dashboard Edge Function.
 
    It provides:
 
@@ -21,8 +22,21 @@ import {
        • total video views
        • ingestion count
        • ingestion health summary
+       • Catalogue Integrity diagnostics
+       • metadata coverage diagnostics
        • recent ingestion history
        • expandable ingestion diagnostics
+
+   Catalogue Integrity currently checks:
+
+       • duplicate URLs
+       • duplicate fingerprints
+       • videos without actors
+       • non-current media URLs
+       • missing filesize
+       • missing duration
+       • missing resolution
+       • missing fingerprint
 
    Backblaze reconciliation is NOT performed here.
 
@@ -32,9 +46,8 @@ import {
    ===================================================================== */
 
 
-
 /* =====================================================================
-   02. DOM REFERENCES
+   01. DOM REFERENCES
 ===================================================================== */
 
 const adminStatus =
@@ -127,8 +140,96 @@ const healthDuplicates =
   );
 
 
+/*
+ * Catalogue Integrity counters.
+ */
+const integrityDuplicateUrls =
+  document.getElementById(
+    "admin-integrity-duplicate-urls"
+  );
+
+
+const integrityDuplicateFingerprints =
+  document.getElementById(
+    "admin-integrity-duplicate-fingerprints"
+  );
+
+
+const integrityNoActors =
+  document.getElementById(
+    "admin-integrity-no-actors"
+  );
+
+
+const integrityOldUrls =
+  document.getElementById(
+    "admin-integrity-old-urls"
+  );
+
+
+const integrityMissingFilesize =
+  document.getElementById(
+    "admin-integrity-missing-filesize"
+  );
+
+
+const integrityMissingDuration =
+  document.getElementById(
+    "admin-integrity-missing-duration"
+  );
+
+
+const integrityMissingResolution =
+  document.getElementById(
+    "admin-integrity-missing-resolution"
+  );
+
+
+const integrityMissingFingerprint =
+  document.getElementById(
+    "admin-integrity-missing-fingerprint"
+  );
+
+
+/*
+ * Catalogue Integrity diagnostic panel.
+ */
+const integrityResults =
+  document.getElementById(
+    "admin-integrity-results"
+  );
+
+
+const integrityResultsTitle =
+  document.getElementById(
+    "admin-integrity-results-title"
+  );
+
+
+const integrityResultsBody =
+  document.getElementById(
+    "admin-integrity-results-body"
+  );
+
+
+const integrityResultsClose =
+  document.getElementById(
+    "admin-integrity-results-close"
+  );
+
+
+/*
+ * Stores the latest integrity snapshot returned by the Edge Function.
+ *
+ * This allows cards to display detailed results without making another
+ * database request.
+ */
+let currentIntegrityData =
+  null;
+
+
 /* =====================================================================
-   03. INITIALISATION
+   02. INITIALISATION
 ===================================================================== */
 
 document.addEventListener(
@@ -148,9 +249,45 @@ async function initialiseAdmin() {
   window.lucide?.createIcons();
 
 
+  /*
+   * Refresh the complete dashboard snapshot.
+   */
   adminRefresh?.addEventListener(
     "click",
     refreshAdmin
+  );
+
+
+  /*
+   * Catalogue Integrity cards are interactive.
+   *
+   * Clicking one displays the detailed records returned by the
+   * zulu_catalogue_integrity() RPC.
+   */
+  document
+    .querySelectorAll(
+      ".admin-integrity-card"
+    )
+    .forEach(
+      card => {
+
+        card.addEventListener(
+          "click",
+          () =>
+            openIntegrityResult(
+              card.dataset.integrityKey
+            )
+        );
+      }
+    );
+
+
+  /*
+   * Close the Catalogue Integrity diagnostic panel.
+   */
+  integrityResultsClose?.addEventListener(
+    "click",
+    closeIntegrityResults
   );
 
 
@@ -159,7 +296,7 @@ async function initialiseAdmin() {
 
 
 /* =====================================================================
-   04. AUTHENTICATION
+   03. AUTHENTICATION
 ===================================================================== */
 
 /**
@@ -169,9 +306,11 @@ async function initialiseAdmin() {
  *
  * IMPORTANT:
  *
- * This is NOT sufficient protection for future destructive admin
- * operations. Edge Functions performing privileged actions must
- * independently validate the user.
+ * This is NOT the security boundary for the dashboard.
+ *
+ * The zulu-admin-dashboard Edge Function independently verifies the JWT
+ * and, when configured, checks ZULU_ADMIN_EMAIL before using its
+ * service-role client.
  */
 async function requireAuthenticatedUser() {
 
@@ -190,6 +329,7 @@ async function requireAuthenticatedUser() {
     window.location.href =
       "login.html";
 
+
     return null;
   }
 
@@ -199,18 +339,14 @@ async function requireAuthenticatedUser() {
 
 
 /* =====================================================================
-   05. DASHBOARD DATA
+   04. DASHBOARD DATA
 ===================================================================== */
 
 /**
  * Reloads the complete Admin dashboard.
  *
- * All dashboard data is now retrieved through the protected
+ * All protected dashboard data is retrieved through the
  * zulu-admin-dashboard Edge Function.
- *
- * The browser does NOT query zulu_ingestions directly. This allows that
- * table to remain protected by RLS while the Edge Function performs the
- * privileged read using the Supabase service-role key.
  */
 async function refreshAdmin() {
 
@@ -247,8 +383,7 @@ async function refreshAdmin() {
 
 
     /*
-     * Retrieve the complete dashboard snapshot from the protected
-     * Edge Function.
+     * Retrieve the complete dashboard snapshot.
      */
     const dashboard =
       await loadAdminDashboard();
@@ -263,8 +398,7 @@ async function refreshAdmin() {
 
 
     /*
-     * Health totals are calculated server-side from the complete
-     * ingestion journal, rather than from the limited recent rows.
+     * Render ingestion-journal health.
      */
     renderIngestionHealth(
       dashboard.health
@@ -272,8 +406,17 @@ async function refreshAdmin() {
 
 
     /*
-     * The Edge Function already limits this collection to the most
-     * recent ingestion records.
+     * Render database-level catalogue diagnostics.
+     */
+    renderCatalogueIntegrity(
+      dashboard.integrity
+    );
+
+
+    /*
+     * Render recent ingestion history.
+     *
+     * The Edge Function already limits this collection.
      */
     renderRecentIngestions(
       dashboard.recent_ingestions || []
@@ -340,6 +483,7 @@ async function refreshAdmin() {
       error
     );
 
+
   } finally {
 
     setRefreshState(
@@ -353,10 +497,9 @@ async function refreshAdmin() {
  * Retrieves the complete Admin dashboard snapshot from the protected
  * zulu-admin-dashboard Edge Function.
  *
- * Supabase automatically supplies the current authenticated session to
- * the function invocation. The Edge Function then independently verifies
- * the JWT and administrator identity before using its service-role client
- * to read protected data.
+ * Supabase supplies the authenticated session to the function invocation.
+ * The Edge Function independently verifies that JWT before accessing
+ * protected data with its service-role client.
  */
 async function loadAdminDashboard() {
 
@@ -406,9 +549,14 @@ async function loadAdminDashboard() {
   }
 
 
+  /*
+   * Catalogue Integrity is now a required part of the dashboard
+   * response.
+   */
   if (
     !data.library ||
-    !data.health
+    !data.health ||
+    !data.integrity
   ) {
 
     throw new Error(
@@ -421,92 +569,8 @@ async function loadAdminDashboard() {
 }
 
 
-
 /* =====================================================================
-   09. INGESTION DATA
-===================================================================== */
-
-/**
- * Loads ingestion records.
- *
- * Version 1 loads all ingestion rows because the health counters need
- * the complete status distribution.
- *
- * The ingestion table will initially be small enough that this is
- * perfectly reasonable.
- *
- * If the journal grows substantially, the summary calculations can
- * later move into a Supabase SQL view/RPC.
- */
-async function loadIngestions() {
-
-  const {
-    data,
-    error,
-    count
-  } =
-    await supabase
-      .from(
-        "zulu_ingestions"
-      )
-      .select(
-        `
-          id,
-          original_filename,
-          canonical_filename,
-          film,
-          filesize_bytes,
-          fingerprint,
-          status,
-          failed_stage,
-          error_message,
-          backblaze_file_id,
-          public_url,
-          video_uploaded_at,
-          video_uid,
-          catalogued_at,
-          thumbnail_status,
-          thumbnail_uploaded_at,
-          created_at,
-          updated_at,
-          completed_at
-        `,
-        {
-          count:
-            "exact"
-        }
-      )
-      .order(
-        "created_at",
-        {
-          ascending:
-            false
-        }
-      );
-
-
-  if (
-    error
-  ) {
-
-    throw new Error(
-      `Could not load ingestions: ${error.message}`
-    );
-  }
-
-
-  return {
-    count:
-      count || 0,
-
-    rows:
-      data || []
-  };
-}
-
-
-/* =====================================================================
-   06. LIBRARY SUMMARY
+   05. LIBRARY SUMMARY
 ===================================================================== */
 
 /**
@@ -546,15 +610,15 @@ function renderLibrarySummary({
 
 
 /* =====================================================================
-   07. INGESTION HEALTH
+   06. INGESTION HEALTH
 ===================================================================== */
 
 /**
  * Renders ingestion-health totals calculated by the protected
  * zulu-admin-dashboard Edge Function.
  *
- * These figures cover the complete ingestion journal and are therefore
- * independent of the recent-ingestions table limit.
+ * These figures cover the complete ingestion journal and are independent
+ * of the recent-ingestions table limit.
  */
 function renderIngestionHealth(
   health
@@ -596,8 +660,676 @@ function renderIngestionHealth(
   );
 }
 
+
 /* =====================================================================
-   12. RECENT INGESTIONS TABLE
+   07. CATALOGUE INTEGRITY
+===================================================================== */
+
+/**
+ * Stores and renders the latest Catalogue Integrity snapshot.
+ *
+ * Each result contains:
+ *
+ *     {
+ *       count: number,
+ *       rows: [...]
+ *     }
+ *
+ * A zero count is displayed as healthy.
+ *
+ * Non-zero core-integrity problems are displayed as problems.
+ * Non-zero metadata-coverage results are displayed as warnings.
+ */
+function renderCatalogueIntegrity(
+  integrity
+) {
+
+  currentIntegrityData =
+    integrity || {};
+
+
+  const mappings =
+    [
+      {
+        key:
+          "duplicate_urls",
+
+        element:
+          integrityDuplicateUrls,
+
+        severity:
+          "problem"
+      },
+
+      {
+        key:
+          "duplicate_fingerprints",
+
+        element:
+          integrityDuplicateFingerprints,
+
+        severity:
+          "problem"
+      },
+
+      {
+        key:
+          "videos_without_actors",
+
+        element:
+          integrityNoActors,
+
+        severity:
+          "problem"
+      },
+
+      {
+        key:
+          "old_media_urls",
+
+        element:
+          integrityOldUrls,
+
+        severity:
+          "problem"
+      },
+
+      {
+        key:
+          "missing_filesize",
+
+        element:
+          integrityMissingFilesize,
+
+        severity:
+          "warning"
+      },
+
+      {
+        key:
+          "missing_duration",
+
+        element:
+          integrityMissingDuration,
+
+        severity:
+          "warning"
+      },
+
+      {
+        key:
+          "missing_resolution",
+
+        element:
+          integrityMissingResolution,
+
+        severity:
+          "warning"
+      },
+
+      {
+        key:
+          "missing_fingerprint",
+
+        element:
+          integrityMissingFingerprint,
+
+        severity:
+          "warning"
+      }
+    ];
+
+
+  for (
+    const mapping of mappings
+  ) {
+
+    const result =
+      integrity?.[
+        mapping.key
+      ] || {
+        count:
+          0,
+
+        rows:
+          []
+      };
+
+
+    setNumber(
+      mapping.element,
+      result.count
+    );
+
+
+    const card =
+      document.querySelector(
+        `[data-integrity-key="${mapping.key}"]`
+      );
+
+
+    if (
+      !card
+    ) {
+
+      continue;
+    }
+
+
+    /*
+     * Remove any previous health state before applying the current
+     * snapshot.
+     */
+    card.classList.remove(
+      "is-healthy",
+      "is-warning",
+      "is-problem"
+    );
+
+
+    if (
+      Number(
+        result.count || 0
+      ) === 0
+    ) {
+
+      card.classList.add(
+        "is-healthy"
+      );
+
+
+    } else {
+
+      card.classList.add(
+        mapping.severity ===
+          "warning"
+          ? "is-warning"
+          : "is-problem"
+      );
+    }
+  }
+
+
+  /*
+   * Refreshing the dashboard invalidates any previously opened result
+   * panel because the underlying diagnostic snapshot may have changed.
+   */
+  closeIntegrityResults();
+
+
+  /*
+   * Some integrity cards contain dynamically-processed Lucide icons.
+   */
+  window.lucide?.createIcons();
+}
+
+
+/* =====================================================================
+   08. CATALOGUE INTEGRITY INTERACTION
+===================================================================== */
+
+/**
+ * Opens the detailed result belonging to one Catalogue Integrity card.
+ */
+function openIntegrityResult(
+  key
+) {
+
+  if (
+    !key ||
+    !currentIntegrityData
+  ) {
+
+    return;
+  }
+
+
+  const result =
+    currentIntegrityData[
+      key
+    ];
+
+
+  if (
+    !result
+  ) {
+
+    return;
+  }
+
+
+  /*
+   * Highlight only the currently selected card.
+   */
+  document
+    .querySelectorAll(
+      ".admin-integrity-card"
+    )
+    .forEach(
+      card =>
+        card.classList.toggle(
+          "is-selected",
+          card.dataset.integrityKey ===
+            key
+        )
+    );
+
+
+  if (
+    integrityResultsTitle
+  ) {
+
+    integrityResultsTitle.textContent =
+      getIntegrityTitle(
+        key
+      );
+  }
+
+
+  if (
+    integrityResultsBody
+  ) {
+
+    integrityResultsBody.innerHTML =
+      renderIntegrityRows(
+        key,
+        result.rows || []
+      );
+  }
+
+
+  if (
+    integrityResults
+  ) {
+
+    integrityResults.hidden =
+      false;
+  }
+
+
+  window.lucide?.createIcons();
+}
+
+
+/**
+ * Closes the Catalogue Integrity diagnostic panel and clears the selected
+ * card state.
+ */
+function closeIntegrityResults() {
+
+  if (
+    integrityResults
+  ) {
+
+    integrityResults.hidden =
+      true;
+  }
+
+
+  document
+    .querySelectorAll(
+      ".admin-integrity-card"
+    )
+    .forEach(
+      card =>
+        card.classList.remove(
+          "is-selected"
+        )
+    );
+}
+
+
+/**
+ * Returns the human-readable title for an integrity check.
+ */
+function getIntegrityTitle(
+  key
+) {
+
+  const titles =
+  {
+    duplicate_urls:
+      "Duplicate URLs",
+
+    duplicate_fingerprints:
+      "Duplicate Files",
+
+    videos_without_actors:
+      "Videos Without Actors",
+
+    old_media_urls:
+      "Non-current URLs",
+
+    missing_filesize:
+      "Missing Filesize",
+
+    missing_duration:
+      "Missing Duration",
+
+    missing_resolution:
+      "Missing Resolution",
+
+    missing_fingerprint:
+      "Missing Fingerprint"
+  };
+
+
+  return titles[
+    key
+  ] || "Catalogue Integrity";
+}
+
+
+/* =====================================================================
+   09. CATALOGUE INTEGRITY RESULT RENDERING
+===================================================================== */
+
+/**
+ * Converts an integrity result collection into diagnostic HTML.
+ *
+ * Duplicate fingerprints and duplicate URLs contain grouped catalogue
+ * records, while the remaining checks contain individual video rows.
+ */
+function renderIntegrityRows(
+  key,
+  rows
+) {
+
+  if (
+    !Array.isArray(
+      rows
+    ) ||
+    !rows.length
+  ) {
+
+    return `
+      <div class="admin-integrity-empty">
+        ✓ No issues found.
+      </div>
+    `;
+  }
+
+
+  if (
+    key ===
+      "duplicate_fingerprints"
+  ) {
+
+    return rows
+      .map(
+        renderDuplicateFingerprint
+      )
+      .join(
+        ""
+      );
+  }
+
+
+  if (
+    key ===
+      "duplicate_urls"
+  ) {
+
+    return rows
+      .map(
+        renderDuplicateUrl
+      )
+      .join(
+        ""
+      );
+  }
+
+
+  return rows
+    .map(
+      renderIntegrityVideo
+    )
+    .join(
+      ""
+    );
+}
+
+
+/**
+ * Renders one group of catalogue records sharing the same fingerprint.
+ */
+function renderDuplicateFingerprint(
+  item
+) {
+
+  const uids =
+    Array.isArray(
+      item.uids
+    )
+      ? item.uids
+      : [];
+
+
+  const films =
+    Array.isArray(
+      item.films
+    )
+      ? item.films
+      : [];
+
+
+  const videos =
+    uids
+      .map(
+        (
+          uid,
+          index
+        ) =>
+          `
+            <div class="admin-integrity-video">
+
+              <span class="admin-integrity-video-uid">
+                UID ${escapeHtml(uid)}
+              </span>
+
+              <span class="admin-integrity-video-film">
+                ${escapeHtml(
+                  films[index] ||
+                  "Untitled"
+                )}
+              </span>
+
+            </div>
+          `
+      )
+      .join(
+        ""
+      );
+
+
+  return `
+    <div class="admin-integrity-result">
+
+      <div class="admin-integrity-result-title">
+        ${escapeHtml(
+          item.occurrences ||
+          uids.length
+        )} catalogue entries share this file
+      </div>
+
+      <div class="admin-integrity-video-list">
+        ${videos}
+      </div>
+
+      <div class="admin-integrity-fingerprint">
+        ${escapeHtml(
+          item.fingerprint ||
+          ""
+        )}
+      </div>
+
+    </div>
+  `;
+}
+
+
+/**
+ * Renders one group of catalogue records sharing the same media URL.
+ */
+function renderDuplicateUrl(
+  item
+) {
+
+  const uids =
+    Array.isArray(
+      item.uids
+    )
+      ? item.uids
+      : [];
+
+
+  const films =
+    Array.isArray(
+      item.films
+    )
+      ? item.films
+      : [];
+
+
+  const videos =
+    uids
+      .map(
+        (
+          uid,
+          index
+        ) =>
+          `
+            <div class="admin-integrity-video">
+
+              <span class="admin-integrity-video-uid">
+                UID ${escapeHtml(uid)}
+              </span>
+
+              <span class="admin-integrity-video-film">
+                ${escapeHtml(
+                  films[index] ||
+                  "Untitled"
+                )}
+              </span>
+
+            </div>
+          `
+      )
+      .join(
+        ""
+      );
+
+
+  return `
+    <div class="admin-integrity-result">
+
+      <div class="admin-integrity-result-title">
+        ${escapeHtml(
+          item.occurrences ||
+          uids.length
+        )} catalogue entries share this URL
+      </div>
+
+      <div class="admin-integrity-video-list">
+        ${videos}
+      </div>
+
+      <div class="admin-integrity-fingerprint">
+        ${escapeHtml(
+          item.url ||
+          ""
+        )}
+      </div>
+
+    </div>
+  `;
+}
+
+
+/**
+ * Renders a normal single-video integrity problem.
+ *
+ * This renderer is used by:
+ *
+ *     videos_without_actors
+ *     old_media_urls
+ *     missing_filesize
+ *     missing_duration
+ *     missing_resolution
+ *     missing_fingerprint
+ */
+function renderIntegrityVideo(
+  item
+) {
+
+  const resolution =
+    item.width ||
+    item.height
+      ? `${
+          item.width ?? "?"
+        } × ${
+          item.height ?? "?"
+        }`
+      : null;
+
+
+  return `
+    <div class="admin-integrity-result">
+
+      <div class="admin-integrity-result-title">
+        ${escapeHtml(
+          item.film ||
+          "Untitled"
+        )}
+      </div>
+
+      <div class="admin-integrity-result-meta">
+
+        <strong>
+          UID:
+        </strong>
+
+        ${escapeHtml(
+          item.uid ?? "—"
+        )}
+
+        ${
+          resolution
+            ? `
+                &nbsp;&nbsp;
+
+                <strong>
+                  Resolution:
+                </strong>
+
+                ${escapeHtml(
+                  resolution
+                )}
+              `
+            : ""
+        }
+
+      </div>
+
+      ${
+        item.url
+          ? `
+              <div class="admin-integrity-fingerprint">
+                ${escapeHtml(
+                  item.url
+                )}
+              </div>
+            `
+          : ""
+      }
+
+    </div>
+  `;
+}
+
+
+/* =====================================================================
+   10. RECENT INGESTIONS TABLE
 ===================================================================== */
 
 /**
@@ -618,11 +1350,14 @@ function renderRecentIngestions(
   adminIngestionsBody.innerHTML =
     "";
 
-  
+
   const recentRows =
-    Array.isArray(rows)
+    Array.isArray(
+      rows
+    )
       ? rows
       : [];
+
 
   if (
     !recentRows.length
@@ -631,12 +1366,14 @@ function renderRecentIngestions(
     adminIngestionsBody.innerHTML =
       `
         <tr>
+
           <td
             colspan="7"
             class="admin-table-empty"
           >
             No ingestion records yet.
           </td>
+
         </tr>
       `;
 
@@ -670,6 +1407,12 @@ function renderRecentIngestions(
       detailRow
     );
   }
+
+
+  /*
+   * Ingestion rows contain dynamically-created Lucide chevrons.
+   */
+  window.lucide?.createIcons();
 }
 
 
@@ -935,12 +1678,12 @@ function createIngestionDetailRow(
 
 
 /* =====================================================================
-   13. EXPAND / COLLAPSE
+   11. INGESTION EXPAND / COLLAPSE
 ===================================================================== */
 
 /**
- * Shows or hides the diagnostics row immediately following an
- * ingestion summary row.
+ * Shows or hides the diagnostics row immediately following an ingestion
+ * summary row.
  */
 function toggleIngestionDetails(
   row,
@@ -983,15 +1726,12 @@ function toggleIngestionDetails(
   );
 
 
-  /*
-   * Re-render Lucide so dynamically-created chevrons exist.
-   */
   window.lucide?.createIcons();
 }
 
 
 /* =====================================================================
-   14. INGESTION COMPONENT STATES
+   12. INGESTION COMPONENT STATES
 ===================================================================== */
 
 /**
@@ -1186,7 +1926,7 @@ function getThumbnailState(
 
 
 /* =====================================================================
-   15. STATUS BADGES
+   13. STATUS BADGES
 ===================================================================== */
 
 /**
@@ -1270,7 +2010,9 @@ function formatStatus(
   }
 
 
-  return status
+  return String(
+    status
+  )
     .replaceAll(
       "_",
       " "
@@ -1284,7 +2026,7 @@ function formatStatus(
 
 
 /* =====================================================================
-   16. COMPONENT STATE RENDERING
+   14. COMPONENT STATE RENDERING
 ===================================================================== */
 
 /**
@@ -1324,11 +2066,11 @@ function renderState({
 
 
 /* =====================================================================
-   17. DETAIL RENDERING
+   15. DETAIL RENDERING
 ===================================================================== */
 
 /**
- * Renders one diagnostic key/value pair.
+ * Renders one ingestion diagnostic key/value pair.
  */
 function detailItem(
   label,
@@ -1362,7 +2104,7 @@ function detailItem(
 
 
 /* =====================================================================
-   18. GENERAL UI HELPERS
+   16. GENERAL UI HELPERS
 ===================================================================== */
 
 /**
@@ -1475,12 +2217,12 @@ function renderTableError(
 
 
 /* =====================================================================
-   19. FORMATTERS
+   17. FORMATTERS
 ===================================================================== */
 
 /**
- * Formats a byte count without importing the main site's utility
- * module, keeping the admin dashboard self-contained.
+ * Formats a byte count without importing the main site's utility module,
+ * keeping the Admin dashboard self-contained.
  */
 function formatBytes(
   bytes
@@ -1493,7 +2235,9 @@ function formatBytes(
 
 
   if (
-    !Number.isFinite(value) ||
+    !Number.isFinite(
+      value
+    ) ||
     value <= 0
   ) {
 
@@ -1527,6 +2271,7 @@ function formatBytes(
 
     size /=
       1024;
+
 
     unitIndex +=
       1;
@@ -1623,8 +2368,9 @@ function stripMp4Extension(
 /**
  * Escapes text before inserting it into innerHTML.
  *
- * This matters because film names, filenames and error messages all
- * originate from external/user-controlled data.
+ * Film names, filenames, URLs, fingerprints and error messages can all
+ * originate from external/user-controlled data and therefore must be
+ * escaped before HTML insertion.
  */
 function escapeHtml(
   value
