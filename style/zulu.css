@@ -1,5 +1,5 @@
 /* =====================================================================
-   RESET / BASE
+   01. RESET / BASE
 ===================================================================== */
 
 * {
@@ -8,8 +8,10 @@
 
 html,
 body {
+  height: 100%;
   margin: 0;
-  background: #0B0C0E;
+  overflow: hidden;
+  background: #0b0c0e;
   color: #fff;
 }
 
@@ -18,19 +20,20 @@ body {
 }
 
 
-/* =========================================================
-   COMPACT HEADER
-========================================================= */
+/* =====================================================================
+   02. HEADER
+===================================================================== */
+
+/* Header layout */
 
 .site-header {
-  height: 150px;
-  min-height: 150px;
-
   display: grid;
   grid-template-columns: 400px 1fr 400px;
   align-items: center;
 
   width: 100%;
+  height: 150px;
+  min-height: 150px;
   padding: 0 22px;
 
   background: #111;
@@ -38,15 +41,14 @@ body {
 }
 
 
-/* LOGO */
+/* Logo */
 
 .header-logo {
-  height: 150px;
-
   display: flex;
   align-items: center;
   justify-content: flex-start;
 
+  height: 150px;
   overflow: visible;
 }
 
@@ -60,10 +62,10 @@ body {
   max-height: none;
 
   object-fit: contain;
-  transform: none;
 }
 
-/* SEARCH */
+
+/* Search */
 
 .header-search {
   width: 100%;
@@ -74,9 +76,6 @@ body {
 .header-search input {
   width: 100%;
   height: 32px;
-
-  box-sizing: border-box;
-
   padding: 0 14px;
 
   border: 1px solid #333;
@@ -94,7 +93,7 @@ body {
 }
 
 
-/* RIGHT-HAND MENU */
+/* Header actions */
 
 .header-actions {
   position: relative;
@@ -107,16 +106,15 @@ body {
 }
 
 
-/* THREE-DOT BUTTON */
+/* Three-dot menu button */
 
 .header-menu-button {
-  width: 34px;
-  height: 34px;
-
   display: inline-flex;
   align-items: center;
   justify-content: center;
 
+  width: 34px;
+  height: 34px;
   padding: 0;
 
   border: none;
@@ -139,16 +137,15 @@ body {
 }
 
 
-/* DROP-DOWN */
+/* Dropdown menu */
 
 .header-menu {
   position: absolute;
-
   top: calc(100% + 8px);
   right: 0;
+  z-index: 1000;
 
   width: 180px;
-
   padding: 6px;
 
   background: #1b1b1b;
@@ -157,8 +154,6 @@ body {
   border-radius: 8px;
 
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
-
-  z-index: 1000;
 }
 
 .header-menu[hidden] {
@@ -166,15 +161,14 @@ body {
 }
 
 
-/* MENU ITEMS */
+/* Menu items */
 
 .header-menu-item {
-  width: 100%;
-
   display: flex;
   align-items: center;
   gap: 10px;
 
+  width: 100%;
   padding: 9px 10px;
 
   border: none;
@@ -199,19 +193,11 @@ body {
   height: 16px;
 }
 
-
-/* DIVIDER */
-
 .header-menu-divider {
   height: 1px;
-
   margin: 5px 4px;
-
   background: #333;
 }
-
-
-/* LOGOUT */
 
 .header-menu-logout {
   color: #e57373;
@@ -224,111 +210,137 @@ body {
 
 
 /* =====================================================================
-   PAGE LAYOUT
+   03. PAGE LAYOUT / INDEPENDENT SCROLLING
 ===================================================================== */
 
 .page-layout {
   display: flex;
   gap: 32px;
-  padding: 24px 50px 36px;
-}
 
+  height: calc(100vh - 150px);
+  min-height: 0;
+
+  padding: 24px 50px 36px;
+
+  overflow: hidden;
+}
 
 .main-content {
   flex: 1;
+
   min-width: 0;
+  min-height: 0;
+  height: 100%;
+
   padding-right: 8px;
+
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
 
-
 /* =====================================================================
-   ACTOR SIDEBAR
+   04. ACTOR SIDEBAR
 ===================================================================== */
 
 .actor-sidebar {
   width: 240px;
+  height: 100%;
+  min-height: 0;
+
   flex-shrink: 0;
+  align-self: stretch;
+
+  padding: 18px;
+
+  overflow-x: hidden;
+  overflow-y: auto;
+
   background: #111;
   border-radius: 14px;
-  padding: 18px;
 }
-
 
 .actor-sidebar h2 {
   margin: 0 0 14px;
   font-size: 18px;
 }
 
-
-#actor-sort {
-  width: 100%;
-  margin-bottom: 14px;
-}
-
-
 .actor-link {
   display: block;
-  padding: 8px 12px;
-  color: #ddd;
-  text-decoration: none;
-  font-size: 14px;
-  border-radius: 8px;
-  transition: background-color 0.2s ease, color 0.2s ease;
-}
 
+  padding: 8px 12px;
+
+  color: #ddd;
+
+  font-size: 14px;
+  text-decoration: none;
+
+  border-radius: 8px;
+
+  transition:
+    background-color 0.2s ease,
+    color 0.2s ease;
+}
 
 .actor-link:hover {
-  color: #fff;
   background-color: #c1121f;
+  color: #fff;
   text-decoration: none;
 }
-
 
 .actor-count {
   margin-left: 8px;
+
   color: #999;
   font-size: 0.9em;
 }
-
 
 .actor-link.active {
   background-color: #e50914;
   color: #fff;
 }
 
-
 .actor-link.active:hover {
   text-decoration: none;
 }
-
 
 .actor-link.active .actor-count {
   color: #fff;
 }
 
+
 /* =====================================================================
-   CONTROLS
+   05. TOOLBAR / SORT CONTROLS
 ===================================================================== */
 
 #actor-sort,
 #video-sort {
   padding: 8px;
+
   border: 0;
   border-radius: 8px;
+
   background: #222;
   color: #fff;
 }
 
+#actor-sort {
+  width: 100%;
+  margin-bottom: 14px;
+}
+
+#video-sort {
+  min-width: 170px;
+}
 
 .video-toolbar {
   display: flex;
-  justify-content: flex-end;
   align-items: center;
+  justify-content: flex-end;
   gap: 10px;
+
   margin-bottom: 18px;
 }
-
 
 .video-toolbar label {
   color: #bbb;
@@ -336,20 +348,13 @@ body {
 }
 
 
-#video-sort {
-  min-width: 170px;
-}
-
-
-
 /* =====================================================================
-   VIDEO GRID
+   06. VIDEO GRID
 ===================================================================== */
 
 #video-container {
   width: 100%;
 }
-
 
 .video-grid {
   display: grid;
@@ -358,29 +363,191 @@ body {
 }
 
 
+/* Video card */
+
 .video-card {
   overflow: hidden;
-  cursor: pointer;
+
   background: #111;
   border-radius: 10px;
+
+  cursor: pointer;
+
   transition:
     transform 0.2s ease,
     background 0.2s ease;
 }
 
-
 .video-card:hover {
+  z-index: 2;
+
   transform: scale(1.04);
   background: #181818;
-  z-index: 2;
 }
+
+
+/* Thumbnail */
+
+.thumb-wrap {
+  position: relative;
+
+  width: 100%;
+  aspect-ratio: 16 / 9;
+
+  background: #1b1b1b;
+}
+
+.video-thumbnail {
+  display: block;
+
+  width: 100%;
+  height: 100%;
+
+  object-fit: cover;
+}
+
+
+/* Play overlay */
+
+.play-icon {
+  position: absolute;
+  inset: 0;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  background: rgba(0, 0, 0, 0.45);
+
+  opacity: 0;
+
+  transition: opacity 0.2s ease;
+}
+
+.video-card:hover .play-icon {
+  opacity: 1;
+}
+
+.play-icon svg {
+  width: 52px;
+  height: 52px;
+}
+
+
+/* Video information */
+
+.video-info {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+
+  min-height: 0;
+  padding: 8px 10px 12px;
+}
+
+.video-info h3 {
+  display: -webkit-box;
+  overflow: hidden;
+
+  margin: 0;
+
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.25;
+
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+
+/* Metadata */
+
+.video-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+
+  margin-top: 8px;
+}
+
+.video-card-details {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.video-meta-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+
+  min-height: 24px;
+  padding: 4px 9px;
+
+  border-radius: 999px;
+
+  background: #262626;
+  color: #bdbdbd;
+
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+
+  white-space: nowrap;
+}
+
+.video-meta-pill svg {
+  width: 14px;
+  height: 14px;
+}
+
+.video-tech-meta {
+  margin-top: 4px;
+  margin-bottom: 6px;
+
+  font-size: 0.82rem;
+
+  opacity: 0.7;
+}
+
+
+/* Tags */
+
+.video-tags {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 4px;
+}
+
+.tag-pill {
+  padding: 2px 8px;
+
+  border-radius: 999px;
+
+  color: #fff;
+
+  font-size: 11px;
+  font-weight: 600;
+
+  white-space: nowrap;
+}
+
+
+/* Card actions */
 
 .video-card-actions {
   display: flex;
   align-items: center;
   gap: 10px;
+
   margin-left: auto;
 }
+
+
+/* Delete button */
 
 .video-delete-btn {
   display: inline-flex;
@@ -414,8 +581,8 @@ body {
 }
 
 .video-delete-btn:hover {
-  color: #ef5350;
   background: rgba(239, 83, 80, 0.12);
+  color: #ef5350;
 }
 
 .video-delete-btn:disabled {
@@ -423,295 +590,104 @@ body {
   cursor: wait;
 }
 
-.video-card-details {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.video-meta-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-
-  min-height: 24px;
-  padding: 4px 9px;
-
-  border-radius: 999px;
-
-  background: #262626;
-  color: #bdbdbd;
-
-  font-size: 12px;
-  font-weight: 600;
-  line-height: 1;
-
-  white-space: nowrap;
-}
-
-.video-meta-pill svg {
-  width: 14px;
-  height: 14px;
-}
-
 
 /* =====================================================================
-  VIDEO THUMBNAIL
-===================================================================== */
-
-.thumb-wrap {
-  position: relative;
-  width: 100%;
-  aspect-ratio: 16 / 9;
-  background: #1b1b1b;
-}
-
-
-.video-thumbnail {
-  width: 100%;
-  height: 100%;
-  display: block;
-  object-fit: cover;
-}
-
-
-.play-icon {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(0, 0, 0, 0.45);
-  opacity: 0;
-  transition: opacity 0.2s ease;
-}
-
-
-.video-card:hover .play-icon {
-  opacity: 1;
-}
-
-
-.play-icon svg {
-  width: 52px;
-  height: 52px;
-}
-
-
-
-/* =====================================================================
-   VIDEO INFO
-===================================================================== */
-
-.video-info {
-  min-height: 0;
-  padding: 8px 10px 12px;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-}
-
-
-.video-info h3 {
-  margin: 0;
-  font-size: 15px;
-  font-weight: 600;
-  line-height: 1.25;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-
-
-.video-meta {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-
-  gap: 12px;
-  margin-top: 8px;
-}
-
-
-.video-tags {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 4px;
-}
-
-
-.tag-pill {
-  padding: 2px 8px;
-  border-radius: 999px;
-  color: #fff;
-  font-size: 11px;
-  font-weight: 600;
-  white-space: nowrap;
-}
-
-
-.video-tech-meta {
-  margin-top: 4px;
-  margin-bottom: 6px;
-  font-size: 0.82rem;
-  opacity: 0.7;
-}
-
-/* =====================================================================
-   EMPTY / ERROR STATES
+   07. EMPTY / ERROR STATES
 ===================================================================== */
 
 .error,
 .empty {
   grid-column: 1 / -1;
+
   color: #ccc;
+
   font-size: 16px;
 }
 
 
-
 /* =====================================================================
-   MODAL
+   08. VIDEO PLAYER MODAL
 ===================================================================== */
 
 .modal {
-  display: none;
   position: fixed;
   inset: 0;
   z-index: 9999;
+
+  display: none;
   align-items: center;
   justify-content: center;
+
   background: rgba(0, 0, 0, 0.9);
 }
-
 
 .modal.open {
   display: flex;
 }
 
-
 .modal-content {
   position: relative;
+
   width: 85vw;
   max-width: 1100px;
   aspect-ratio: 16 / 9;
 }
 
-
 .modal-content video {
   width: 100%;
   height: 100%;
+
   border: 0;
+
   background: #000;
 }
-
 
 .close-button {
   position: absolute;
   top: -46px;
   right: 0;
+
   border: 0;
+
   background: none;
   color: #fff;
+
   font-size: 40px;
   line-height: 1;
+
   cursor: pointer;
 }
-
 
 body.modal-open {
   overflow: hidden;
 }
 
+
 /* =====================================================================
-   RESPONSIVE
+   09. ADD VIDEO
 ===================================================================== */
 
-@media (max-width: 1200px) {
-  .video-grid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-}
-
-
-/* =====================================================
-   INDEPENDENT SIDEBAR / VIDEO SCROLLING
-===================================================== */
-
-html,
-body {
-  height: 100%;
-  margin: 0;
-  overflow: hidden;
-}
-
-
-/* Area beneath the header */
-
-.page-layout {
-  display: flex;
-
-  height: calc(100vh - 150px);
-  min-height: 0;
-
-  overflow: hidden;
-
-  padding: 24px 50px 36px;
-  gap: 32px;
-}
-
-
-/* Actor column gets its own scrollbar */
-
-.actor-sidebar {
-  width: 240px;
-  height: 100%;
-  min-height: 0;
-
-  flex-shrink: 0;
-
-  overflow-y: auto;
-  overflow-x: hidden;
-
-  position: static;
-  align-self: stretch;
-}
-
-
-/* Video column gets its own scrollbar */
-
-.main-content {
-  flex: 1;
-
-  min-width: 0;
-  min-height: 0;
-  height: 100%;
-
-  overflow-y: auto;
-  overflow-x: hidden;
-
-  padding-right: 8px;
-}
-
-/* =====================================================
-   ADD VIDEO
-   ===================================================== */
+/* Add Video button */
 
 .add-video-btn {
   padding: 10px 18px;
+
   border: 0;
   border-radius: 8px;
-  cursor: pointer;
+
   font-weight: 600;
+
+  cursor: pointer;
 }
+
+
+/* Modal */
 
 .add-video-modal {
   position: fixed;
   inset: 0;
   z-index: 10000;
+
   display: none;
   align-items: center;
   justify-content: center;
@@ -724,19 +700,26 @@ body {
 .add-video-backdrop {
   position: absolute;
   inset: 0;
+
   background: rgba(0, 0, 0, 0.72);
+
   backdrop-filter: blur(4px);
 }
 
 .add-video-dialog {
   position: relative;
   z-index: 1;
+
   width: min(620px, calc(100vw - 32px));
   max-height: calc(100vh - 40px);
-  overflow-y: auto;
+
   padding: 28px;
-  border-radius: 16px;
+
+  overflow-y: auto;
+
   background: #151515;
+  border-radius: 16px;
+
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.55);
 }
 
@@ -748,12 +731,19 @@ body {
   position: absolute;
   top: 12px;
   right: 16px;
+
   border: 0;
+
   background: none;
-  font-size: 30px;
-  cursor: pointer;
   color: inherit;
+
+  font-size: 30px;
+
+  cursor: pointer;
 }
+
+
+/* Form fields */
 
 .add-video-field {
   margin-bottom: 20px;
@@ -761,35 +751,45 @@ body {
 
 .add-video-field label {
   display: block;
+
   margin-bottom: 7px;
+
   font-size: 14px;
   font-weight: 600;
 }
 
 .add-video-field input[type="text"],
 .add-video-field input[type="file"] {
-  box-sizing: border-box;
   width: 100%;
 }
 
 .add-video-field input[type="text"] {
   padding: 11px 12px;
+
   border: 1px solid rgba(255, 255, 255, 0.18);
   border-radius: 8px;
+
   background: rgba(255, 255, 255, 0.06);
   color: inherit;
 }
 
 .add-video-file-info {
   margin-top: 8px;
-  opacity: 0.7;
+
   font-size: 13px;
+
+  opacity: 0.7;
 }
+
+
+/* Actor rows */
 
 .add-video-actor-row {
   position: relative;
+
   display: flex;
   gap: 8px;
+
   margin-bottom: 10px;
 }
 
@@ -797,29 +797,39 @@ body {
   flex: 1;
 }
 
-.add-video-remove-actor {
-  width: 38px;
-  border: 0;
-  border-radius: 8px;
-  cursor: pointer;
-}
-
 .add-video-actor-wrapper {
   position: relative;
   flex: 1;
 }
 
+.add-video-remove-actor {
+  width: 38px;
+
+  border: 0;
+  border-radius: 8px;
+
+  cursor: pointer;
+}
+
+
+/* Actor autocomplete */
+
 .add-video-actor-suggestions {
   position: absolute;
   top: calc(100% + 3px);
-  left: 0;
   right: 0;
+  left: 0;
   z-index: 20;
+
   display: none;
+
   max-height: 220px;
+
   overflow-y: auto;
+
   border: 1px solid rgba(255, 255, 255, 0.15);
   border-radius: 8px;
+
   background: #202020;
 }
 
@@ -836,18 +846,24 @@ body {
   background: rgba(255, 255, 255, 0.08);
 }
 
+
+/* Actions */
+
 .add-video-actions {
   display: flex;
   justify-content: flex-end;
   gap: 10px;
+
   margin-top: 24px;
 }
 
 .add-video-primary-btn,
 .add-video-secondary-btn {
   padding: 10px 16px;
+
   border: 0;
   border-radius: 8px;
+
   cursor: pointer;
 }
 
@@ -857,14 +873,14 @@ body {
 
 .add-video-status {
   min-height: 20px;
+
   font-size: 14px;
 }
 
 
-
-/* =====================================================
-   DELETE VIDEO
-   ===================================================== */
+/* =====================================================================
+   10. DELETE VIDEO MODAL
+===================================================================== */
 
 .delete-video-modal {
   position: fixed;
@@ -878,6 +894,7 @@ body {
   padding: 20px;
 
   background: rgba(0, 0, 0, 0.78);
+
   backdrop-filter: blur(4px);
 }
 
@@ -890,22 +907,23 @@ body {
   padding: 26px;
 
   background: #171717;
+  color: #fff;
+
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 12px;
 
-  box-shadow:
-    0 20px 60px rgba(0, 0, 0, 0.65);
-
-  color: #fff;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.65);
 }
 
 .delete-video-dialog h2 {
   margin: 0 0 18px;
+
   font-size: 1.35rem;
 }
 
 .delete-video-warning {
   margin: 0 0 10px;
+
   color: rgba(255, 255, 255, 0.8);
 }
 
@@ -914,6 +932,7 @@ body {
   padding-left: 20px;
 
   color: rgba(255, 255, 255, 0.7);
+
   line-height: 1.6;
 }
 
@@ -933,16 +952,21 @@ body {
 }
 
 #deleteVideoUid {
-  font-size: 0.78rem;
   color: rgba(255, 255, 255, 0.5);
+
+  font-size: 0.78rem;
 }
 
 .delete-video-final-warning {
   margin: 18px 0;
 
-  font-size: 0.82rem;
   color: rgba(255, 255, 255, 0.55);
+
+  font-size: 0.82rem;
 }
+
+
+/* Delete actions */
 
 .delete-video-actions {
   display: flex;
@@ -952,10 +976,10 @@ body {
 
 .delete-video-cancel,
 .delete-video-confirm {
+  padding: 9px 14px;
+
   border: 0;
   border-radius: 7px;
-
-  padding: 9px 14px;
 
   font: inherit;
   font-size: 0.82rem;
@@ -985,4 +1009,15 @@ body {
 .delete-video-cancel:disabled {
   opacity: 0.5;
   cursor: wait;
+}
+
+
+/* =====================================================================
+   11. RESPONSIVE
+===================================================================== */
+
+@media (max-width: 1200px) {
+  .video-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
 }
