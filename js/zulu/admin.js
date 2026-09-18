@@ -3,6 +3,14 @@ import {
 } from "../supabaseClient.js";
 
 
+import {
+  generateThumbnailCandidatesFromUrl,
+  getSelectedThumbnailBlob,
+  resetThumbnailState,
+  uploadThumbnailToBackblaze
+} from "./thumbnails.js";
+
+
 /* =====================================================================
    ADMIN.JS
    =====================================================================
@@ -16,7 +24,7 @@ import {
 
        zulu-admin-dashboard
 
-   Actual Backblaze MP4 storage health is retrieved separately through:
+   Actual Backblaze video storage health is retrieved separately through:
 
        zulu-video-health
 
@@ -25,11 +33,17 @@ import {
 
        zulu-thumbnail-health
 
+   Missing thumbnail repair additionally reuses:
+
+       zulu-sign-media
+       zulu-upload-authorize
+       thumbnails.js
+
    The separation is deliberate.
 
-   If either Backblaze health service is temporarily unavailable, the
-   main Admin dashboard can continue to load normally and the affected
-   storage section can report its own independent error state.
+   If Backblaze is temporarily unavailable, the main Admin dashboard can
+   continue to load normally and the individual storage-health sections
+   can report their own independent error states.
 
    The dashboard provides:
 
@@ -39,9 +53,9 @@ import {
        • ingestion count
        • ingestion health summary
        • Catalogue Integrity diagnostics
-       • metadata coverage diagnostics
        • Video Storage Health reconciliation
        • Thumbnail Health reconciliation
+       • missing thumbnail repair
        • recent ingestion history
        • expandable ingestion diagnostics
 
@@ -58,14 +72,14 @@ import {
 
    Video Storage Health checks:
 
-       • catalogue video count
-       • Backblaze MP4 count
-       • exact matched MP4s
-       • missing MP4s
-       • orphaned MP4s
-       • case mismatches
+       • catalogue videos
+       • Backblaze MP4 objects
+       • exact filename matches
+       • missing MP4 objects
+       • orphaned MP4 objects
+       • filename case mismatches
        • URL / filename errors
-       • invalid B2 objects
+       • invalid storage objects
 
    Thumbnail Health checks:
 
@@ -75,8 +89,20 @@ import {
        • orphaned thumbnails
        • invalid thumbnail filenames
 
+   Missing Thumbnail Repair:
+
+       • signs the existing catalogue MP4
+       • seeks directly into the remote MP4
+       • generates thumbnail candidates
+       • selects the highest-scoring candidate
+       • uploads images/{uid}.png
+       • reruns Thumbnail Health to verify the repair
+
    Backblaze application credentials are NEVER exposed to this browser
-   code. All B2 operations occur inside the protected Edge Functions.
+   code.
+
+   All privileged B2 authorisation remains inside protected Supabase
+   Edge Functions.
 
    ===================================================================== */
 
@@ -109,9 +135,10 @@ const adminIngestionsBody =
   );
 
 
-/*
- * Library counters.
- */
+/* ---------------------------------------------------------------------
+   LIBRARY SUMMARY
+--------------------------------------------------------------------- */
+
 const statVideos =
   document.getElementById(
     "admin-stat-videos"
@@ -136,9 +163,10 @@ const statIngestions =
   );
 
 
-/*
- * Ingestion health counters.
- */
+/* ---------------------------------------------------------------------
+   INGESTION HEALTH
+--------------------------------------------------------------------- */
+
 const healthComplete =
   document.getElementById(
     "admin-health-complete"
@@ -175,9 +203,10 @@ const healthDuplicates =
   );
 
 
-/*
- * Catalogue Integrity counters.
- */
+/* ---------------------------------------------------------------------
+   CATALOGUE INTEGRITY
+--------------------------------------------------------------------- */
+
 const integrityDuplicateUrls =
   document.getElementById(
     "admin-integrity-duplicate-urls"
@@ -226,9 +255,6 @@ const integrityMissingFingerprint =
   );
 
 
-/*
- * Catalogue Integrity diagnostic panel.
- */
 const integrityResults =
   document.getElementById(
     "admin-integrity-results"
@@ -253,9 +279,34 @@ const integrityResultsClose =
   );
 
 
-/*
- * Video Storage Health counters.
- */
+/* ---------------------------------------------------------------------
+   VIDEO STORAGE HEALTH
+--------------------------------------------------------------------- */
+
+const videoHealthStatus =
+  document.getElementById(
+    "admin-video-health-status"
+  );
+
+
+const videoHealthCoverage =
+  document.getElementById(
+    "admin-video-health-coverage"
+  );
+
+
+const videoHealthCoverageTitle =
+  document.getElementById(
+    "admin-video-health-coverage-title"
+  );
+
+
+const videoHealthCoverageDetail =
+  document.getElementById(
+    "admin-video-health-coverage-detail"
+  );
+
+
 const videoHealthCatalogue =
   document.getElementById(
     "admin-video-health-catalogue"
@@ -304,36 +355,6 @@ const videoHealthInvalid =
   );
 
 
-/*
- * Video Storage Health status and coverage.
- */
-const videoHealthStatus =
-  document.getElementById(
-    "admin-video-health-status"
-  );
-
-
-const videoHealthCoverage =
-  document.getElementById(
-    "admin-video-health-coverage"
-  );
-
-
-const videoHealthCoverageTitle =
-  document.getElementById(
-    "admin-video-health-coverage-title"
-  );
-
-
-const videoHealthCoverageDetail =
-  document.getElementById(
-    "admin-video-health-coverage-detail"
-  );
-
-
-/*
- * Video Storage Health diagnostic panel.
- */
 const videoHealthResults =
   document.getElementById(
     "admin-video-health-results"
@@ -358,9 +379,10 @@ const videoHealthResultsClose =
   );
 
 
-/*
- * Thumbnail Health counters.
- */
+/* ---------------------------------------------------------------------
+   THUMBNAIL HEALTH
+--------------------------------------------------------------------- */
+
 const thumbnailExpected =
   document.getElementById(
     "admin-thumbnail-expected"
@@ -391,18 +413,12 @@ const thumbnailInvalid =
   );
 
 
-/*
- * Thumbnail Health status.
- */
 const thumbnailStatus =
   document.getElementById(
     "admin-thumbnail-status"
   );
 
 
-/*
- * Thumbnail Health diagnostic panel.
- */
 const thumbnailResults =
   document.getElementById(
     "admin-thumbnail-results"
@@ -427,38 +443,43 @@ const thumbnailResultsClose =
   );
 
 
+/* =====================================================================
+   02. DASHBOARD STATE
+===================================================================== */
+
 /*
- * Stores the latest Catalogue Integrity snapshot returned by
- * zulu-admin-dashboard.
- *
- * This allows diagnostic cards to display detailed results without
- * another database request.
+ * Latest Catalogue Integrity snapshot.
  */
 let currentIntegrityData =
   null;
 
 
 /*
- * Stores the latest Backblaze MP4 reconciliation returned by
- * zulu-video-health.
+ * Latest Video Storage Health snapshot.
  */
 let currentVideoHealthData =
   null;
 
 
 /*
- * Stores the latest actual Backblaze thumbnail reconciliation returned
- * by zulu-thumbnail-health.
- *
- * This allows Missing, Orphaned and Invalid cards to display the
- * corresponding object/video records without another B2 request.
+ * Latest Thumbnail Health snapshot.
  */
 let currentThumbnailData =
   null;
 
 
+/*
+ * UID currently undergoing Stage 10.1 thumbnail repair.
+ *
+ * thumbnails.js maintains shared thumbnail-candidate state. Only one
+ * repair may therefore run at once.
+ */
+let repairingThumbnailUid =
+  null;
+
+
 /* =====================================================================
-   02. INITIALISATION
+   03. INITIALISATION
 ===================================================================== */
 
 document.addEventListener(
@@ -468,31 +489,27 @@ document.addEventListener(
 
 
 /**
- * Starts the Admin dashboard.
+ * Starts the Admin dashboard and attaches all persistent event handlers.
  */
 async function initialiseAdmin() {
 
-  /*
-   * Render Lucide icons if the library loaded successfully.
-   */
   window.lucide?.createIcons();
 
 
-  /*
-   * Refresh all three independent dashboard data sources.
-   */
+  /* -------------------------------------------------------------------
+     MAIN REFRESH
+  ------------------------------------------------------------------- */
+
   adminRefresh?.addEventListener(
     "click",
     refreshAdmin
   );
 
 
-  /*
-   * Catalogue Integrity cards are interactive.
-   *
-   * Clicking one displays the detailed records returned by the
-   * zulu_catalogue_integrity() RPC.
-   */
+  /* -------------------------------------------------------------------
+     CATALOGUE INTEGRITY
+  ------------------------------------------------------------------- */
+
   document
     .querySelectorAll(
       ".admin-integrity-card"
@@ -511,20 +528,16 @@ async function initialiseAdmin() {
     );
 
 
-  /*
-   * Close the Catalogue Integrity diagnostic panel.
-   */
   integrityResultsClose?.addEventListener(
     "click",
     closeIntegrityResults
   );
 
 
-  /*
-   * Video Storage Health diagnostic cards are interactive.
-   *
-   * Catalogue, B2 Videos and Matched are informational.
-   */
+  /* -------------------------------------------------------------------
+     VIDEO STORAGE HEALTH
+  ------------------------------------------------------------------- */
+
   document
     .querySelectorAll(
       ".admin-video-health-card-action"
@@ -543,21 +556,16 @@ async function initialiseAdmin() {
     );
 
 
-  /*
-   * Close Video Storage Health diagnostics.
-   */
   videoHealthResultsClose?.addEventListener(
     "click",
     closeVideoHealthResults
   );
 
 
-  /*
-   * Missing, Orphaned and Invalid Thumbnail Health cards are
-   * interactive.
-   *
-   * Expected and Present are deliberately informational only.
-   */
+  /* -------------------------------------------------------------------
+     THUMBNAIL HEALTH
+  ------------------------------------------------------------------- */
+
   document
     .querySelectorAll(
       ".admin-thumbnail-card-action"
@@ -576,9 +584,6 @@ async function initialiseAdmin() {
     );
 
 
-  /*
-   * Close the Thumbnail Health diagnostic panel.
-   */
   thumbnailResultsClose?.addEventListener(
     "click",
     closeThumbnailResults
@@ -590,7 +595,7 @@ async function initialiseAdmin() {
 
 
 /* =====================================================================
-   03. AUTHENTICATION
+   04. AUTHENTICATION
 ===================================================================== */
 
 /**
@@ -600,12 +605,9 @@ async function initialiseAdmin() {
  *
  * IMPORTANT:
  *
- * This is NOT the security boundary for the Edge Functions.
- *
- * zulu-admin-dashboard, zulu-video-health and zulu-thumbnail-health
- * independently verify the authenticated user's JWT and can
- * independently enforce ZULU_ADMIN_EMAIL before accessing protected
- * resources.
+ * This is not the ultimate security boundary. Each protected Edge
+ * Function independently verifies the authenticated user's JWT and can
+ * independently enforce ZULU_ADMIN_EMAIL.
  */
 async function requireAuthenticatedUser() {
 
@@ -634,22 +636,18 @@ async function requireAuthenticatedUser() {
 
 
 /* =====================================================================
-   04. DASHBOARD REFRESH
+   05. DASHBOARD REFRESH
 ===================================================================== */
 
 /**
- * Reloads the complete Admin dashboard.
- *
- * Three independent server-side requests are made:
+ * Reloads all three independent Admin data sources:
  *
  *     1. zulu-admin-dashboard
  *     2. zulu-video-health
  *     3. zulu-thumbnail-health
  *
- * Promise.allSettled() is used intentionally.
- *
- * This means a Backblaze problem does not prevent catalogue,
- * ingestion or the other independent storage-health service from
+ * Promise.allSettled() is deliberate. A failure of either Backblaze
+ * reconciliation does not prevent Supabase health information from
  * loading.
  */
 async function refreshAdmin() {
@@ -667,15 +665,12 @@ async function refreshAdmin() {
 
   setVideoHealthLoadingState();
 
+
   setThumbnailLoadingState();
 
 
   try {
 
-    /*
-     * Confirm that the browser still has an authenticated Supabase user
-     * before making any protected Edge Function requests.
-     */
     const user =
       await requireAuthenticatedUser();
 
@@ -688,26 +683,18 @@ async function refreshAdmin() {
     }
 
 
-    /*
-     * Three completely independent health requests:
-     *
-     *   1. Supabase catalogue / ingestion health
-     *   2. Backblaze MP4 reconciliation
-     *   3. Backblaze thumbnail reconciliation
-     *
-     * Promise.allSettled() means a problem in one service does not stop
-     * either of the other two from rendering.
-     */
     const [
       dashboardResult,
       videoHealthResult,
       thumbnailResult
     ] =
-      await Promise.allSettled([
-        loadAdminDashboard(),
-        loadVideoHealth(),
-        loadThumbnailHealth()
-      ]);
+      await Promise.allSettled(
+        [
+          loadAdminDashboard(),
+          loadVideoHealth(),
+          loadThumbnailHealth()
+        ]
+      );
 
 
     /* ===============================================================
@@ -723,43 +710,27 @@ async function refreshAdmin() {
         dashboardResult.value;
 
 
-      /*
-       * Render the four top-level library counters.
-       */
       renderLibrarySummary(
         dashboard.library
       );
 
 
-      /*
-       * Render ingestion-journal health.
-       */
       renderIngestionHealth(
         dashboard.health
       );
 
 
-      /*
-       * Render database-level catalogue diagnostics.
-       */
       renderCatalogueIntegrity(
         dashboard.integrity
       );
 
 
-      /*
-       * Render recent ingestion history.
-       */
       renderRecentIngestions(
         dashboard.recent_ingestions ||
         []
       );
 
 
-      /*
-       * Prefer the server-generated timestamp so the displayed refresh
-       * time corresponds to the actual dashboard snapshot.
-       */
       const refreshedAt =
         dashboard.generated_at
           ? new Date(
@@ -874,12 +845,10 @@ async function refreshAdmin() {
     }
 
 
-  } catch (error) {
+  } catch (
+    error
+  ) {
 
-    /*
-     * This outer catch is primarily for authentication or another
-     * unexpected error outside the three independent health requests.
-     */
     console.error(
       "ADMIN REFRESH ERROR:",
       error
@@ -920,7 +889,7 @@ async function refreshAdmin() {
 
 
 /* =====================================================================
-   05. ADMIN DASHBOARD REQUEST
+   06. ADMIN DASHBOARD REQUEST
 ===================================================================== */
 
 /**
@@ -975,9 +944,6 @@ async function loadAdminDashboard() {
   }
 
 
-  /*
-   * Catalogue Integrity is a required part of the dashboard response.
-   */
   if (
     !data.library ||
     !data.health ||
@@ -995,16 +961,12 @@ async function loadAdminDashboard() {
 
 
 /* =====================================================================
-   06. VIDEO STORAGE HEALTH REQUEST
+   07. VIDEO STORAGE HEALTH REQUEST
 ===================================================================== */
 
 /**
- * Retrieves the live MP4 inventory reconciliation from Backblaze through
- * the protected zulu-video-health Edge Function.
- *
- * The browser receives reconciliation results only.
- *
- * It never receives Backblaze credentials or direct B2 API tokens.
+ * Retrieves the catalogue ↔ Backblaze MP4 reconciliation from the
+ * protected zulu-video-health Edge Function.
  */
 async function loadVideoHealth() {
 
@@ -1074,7 +1036,7 @@ async function loadVideoHealth() {
 
 
 /* =====================================================================
-   07. THUMBNAIL HEALTH REQUEST
+   08. THUMBNAIL HEALTH REQUEST
 ===================================================================== */
 
 /**
@@ -1151,7 +1113,7 @@ async function loadThumbnailHealth() {
 
 
 /* =====================================================================
-   08. LIBRARY SUMMARY
+   09. LIBRARY SUMMARY
 ===================================================================== */
 
 /**
@@ -1191,7 +1153,7 @@ function renderLibrarySummary({
 
 
 /* =====================================================================
-   09. INGESTION HEALTH
+   10. INGESTION HEALTH
 ===================================================================== */
 
 /**
@@ -1240,11 +1202,12 @@ function renderIngestionHealth(
 
 
 /* =====================================================================
-   10. VIDEO STORAGE HEALTH
+   11. VIDEO STORAGE HEALTH
 ===================================================================== */
 
 /**
- * Stores and renders the latest catalogue ↔ Backblaze MP4 reconciliation.
+ * Stores and renders the latest catalogue ↔ Backblaze MP4
+ * reconciliation.
  */
 function renderVideoHealth(
   data
@@ -1259,167 +1222,6 @@ function renderVideoHealth(
     {};
 
 
-  setNumber(
-    videoHealthCatalogue,
-    summary.catalogue_videos
-  );
-
-
-  setNumber(
-    videoHealthB2,
-    summary.b2_videos
-  );
-
-
-  setNumber(
-    videoHealthMatched,
-    summary.matched
-  );
-
-
-  setNumber(
-    videoHealthMissing,
-    summary.missing
-  );
-
-
-  setNumber(
-    videoHealthOrphaned,
-    summary.orphaned
-  );
-
-
-  setNumber(
-    videoHealthCaseMismatch,
-    summary.case_mismatch
-  );
-
-
-  setNumber(
-    videoHealthUrlError,
-    summary.url_filename_error
-  );
-
-
-  setNumber(
-    videoHealthInvalid,
-    summary.invalid
-  );
-
-
-  /*
-   * Catalogue is informational.
-   */
-  setVideoHealthStaticCardState(
-    videoHealthCatalogue,
-    "healthy"
-  );
-
-
-  /*
-   * B2 count is informational. It is healthy when the inventory request
-   * itself completed successfully.
-   */
-  setVideoHealthStaticCardState(
-    videoHealthB2,
-    "healthy"
-  );
-
-
-  /*
-   * Exact matched count should normally equal the catalogue count.
-   *
-   * A case mismatch can still be physically present, but it is not
-   * treated as an exact match.
-   */
-  setVideoHealthStaticCardState(
-    videoHealthMatched,
-    Number(
-      summary.matched ||
-      0
-    ) ===
-      Number(
-        summary.catalogue_videos ||
-        0
-      )
-      ? "healthy"
-      : "warning"
-  );
-
-
-  /*
-   * Missing catalogue videos are the most serious storage discrepancy.
-   */
-  setVideoHealthCardState(
-    "missing",
-    Number(
-      summary.missing ||
-      0
-    ) === 0
-      ? "healthy"
-      : "problem"
-  );
-
-
-  /*
-   * Orphaned objects exist physically but are not referenced by the
-   * catalogue.
-   */
-  setVideoHealthCardState(
-    "orphaned",
-    Number(
-      summary.orphaned ||
-      0
-    ) === 0
-      ? "healthy"
-      : "warning"
-  );
-
-
-  /*
-   * Case mismatches indicate that an object exists, but not under the
-   * exact case-sensitive filename referenced by the catalogue.
-   */
-  setVideoHealthCardState(
-    "case_mismatch",
-    Number(
-      summary.case_mismatch ||
-      0
-    ) === 0
-      ? "healthy"
-      : "warning"
-  );
-
-
-  /*
-   * URL / filename errors mean the catalogue URL could not be mapped
-   * cleanly to an MP4 object.
-   */
-  setVideoHealthCardState(
-    "url_filename_error",
-    Number(
-      summary.url_filename_error ||
-      0
-    ) === 0
-      ? "healthy"
-      : "problem"
-  );
-
-
-  /*
-   * Invalid objects are unexpected non-video objects outside images/.
-   */
-  setVideoHealthCardState(
-    "invalid",
-    Number(
-      summary.invalid ||
-      0
-    ) === 0
-      ? "healthy"
-      : "warning"
-  );
-
-
   const catalogueCount =
     Number(
       summary.catalogue_videos ||
@@ -1427,58 +1229,212 @@ function renderVideoHealth(
     );
 
 
+  const b2Count =
+    Number(
+      summary.b2_videos ||
+      0
+    );
+
+
+  const matched =
+    Number(
+      summary.matched ||
+      0
+    );
+
+
   const physicallyPresent =
     Number(
       summary.physically_present ??
-      summary.matched ??
+      matched
+    );
+
+
+  const missing =
+    Number(
+      summary.missing ||
+      0
+    );
+
+
+  const orphaned =
+    Number(
+      summary.orphaned ||
+      0
+    );
+
+
+  const caseMismatch =
+    Number(
+      summary.case_mismatch ||
+      0
+    );
+
+
+  const urlError =
+    Number(
+      summary.url_filename_error ||
+      0
+    );
+
+
+  const invalid =
+    Number(
+      summary.invalid ||
       0
     );
 
 
   const coverage =
-    Number(
-      summary.coverage_percent ||
-      0
-    );
+    Number.isFinite(
+      Number(
+        summary.coverage_percent
+      )
+    )
+      ? Number(
+          summary.coverage_percent
+        )
+      : catalogueCount > 0
+        ? (
+            physicallyPresent /
+            catalogueCount
+          ) * 100
+        : 0;
 
 
-  /*
-   * Overall green state is deliberately stricter than physical
-   * presence alone.
-   *
-   * We want:
-   *
-   *   - every catalogue video physically present
-   *   - no missing videos
-   *   - no orphaned videos
-   *   - no case mismatches
-   *   - no URL / filename errors
-   *   - no invalid objects
-   */
+  /* -------------------------------------------------------------------
+     COUNTERS
+  ------------------------------------------------------------------- */
+
+  setNumber(
+    videoHealthCatalogue,
+    catalogueCount
+  );
+
+
+  setNumber(
+    videoHealthB2,
+    b2Count
+  );
+
+
+  setNumber(
+    videoHealthMatched,
+    matched
+  );
+
+
+  setNumber(
+    videoHealthMissing,
+    missing
+  );
+
+
+  setNumber(
+    videoHealthOrphaned,
+    orphaned
+  );
+
+
+  setNumber(
+    videoHealthCaseMismatch,
+    caseMismatch
+  );
+
+
+  setNumber(
+    videoHealthUrlError,
+    urlError
+  );
+
+
+  setNumber(
+    videoHealthInvalid,
+    invalid
+  );
+
+
+  /* -------------------------------------------------------------------
+     STATIC CARD STATES
+  ------------------------------------------------------------------- */
+
+  setVideoHealthStaticCardState(
+    videoHealthCatalogue,
+    "healthy"
+  );
+
+
+  setVideoHealthStaticCardState(
+    videoHealthB2,
+    "healthy"
+  );
+
+
+  setVideoHealthStaticCardState(
+    videoHealthMatched,
+    matched === catalogueCount
+      ? "healthy"
+      : "warning"
+  );
+
+
+  /* -------------------------------------------------------------------
+     DIAGNOSTIC CARD STATES
+  ------------------------------------------------------------------- */
+
+  setVideoHealthCardState(
+    "missing",
+    missing === 0
+      ? "healthy"
+      : "problem"
+  );
+
+
+  setVideoHealthCardState(
+    "orphaned",
+    orphaned === 0
+      ? "healthy"
+      : "warning"
+  );
+
+
+  setVideoHealthCardState(
+    "case_mismatch",
+    caseMismatch === 0
+      ? "healthy"
+      : "warning"
+  );
+
+
+  setVideoHealthCardState(
+    "url_filename_error",
+    urlError === 0
+      ? "healthy"
+      : "problem"
+  );
+
+
+  setVideoHealthCardState(
+    "invalid",
+    invalid === 0
+      ? "healthy"
+      : "warning"
+  );
+
+
+  /* -------------------------------------------------------------------
+     COVERAGE
+  ------------------------------------------------------------------- */
+
   const completelyHealthy =
     catalogueCount > 0 &&
     physicallyPresent ===
       catalogueCount &&
-    Number(
-      summary.missing ||
-      0
-    ) === 0 &&
-    Number(
-      summary.orphaned ||
-      0
-    ) === 0 &&
-    Number(
-      summary.case_mismatch ||
-      0
-    ) === 0 &&
-    Number(
-      summary.url_filename_error ||
-      0
-    ) === 0 &&
-    Number(
-      summary.invalid ||
-      0
-    ) === 0;
+    missing === 0 &&
+    orphaned === 0 &&
+    caseMismatch === 0 &&
+    urlError === 0 &&
+    invalid === 0;
 
 
   if (
@@ -1487,16 +1443,20 @@ function renderVideoHealth(
 
     videoHealthCoverage.classList.remove(
       "is-loading",
+      "is-error",
       "is-healthy",
       "is-warning",
-      "is-error"
+      "is-problem"
     );
 
 
     videoHealthCoverage.classList.add(
       completelyHealthy
         ? "is-healthy"
-        : "is-warning"
+        : missing > 0 ||
+          urlError > 0
+          ? "is-problem"
+          : "is-warning"
     );
   }
 
@@ -1506,7 +1466,9 @@ function renderVideoHealth(
   ) {
 
     videoHealthCoverageTitle.textContent =
-      `${coverage}% storage coverage`;
+      `${coverage.toFixed(
+        1
+      )}% storage coverage`;
   }
 
 
@@ -1519,10 +1481,10 @@ function renderVideoHealth(
   }
 
 
-  /*
-   * Video Storage Health has its own refresh timestamp because it is an
-   * independent request from the primary dashboard.
-   */
+  /* -------------------------------------------------------------------
+     CHECKED TIME
+  ------------------------------------------------------------------- */
+
   if (
     videoHealthStatus
   ) {
@@ -1553,24 +1515,10 @@ function renderVideoHealth(
 
 
   /*
-   * If a diagnostic panel is already open during a refresh, redraw it
-   * from the newly returned health snapshot.
+   * If a diagnostic result was open before Refresh, close it because
+   * the underlying reconciliation snapshot has changed.
    */
-  const selectedCard =
-    document.querySelector(
-      ".admin-video-health-card-action.is-selected"
-    );
-
-
-  if (
-    selectedCard &&
-    !videoHealthResults?.hidden
-  ) {
-
-    openVideoHealthResult(
-      selectedCard.dataset.videoHealthKey
-    );
-  }
+  closeVideoHealthResults();
 
 
   window.lucide?.createIcons();
@@ -1578,7 +1526,7 @@ function renderVideoHealth(
 
 
 /**
- * Sets the Video Storage Health section to its loading appearance.
+ * Applies a loading state to the complete Video Storage Health section.
  */
 function setVideoHealthLoadingState() {
 
@@ -1586,76 +1534,12 @@ function setVideoHealthLoadingState() {
     null;
 
 
-  [
-    videoHealthCatalogue,
-    videoHealthB2,
-    videoHealthMatched,
-    videoHealthMissing,
-    videoHealthOrphaned,
-    videoHealthCaseMismatch,
-    videoHealthUrlError,
-    videoHealthInvalid
-  ]
-    .forEach(
-      element => {
-
-        if (
-          element
-        ) {
-
-          element.textContent =
-            "—";
-        }
-      }
-    );
-
-
-  document
-    .querySelectorAll(
-      ".admin-video-health-card"
-    )
-    .forEach(
-      card => {
-
-        card.classList.remove(
-          "is-healthy",
-          "is-warning",
-          "is-problem",
-          "is-error",
-          "is-selected"
-        );
-
-
-        card.classList.add(
-          "is-loading"
-        );
-      }
-    );
-
-
   if (
     videoHealthStatus
   ) {
 
     videoHealthStatus.textContent =
-      "Checking Backblaze…";
-  }
-
-
-  if (
-    videoHealthCoverage
-  ) {
-
-    videoHealthCoverage.classList.remove(
-      "is-healthy",
-      "is-warning",
-      "is-error"
-    );
-
-
-    videoHealthCoverage.classList.add(
-      "is-loading"
-    );
+      "Checking Backblaze video storage…";
   }
 
 
@@ -1664,7 +1548,7 @@ function setVideoHealthLoadingState() {
   ) {
 
     videoHealthCoverageTitle.textContent =
-      "Checking video storage…";
+      "Checking storage coverage…";
   }
 
 
@@ -1673,8 +1557,94 @@ function setVideoHealthLoadingState() {
   ) {
 
     videoHealthCoverageDetail.textContent =
-      "Reconciling the catalogue against Backblaze B2.";
+      "Reconciling catalogue videos with Backblaze MP4 objects.";
   }
+
+
+  const elements = [
+    videoHealthCoverage,
+    videoHealthCatalogue,
+    videoHealthB2,
+    videoHealthMatched,
+    videoHealthMissing,
+    videoHealthOrphaned,
+    videoHealthCaseMismatch,
+    videoHealthUrlError,
+    videoHealthInvalid
+  ];
+
+
+  for (
+    const element of elements
+  ) {
+
+    const card =
+      element?.closest(
+        ".admin-video-health-card"
+      ) ||
+      element;
+
+
+    card?.classList.remove(
+      "is-error",
+      "is-healthy",
+      "is-warning",
+      "is-problem"
+    );
+
+
+    card?.classList.add(
+      "is-loading"
+    );
+  }
+
+
+  setText(
+    videoHealthCatalogue,
+    "—"
+  );
+
+
+  setText(
+    videoHealthB2,
+    "—"
+  );
+
+
+  setText(
+    videoHealthMatched,
+    "—"
+  );
+
+
+  setText(
+    videoHealthMissing,
+    "—"
+  );
+
+
+  setText(
+    videoHealthOrphaned,
+    "—"
+  );
+
+
+  setText(
+    videoHealthCaseMismatch,
+    "—"
+  );
+
+
+  setText(
+    videoHealthUrlError,
+    "—"
+  );
+
+
+  setText(
+    videoHealthInvalid,
+    "—"
+  );
 
 
   closeVideoHealthResults();
@@ -1682,7 +1652,7 @@ function setVideoHealthLoadingState() {
 
 
 /**
- * Renders the independent error state for Video Storage Health.
+ * Displays an independent Video Storage Health failure.
  */
 function renderVideoHealthError(
   error
@@ -1692,52 +1662,15 @@ function renderVideoHealthError(
     null;
 
 
-  document
-    .querySelectorAll(
-      ".admin-video-health-card"
-    )
-    .forEach(
-      card => {
-
-        card.classList.remove(
-          "is-loading",
-          "is-healthy",
-          "is-warning",
-          "is-problem",
-          "is-selected"
-        );
-
-
-        card.classList.add(
-          "is-error"
-        );
-      }
-    );
-
-
   if (
     videoHealthStatus
   ) {
 
     videoHealthStatus.textContent =
-      "Backblaze check failed";
-  }
-
-
-  if (
-    videoHealthCoverage
-  ) {
-
-    videoHealthCoverage.classList.remove(
-      "is-loading",
-      "is-healthy",
-      "is-warning"
-    );
-
-
-    videoHealthCoverage.classList.add(
-      "is-error"
-    );
+      `Video Storage Health unavailable: ${
+        error?.message ||
+        "Unknown error"
+      }`;
   }
 
 
@@ -1746,7 +1679,7 @@ function renderVideoHealthError(
   ) {
 
     videoHealthCoverageTitle.textContent =
-      "Video storage health unavailable";
+      "Storage health unavailable";
   }
 
 
@@ -1755,9 +1688,94 @@ function renderVideoHealthError(
   ) {
 
     videoHealthCoverageDetail.textContent =
-      error?.message ||
-      "The Backblaze video inventory could not be loaded.";
+      "The Backblaze video inventory could not be reconciled.";
   }
+
+
+  const elements = [
+    videoHealthCoverage,
+    videoHealthCatalogue,
+    videoHealthB2,
+    videoHealthMatched,
+    videoHealthMissing,
+    videoHealthOrphaned,
+    videoHealthCaseMismatch,
+    videoHealthUrlError,
+    videoHealthInvalid
+  ];
+
+
+  for (
+    const element of elements
+  ) {
+
+    const card =
+      element?.closest(
+        ".admin-video-health-card"
+      ) ||
+      element;
+
+
+    card?.classList.remove(
+      "is-loading",
+      "is-healthy",
+      "is-warning",
+      "is-problem"
+    );
+
+
+    card?.classList.add(
+      "is-error"
+    );
+  }
+
+
+  setText(
+    videoHealthCatalogue,
+    "—"
+  );
+
+
+  setText(
+    videoHealthB2,
+    "—"
+  );
+
+
+  setText(
+    videoHealthMatched,
+    "—"
+  );
+
+
+  setText(
+    videoHealthMissing,
+    "—"
+  );
+
+
+  setText(
+    videoHealthOrphaned,
+    "—"
+  );
+
+
+  setText(
+    videoHealthCaseMismatch,
+    "—"
+  );
+
+
+  setText(
+    videoHealthUrlError,
+    "—"
+  );
+
+
+  setText(
+    videoHealthInvalid,
+    "—"
+  );
 
 
   closeVideoHealthResults();
@@ -1765,8 +1783,7 @@ function renderVideoHealthError(
 
 
 /**
- * Applies a state to one interactive Video Storage Health diagnostic
- * card.
+ * Applies a health state to one clickable Video Storage Health card.
  */
 function setVideoHealthCardState(
   key,
@@ -1775,7 +1792,7 @@ function setVideoHealthCardState(
 
   const card =
     document.querySelector(
-      `.admin-video-health-card-action[data-video-health-key="${key}"]`
+      `[data-video-health-key="${key}"]`
     );
 
 
@@ -1796,19 +1813,14 @@ function setVideoHealthCardState(
   );
 
 
-  if (
-    state
-  ) {
-
-    card.classList.add(
-      `is-${state}`
-    );
-  }
+  card.classList.add(
+    `is-${state}`
+  );
 }
 
 
 /**
- * Applies a state to an informational Video Storage Health card.
+ * Applies a health state to one informational Video Storage Health card.
  */
 function setVideoHealthStaticCardState(
   element,
@@ -1838,41 +1850,40 @@ function setVideoHealthStaticCardState(
   );
 
 
-  if (
-    state
-  ) {
-
-    card.classList.add(
-      `is-${state}`
-    );
-  }
+  card.classList.add(
+    `is-${state}`
+  );
 }
 
 
+/* =====================================================================
+   12. VIDEO STORAGE HEALTH INTERACTION
+===================================================================== */
+
 /**
- * Opens one Video Storage Health diagnostic category.
+ * Opens one detailed Video Storage Health diagnostic collection.
  */
 function openVideoHealthResult(
   key
 ) {
 
   if (
-    !currentVideoHealthData ||
-    !key
+    !key ||
+    !currentVideoHealthData
   ) {
 
     return;
   }
 
 
-  const section =
+  const result =
     currentVideoHealthData[
       key
     ];
 
 
   if (
-    !section
+    !result
   ) {
 
     return;
@@ -1896,21 +1907,20 @@ function openVideoHealthResult(
 
 
   const titles = {
-
     missing:
       "Missing Videos",
 
     orphaned:
-      "Orphaned B2 Videos",
+      "Orphaned Videos",
 
     case_mismatch:
-      "Case Mismatches",
+      "Filename Case Mismatches",
 
     url_filename_error:
       "URL / Filename Errors",
 
     invalid:
-      "Invalid B2 Objects"
+      "Invalid Storage Objects"
   };
 
 
@@ -1919,10 +1929,8 @@ function openVideoHealthResult(
   ) {
 
     videoHealthResultsTitle.textContent =
-      titles[
-        key
-      ] ||
-      "Video Storage Results";
+      titles[key] ||
+      "Video Storage Health";
   }
 
 
@@ -1933,7 +1941,7 @@ function openVideoHealthResult(
     videoHealthResultsBody.innerHTML =
       renderVideoHealthRows(
         key,
-        section.rows ||
+        result.rows ||
         []
       );
   }
@@ -1953,7 +1961,7 @@ function openVideoHealthResult(
 
 
 /**
- * Closes Video Storage Health diagnostics.
+ * Closes the Video Storage Health result panel.
  */
 function closeVideoHealthResults() {
 
@@ -1982,8 +1990,7 @@ function closeVideoHealthResults() {
 
 
 /**
- * Renders the rows belonging to a Video Storage Health diagnostic
- * category.
+ * Converts a Video Storage Health collection to HTML.
  */
 function renderVideoHealthRows(
   key,
@@ -1994,12 +2001,12 @@ function renderVideoHealthRows(
     !Array.isArray(
       rows
     ) ||
-    rows.length === 0
+    !rows.length
   ) {
 
     return `
       <div class="admin-video-health-empty">
-        No problems found.
+        ✓ No issues found.
       </div>
     `;
   }
@@ -2020,132 +2027,105 @@ function renderVideoHealthRows(
 
 
 /**
- * Renders one Video Storage Health diagnostic record.
+ * Renders one Video Storage Health diagnostic row.
+ *
+ * Several alternative property names are supported intentionally. This
+ * keeps the Admin UI tolerant of diagnostic-field naming differences
+ * while the zulu-video-health function evolves.
  */
 function renderVideoHealthRow(
   key,
   row
 ) {
 
-  const uid =
-    row.uid !==
-      null &&
-    row.uid !==
-      undefined
-      ? escapeHtml(
-          row.uid
-        )
-      : null;
+  const catalogueFilename =
+    row.catalogue_filename ??
+    row.catalogue_file ??
+    row.expected_file ??
+    null;
+
+
+  const b2Filename =
+    row.b2_file_name ??
+    row.b2_file ??
+    row.file_name ??
+    null;
 
 
   const film =
-    row.film
-      ? escapeHtml(
-          row.film
-        )
-      : null;
-
-
-  const title =
-    film ||
+    row.film ||
     (
-      row.file_name
-        ? escapeHtml(
-            row.file_name
-          )
-        : "Storage object"
+      key === "orphaned"
+        ? "Orphaned Backblaze video"
+        : key === "invalid"
+          ? "Invalid storage object"
+          : "Untitled"
     );
 
 
-  const meta =
-    [];
+  const uid =
+    row.uid ??
+    null;
+
+
+  const meta = [];
 
 
   if (
-    uid
+    catalogueFilename
   ) {
 
     meta.push(
-      `<strong>UID:</strong> ${uid}`
-    );
-  }
-
-
-  if (
-    row.file_name
-  ) {
-
-    meta.push(
-      `<strong>B2 file:</strong> ${escapeHtml(
-        row.file_name
-      )}`
-    );
-  }
-
-
-  if (
-    row.expected_file
-  ) {
-
-    meta.push(
-      `<strong>Expected:</strong> ${escapeHtml(
-        row.expected_file
-      )}`
+      `
+        <div>
+          <strong>Catalogue filename:</strong>
+          <span class="admin-video-health-file">
+            ${escapeHtml(
+              catalogueFilename
+            )}
+          </span>
+        </div>
+      `
     );
   }
 
 
   if (
-    row.catalogue_file
+    b2Filename &&
+    b2Filename !==
+      catalogueFilename
   ) {
 
     meta.push(
-      `<strong>Catalogue filename:</strong> ${escapeHtml(
-        row.catalogue_file
-      )}`
+      `
+        <div>
+          <strong>Backblaze filename:</strong>
+          <span class="admin-video-health-file">
+            ${escapeHtml(
+              b2Filename
+            )}
+          </span>
+        </div>
+      `
     );
   }
 
 
   if (
-    row.b2_file
+    row.url
   ) {
 
     meta.push(
-      `<strong>B2 filename:</strong> ${escapeHtml(
-        row.b2_file
-      )}`
-    );
-  }
-
-
-  if (
-    row.size_bytes !==
-      null &&
-    row.size_bytes !==
-      undefined
-  ) {
-
-    meta.push(
-      `<strong>Size:</strong> ${escapeHtml(
-        formatBytes(
-          row.size_bytes
-        )
-      )}`
-    );
-  }
-
-
-  if (
-    row.uploaded_at
-  ) {
-
-    meta.push(
-      `<strong>Uploaded:</strong> ${escapeHtml(
-        formatDateTime(
-          row.uploaded_at
-        )
-      )}`
+      `
+        <div>
+          <strong>URL:</strong>
+          <span class="admin-video-health-file">
+            ${escapeHtml(
+              row.url
+            )}
+          </span>
+        </div>
+      `
     );
   }
 
@@ -2155,77 +2135,100 @@ function renderVideoHealthRow(
   ) {
 
     meta.push(
-      `<strong>Reason:</strong> ${escapeHtml(
-        row.reason
-      )}`
+      `
+        <div>
+          <strong>Reason:</strong>
+          ${escapeHtml(
+            row.reason
+          )}
+        </div>
+      `
     );
   }
 
 
-  let extra =
-    "";
-
-
   if (
-    row.url
+    row.size_bytes !==
+      undefined &&
+    row.size_bytes !==
+      null
   ) {
 
-    extra += `
-      <div class="admin-video-health-path">
-        ${escapeHtml(
-          row.url
-        )}
-      </div>
-    `;
+    meta.push(
+      `
+        <div>
+          <strong>Size:</strong>
+          ${escapeHtml(
+            formatBytes(
+              row.size_bytes
+            )
+          )}
+        </div>
+      `
+    );
   }
 
 
   if (
-    row.file_id
+    row.uploaded_at
   ) {
 
-    extra += `
-      <div class="admin-video-health-file-id">
-        B2 file ID: ${escapeHtml(
-          row.file_id
-        )}
-      </div>
-    `;
+    meta.push(
+      `
+        <div>
+          <strong>Uploaded:</strong>
+          ${escapeHtml(
+            formatDateTime(
+              row.uploaded_at
+            )
+          )}
+        </div>
+      `
+    );
   }
 
 
   return `
-    <div
-      class="admin-video-health-result"
-      data-video-health-result="${escapeHtml(
-        key
-      )}"
-    >
+    <div class="admin-video-health-result">
 
       <div class="admin-video-health-result-title">
-        ${title}
+
+        ${
+          uid !== null
+            ? `
+                <span class="admin-video-health-result-uid">
+                  UID ${escapeHtml(
+                    uid
+                  )}
+                </span>
+              `
+            : ""
+        }
+
+        <span class="admin-video-health-result-film">
+          ${escapeHtml(
+            film
+          )}
+        </span>
+
       </div>
 
       ${
         meta.length
           ? `
-            <div class="admin-video-health-result-meta">
-              ${meta.join(
-                " · "
-              )}
-            </div>
-          `
+              <div class="admin-video-health-result-meta">
+                ${meta.join("")}
+              </div>
+            `
           : ""
       }
-
-      ${extra}
 
     </div>
   `;
 }
 
 /* =====================================================================
-   11. THUMBNAIL HEALTH
+   13. THUMBNAIL HEALTH
 ===================================================================== */
 
 /**
@@ -2289,9 +2292,10 @@ function renderThumbnailHealth(
   );
 
 
-  /*
-   * Apply health colours.
-   */
+  /* -------------------------------------------------------------------
+     DIAGNOSTIC CARD STATES
+  ------------------------------------------------------------------- */
+
   setThumbnailCardState(
     "missing",
     Number(
@@ -2325,9 +2329,10 @@ function renderThumbnailHealth(
   );
 
 
-  /*
-   * Expected is informational.
-   */
+  /* -------------------------------------------------------------------
+     EXPECTED CARD
+  ------------------------------------------------------------------- */
+
   const expectedCard =
     thumbnailExpected?.closest(
       ".admin-thumbnail-card"
@@ -2343,9 +2348,10 @@ function renderThumbnailHealth(
   );
 
 
-  /*
-   * Present is considered healthy when every expected thumbnail exists.
-   */
+  /* -------------------------------------------------------------------
+     PRESENT CARD
+  ------------------------------------------------------------------- */
+
   const presentCard =
     thumbnailPresent?.closest(
       ".admin-thumbnail-card"
@@ -2400,9 +2406,10 @@ function renderThumbnailHealth(
   }
 
 
-  /*
-   * Display the timestamp generated by zulu-thumbnail-health.
-   */
+  /* -------------------------------------------------------------------
+     STATUS / COVERAGE
+  ------------------------------------------------------------------- */
+
   if (
     thumbnailStatus
   ) {
@@ -2463,8 +2470,9 @@ function renderThumbnailHealth(
 
 
   /*
-   * A refresh invalidates an open diagnostic panel because its records
-   * may have changed.
+   * The health snapshot has changed, so close any old diagnostic panel.
+   *
+   * Stage 10.1 explicitly reopens Missing after a successful repair.
    */
   closeThumbnailResults();
 
@@ -2474,12 +2482,21 @@ function renderThumbnailHealth(
 
 
 /**
- * Places the Thumbnail Health section into its loading state.
+ * Applies the loading state while zulu-thumbnail-health is running.
  */
 function setThumbnailLoadingState() {
 
   currentThumbnailData =
     null;
+
+
+  if (
+    thumbnailStatus
+  ) {
+
+    thumbnailStatus.textContent =
+      "Checking Backblaze…";
+  }
 
 
   setText(
@@ -2535,22 +2552,12 @@ function setThumbnailLoadingState() {
     );
 
 
-  if (
-    thumbnailStatus
-  ) {
-
-    thumbnailStatus.textContent =
-      "Checking Backblaze…";
-  }
-
-
   closeThumbnailResults();
 }
 
 
 /**
- * Displays a Thumbnail Health failure without affecting the remainder
- * of the Admin dashboard.
+ * Displays an independent Thumbnail Health failure.
  */
 function renderThumbnailHealthError(
   error
@@ -2560,27 +2567,16 @@ function renderThumbnailHealthError(
     null;
 
 
-  document
-    .querySelectorAll(
-      ".admin-thumbnail-card"
-    )
-    .forEach(
-      card => {
+  if (
+    thumbnailStatus
+  ) {
 
-        card.classList.remove(
-          "is-loading",
-          "is-healthy",
-          "is-warning",
-          "is-problem",
-          "is-selected"
-        );
-
-
-        card.classList.add(
-          "is-error"
-        );
-      }
-    );
+    thumbnailStatus.textContent =
+      `Thumbnail Health unavailable: ${
+        error?.message ||
+        "Unknown error"
+      }`;
+  }
 
 
   setText(
@@ -2613,16 +2609,27 @@ function renderThumbnailHealthError(
   );
 
 
-  if (
-    thumbnailStatus
-  ) {
+  document
+    .querySelectorAll(
+      ".admin-thumbnail-card"
+    )
+    .forEach(
+      card => {
 
-    thumbnailStatus.textContent =
-      `Backblaze check failed: ${
-        error?.message ||
-        "Unknown error"
-      }`;
-  }
+        card.classList.remove(
+          "is-loading",
+          "is-healthy",
+          "is-warning",
+          "is-problem",
+          "is-selected"
+        );
+
+
+        card.classList.add(
+          "is-error"
+        );
+      }
+    );
 
 
   closeThumbnailResults();
@@ -2630,7 +2637,7 @@ function renderThumbnailHealthError(
 
 
 /**
- * Applies a health state to one interactive Thumbnail Health card.
+ * Applies a health state to one clickable Thumbnail Health card.
  */
 function setThumbnailCardState(
   key,
@@ -2667,11 +2674,11 @@ function setThumbnailCardState(
 
 
 /* =====================================================================
-   12. THUMBNAIL HEALTH INTERACTION
+   14. THUMBNAIL HEALTH INTERACTION
 ===================================================================== */
 
 /**
- * Opens the detailed result belonging to a Thumbnail Health card.
+ * Opens one detailed Thumbnail Health diagnostic collection.
  */
 function openThumbnailResult(
   key
@@ -2700,21 +2707,32 @@ function openThumbnailResult(
   }
 
 
-  /*
-   * Highlight only the currently selected Thumbnail Health card.
-   */
   document
     .querySelectorAll(
       ".admin-thumbnail-card-action"
     )
     .forEach(
-      card =>
+      card => {
+
         card.classList.toggle(
           "is-selected",
           card.dataset.thumbnailKey ===
             key
-        )
+        );
+      }
     );
+
+
+  const titles = {
+    missing:
+      "Missing Thumbnails",
+
+    orphaned:
+      "Orphaned Thumbnails",
+
+    invalid:
+      "Invalid Thumbnail Objects"
+  };
 
 
   if (
@@ -2722,9 +2740,8 @@ function openThumbnailResult(
   ) {
 
     thumbnailResultsTitle.textContent =
-      getThumbnailResultTitle(
-        key
-      );
+      titles[key] ||
+      "Thumbnail Health";
   }
 
 
@@ -2750,13 +2767,19 @@ function openThumbnailResult(
   }
 
 
+  /*
+   * Stage 10.1 repair buttons are dynamically created when the Missing
+   * diagnostic panel is rendered.
+   */
+  attachThumbnailRepairEvents();
+
+
   window.lucide?.createIcons();
 }
 
 
 /**
- * Closes the Thumbnail Health diagnostic panel and clears card
- * selection.
+ * Closes the Thumbnail Health diagnostic panel.
  */
 function closeThumbnailResults() {
 
@@ -2774,46 +2797,18 @@ function closeThumbnailResults() {
       ".admin-thumbnail-card-action"
     )
     .forEach(
-      card =>
+      card => {
+
         card.classList.remove(
           "is-selected"
-        )
+        );
+      }
     );
 }
 
 
 /**
- * Returns the human-readable title for a Thumbnail Health result.
- */
-function getThumbnailResultTitle(
-  key
-) {
-
-  const titles =
-  {
-    missing:
-      "Missing Thumbnails",
-
-    orphaned:
-      "Orphaned Thumbnails",
-
-    invalid:
-      "Invalid Thumbnail Files"
-  };
-
-
-  return titles[
-    key
-  ] || "Thumbnail Health";
-}
-
-
-/* =====================================================================
-   13. THUMBNAIL RESULT RENDERING
-===================================================================== */
-
-/**
- * Converts Thumbnail Health rows into diagnostic HTML.
+ * Converts a Thumbnail Health diagnostic collection to HTML.
  */
 function renderThumbnailRows(
   key,
@@ -2835,94 +2830,182 @@ function renderThumbnailRows(
   }
 
 
-  if (
-    key ===
-      "missing"
+  switch (
+    key
   ) {
 
-    return rows
-      .map(
-        renderMissingThumbnail
-      )
-      .join(
-        ""
-      );
+    case "missing":
+
+      return rows
+        .map(
+          item =>
+            renderMissingThumbnail(
+              item
+            )
+        )
+        .join(
+          ""
+        );
+
+
+    case "orphaned":
+
+      return rows
+        .map(
+          item =>
+            renderOrphanedThumbnail(
+              item
+            )
+        )
+        .join(
+          ""
+        );
+
+
+    case "invalid":
+
+      return rows
+        .map(
+          item =>
+            renderInvalidThumbnail(
+              item
+            )
+        )
+        .join(
+          ""
+        );
+
+
+    default:
+
+      return `
+        <div class="admin-thumbnail-empty">
+          No diagnostic renderer is available.
+        </div>
+      `;
   }
-
-
-  if (
-    key ===
-      "orphaned"
-  ) {
-
-    return rows
-      .map(
-        renderOrphanedThumbnail
-      )
-      .join(
-        ""
-      );
-  }
-
-
-  if (
-    key ===
-      "invalid"
-  ) {
-
-    return rows
-      .map(
-        renderInvalidThumbnail
-      )
-      .join(
-        ""
-      );
-  }
-
-
-  return "";
 }
 
 
 /**
  * Renders one catalogue video whose expected thumbnail does not exist
  * in Backblaze.
+ *
+ * Stage 10.1 adds a controlled repair action here.
+ *
+ * The catalogue row itself is not changed.
+ *
+ * Repair:
+ *
+ *     1. signs the existing MP4 URL
+ *     2. generates a thumbnail from the existing video
+ *     3. uploads images/{uid}.png
+ *     4. reruns Thumbnail Health
  */
 function renderMissingThumbnail(
   item
 ) {
 
+  const uid =
+    item.uid;
+
+
+  const hasVideoUrl =
+    Boolean(
+      item.url
+    );
+
+
   return `
-    <div class="admin-thumbnail-result">
+    <div
+      class="admin-thumbnail-result"
+      data-thumbnail-repair-row="${escapeHtml(
+        uid
+      )}"
+    >
 
-      <div class="admin-thumbnail-result-title">
+      <div class="admin-thumbnail-result-main">
 
-        <span class="admin-thumbnail-result-uid">
-          UID ${escapeHtml(
-            item.uid
-          )}
-        </span>
+        <div class="admin-thumbnail-result-title">
 
-        <span class="admin-thumbnail-result-film">
-          ${escapeHtml(
-            item.film ||
-            "Untitled"
-          )}
-        </span>
+          <span class="admin-thumbnail-result-uid">
+            UID ${escapeHtml(
+              uid
+            )}
+          </span>
+
+          <span class="admin-thumbnail-result-film">
+            ${escapeHtml(
+              item.film ||
+              "Untitled"
+            )}
+          </span>
+
+        </div>
+
+
+        <div class="admin-thumbnail-result-meta">
+
+          <div>
+
+            <strong>
+              Expected:
+            </strong>
+
+            <span class="admin-thumbnail-file">
+              ${escapeHtml(
+                item.expected_file ||
+                `images/${uid}.png`
+              )}
+            </span>
+
+          </div>
+
+
+          ${
+            !hasVideoUrl
+              ? `
+                  <div class="admin-thumbnail-repair-warning">
+                    Catalogue video URL is unavailable.
+                  </div>
+                `
+              : ""
+          }
+
+        </div>
 
       </div>
 
-      <div class="admin-thumbnail-result-meta">
 
-        <strong>Expected:</strong>
-        <span class="admin-thumbnail-file">
-          ${escapeHtml(
-            item.expected_file ||
-            `images/${item.uid}.png`
-          )}
-        </span>
+      <div class="admin-thumbnail-repair-actions">
+
+        <button
+          type="button"
+          class="admin-thumbnail-repair-button"
+          data-thumbnail-repair-uid="${escapeHtml(
+            uid
+          )}"
+          ${hasVideoUrl ? "" : "disabled"}
+        >
+
+          <i data-lucide="wand-sparkles"></i>
+
+          <span>
+            Repair Thumbnail
+          </span>
+
+        </button>
 
       </div>
+
+
+      <div
+        class="admin-thumbnail-repair-status"
+        data-thumbnail-repair-status="${escapeHtml(
+          uid
+        )}"
+        hidden
+      ></div>
 
     </div>
   `;
@@ -2930,8 +3013,11 @@ function renderMissingThumbnail(
 
 
 /**
- * Renders one valid-looking thumbnail whose UID is not present in
- * zulu_videos.
+ * Renders one Backblaze thumbnail whose numeric UID no longer exists
+ * in the catalogue.
+ *
+ * Stage 10.1 remains read-only for orphaned objects. Deletion belongs to
+ * the later storage-cleanup stage.
  */
 function renderOrphanedThumbnail(
   item
@@ -2954,35 +3040,74 @@ function renderOrphanedThumbnail(
 
       </div>
 
+
       <div class="admin-thumbnail-result-meta">
 
         <div>
-          <strong>File:</strong>
+
+          <strong>
+            File:
+          </strong>
+
           <span class="admin-thumbnail-file">
             ${escapeHtml(
               item.file_name ||
               ""
             )}
           </span>
+
         </div>
 
+
         <div>
-          <strong>Size:</strong>
+
+          <strong>
+            Size:
+          </strong>
+
           ${escapeHtml(
             formatBytes(
               item.size_bytes
             )
           )}
+
         </div>
 
+
         <div>
-          <strong>Uploaded:</strong>
+
+          <strong>
+            Uploaded:
+          </strong>
+
           ${escapeHtml(
             formatDateTime(
               item.uploaded_at
             )
           )}
+
         </div>
+
+
+        ${
+          item.file_id
+            ? `
+                <div>
+
+                  <strong>
+                    B2 file ID:
+                  </strong>
+
+                  <span class="admin-thumbnail-file">
+                    ${escapeHtml(
+                      item.file_id
+                    )}
+                  </span>
+
+                </div>
+              `
+            : ""
+        }
 
       </div>
 
@@ -2992,8 +3117,8 @@ function renderOrphanedThumbnail(
 
 
 /**
- * Renders one object under images/ that does not follow the expected
- * images/{uid}.png naming convention.
+ * Renders one object under images/ that does not match
+ * images/{uid}.png.
  */
 function renderInvalidThumbnail(
   item
@@ -3005,44 +3130,75 @@ function renderInvalidThumbnail(
       <div class="admin-thumbnail-result-title">
 
         <span class="admin-thumbnail-result-film">
-          ${escapeHtml(
-            item.file_name ||
-            "Unknown file"
-          )}
+          Invalid thumbnail object
         </span>
 
       </div>
 
+
       <div class="admin-thumbnail-result-meta">
 
         <div>
-          <strong>Size:</strong>
+
+          <strong>
+            File:
+          </strong>
+
+          <span class="admin-thumbnail-file">
+            ${escapeHtml(
+              item.file_name ||
+              ""
+            )}
+          </span>
+
+        </div>
+
+
+        <div>
+
+          <strong>
+            Size:
+          </strong>
+
           ${escapeHtml(
             formatBytes(
               item.size_bytes
             )
           )}
+
         </div>
 
+
         <div>
-          <strong>Uploaded:</strong>
+
+          <strong>
+            Uploaded:
+          </strong>
+
           ${escapeHtml(
             formatDateTime(
               item.uploaded_at
             )
           )}
+
         </div>
+
 
         ${
           item.file_id
             ? `
                 <div>
-                  <strong>B2 File ID:</strong>
+
+                  <strong>
+                    B2 file ID:
+                  </strong>
+
                   <span class="admin-thumbnail-file">
                     ${escapeHtml(
                       item.file_id
                     )}
                   </span>
+
                 </div>
               `
             : ""
@@ -3056,196 +3212,938 @@ function renderInvalidThumbnail(
 
 
 /* =====================================================================
-   14. CATALOGUE INTEGRITY
+   15. MISSING THUMBNAIL REPAIR — STAGE 10.1
 ===================================================================== */
 
 /**
- * Stores and renders the latest Catalogue Integrity snapshot.
+ * Attaches repair handlers to the currently-rendered Missing Thumbnail
+ * rows.
  *
- * Each result contains:
+ * Buttons are recreated whenever the diagnostic panel is rendered, so
+ * listeners are deliberately attached after each render.
+ */
+function attachThumbnailRepairEvents() {
+
+  document
+    .querySelectorAll(
+      ".admin-thumbnail-repair-button"
+    )
+    .forEach(
+      button => {
+
+        button.addEventListener(
+          "click",
+          () => {
+
+            const uid =
+              button.dataset
+                .thumbnailRepairUid;
+
+
+            if (
+              uid
+            ) {
+
+              repairMissingThumbnail(
+                uid
+              );
+            }
+          }
+        );
+      }
+    );
+}
+
+
+/**
+ * Repairs one missing thumbnail using the catalogue MP4 that already
+ * exists in Backblaze.
  *
- *     {
- *       count: number,
- *       rows: [...]
- *     }
+ * IMPORTANT:
  *
- * A zero count is displayed as healthy.
+ * This does not:
  *
- * Non-zero core-integrity problems are displayed as problems.
- * Non-zero metadata-coverage results are displayed as warnings.
+ *     • upload another MP4
+ *     • modify zulu_videos
+ *     • create an ingestion
+ *     • delete any B2 object
+ *
+ * It creates only the missing images/{uid}.png object.
+ */
+async function repairMissingThumbnail(
+  uid
+) {
+
+  /*
+   * thumbnails.js maintains shared candidate state.
+   *
+   * Running two repairs simultaneously could cause one repair to upload
+   * the candidate generated for another video.
+   */
+  if (
+    repairingThumbnailUid !==
+      null
+  ) {
+
+    return;
+  }
+
+
+  const missingRows =
+    currentThumbnailData
+      ?.missing
+      ?.rows ||
+    [];
+
+
+  const item =
+    missingRows.find(
+      row =>
+        String(
+          row.uid
+        ) ===
+        String(
+          uid
+        )
+    );
+
+
+  if (
+    !item
+  ) {
+
+    setStatus(
+      `Could not find missing thumbnail record for UID ${uid}.`,
+      "error"
+    );
+
+
+    return;
+  }
+
+
+  if (
+    !item.url
+  ) {
+
+    setThumbnailRepairStatus(
+      uid,
+      "Catalogue video URL is unavailable.",
+      "error"
+    );
+
+
+    return;
+  }
+
+
+  repairingThumbnailUid =
+    String(
+      uid
+    );
+
+
+  const button =
+    document.querySelector(
+      `[data-thumbnail-repair-uid="${cssEscapeValue(
+        uid
+      )}"]`
+    );
+
+
+  /*
+   * Disable every repair button while this video is processed.
+   */
+  setAllThumbnailRepairButtonsDisabled(
+    true
+  );
+
+
+  if (
+    button
+  ) {
+
+    button.classList.remove(
+      "is-error",
+      "is-success"
+    );
+
+
+    button.classList.add(
+      "is-working"
+    );
+
+
+    button.innerHTML =
+      `
+        <i data-lucide="loader-circle"></i>
+        <span>Preparing…</span>
+      `;
+  }
+
+
+  window.lucide?.createIcons();
+
+
+  try {
+
+    /* ===============================================================
+       STEP 1 — SIGN EXISTING MP4
+    =============================================================== */
+
+    setThumbnailRepairStatus(
+      uid,
+      "Requesting secure video access…",
+      "working"
+    );
+
+
+    setThumbnailRepairButtonText(
+      button,
+      "Signing video…"
+    );
+
+
+    const signedUrl =
+      await getAdminSignedVideoUrl(
+        item.url
+      );
+
+
+    /* ===============================================================
+       STEP 2 — GENERATE THUMBNAIL
+    =============================================================== */
+
+    resetThumbnailState();
+
+
+    setThumbnailRepairButtonText(
+      button,
+      "Analysing…"
+    );
+
+
+    const analysis =
+      await generateThumbnailCandidatesFromUrl(
+        signedUrl,
+        {
+          onStatus:
+            message => {
+
+              setThumbnailRepairStatus(
+                uid,
+                message,
+                "working"
+              );
+            }
+        }
+      );
+
+
+    const thumbnailBlob =
+      getSelectedThumbnailBlob();
+
+
+    if (
+      !thumbnailBlob
+    ) {
+
+      throw new Error(
+        "Thumbnail analysis completed but no image was selected."
+      );
+    }
+
+
+    /* ===============================================================
+       STEP 3 — UPLOAD images/{uid}.png
+    =============================================================== */
+
+    setThumbnailRepairButtonText(
+      button,
+      "Uploading…"
+    );
+
+
+    setThumbnailRepairStatus(
+      uid,
+      "Publishing repaired thumbnail to Backblaze…",
+      "working"
+    );
+
+
+    await uploadThumbnailToBackblaze(
+      item.uid,
+      thumbnailBlob,
+      {
+        onStatus:
+          message => {
+
+            setThumbnailRepairStatus(
+              uid,
+              message,
+              "working"
+            );
+          }
+      }
+    );
+
+
+    /* ===============================================================
+       STEP 4 — LOCAL SUCCESS STATE
+    =============================================================== */
+
+    if (
+      button
+    ) {
+
+      button.classList.remove(
+        "is-working",
+        "is-error"
+      );
+
+
+      button.classList.add(
+        "is-success"
+      );
+
+
+      button.innerHTML =
+        `
+          <i data-lucide="circle-check"></i>
+          <span>Repaired</span>
+        `;
+    }
+
+
+    window.lucide?.createIcons();
+
+
+    const faceCount =
+      Number(
+        analysis?.faceCount ||
+        0
+      );
+
+
+    const faceDescription =
+      faceCount > 0
+        ? ` Best frame contained ${faceCount} detected ${
+            faceCount === 1
+              ? "face"
+              : "faces"
+          }.`
+        : "";
+
+
+    setThumbnailRepairStatus(
+      uid,
+      `Thumbnail uploaded successfully.${faceDescription} Verifying…`,
+      "success"
+    );
+
+
+    /* ===============================================================
+       STEP 5 — VERIFY AGAINST BACKBLAZE
+    =============================================================== */
+
+    const refreshed =
+      await loadThumbnailHealth();
+
+
+    currentThumbnailData =
+      refreshed;
+
+
+    /*
+     * Verify that the repaired UID genuinely disappeared from the
+     * Missing collection.
+     */
+    const stillMissing =
+      refreshed
+        ?.missing
+        ?.rows
+        ?.some(
+          row =>
+            String(
+              row.uid
+            ) ===
+            String(
+              uid
+            )
+        );
+
+
+    if (
+      stillMissing
+    ) {
+
+      throw new Error(
+        "The thumbnail upload completed, but Backblaze verification still reports the thumbnail as missing."
+      );
+    }
+
+
+    renderThumbnailHealth(
+      refreshed
+    );
+
+
+    /*
+     * Re-open Missing after rendering the new snapshot.
+     *
+     * The successfully repaired UID will no longer appear in the list.
+     */
+    openThumbnailResult(
+      "missing"
+    );
+
+
+    setStatus(
+      `Thumbnail repaired for UID ${item.uid}.`,
+      "success"
+    );
+
+
+  } catch (
+    error
+  ) {
+
+    console.error(
+      "THUMBNAIL REPAIR FAILED:",
+      error
+    );
+
+
+    setThumbnailRepairStatus(
+      uid,
+      error?.message ||
+      "Thumbnail repair failed.",
+      "error"
+    );
+
+
+    if (
+      button
+    ) {
+
+      button.classList.remove(
+        "is-working",
+        "is-success"
+      );
+
+
+      button.classList.add(
+        "is-error"
+      );
+
+
+      button.innerHTML =
+        `
+          <i data-lucide="rotate-ccw"></i>
+          <span>Retry Repair</span>
+        `;
+
+
+      button.disabled =
+        false;
+    }
+
+
+    window.lucide?.createIcons();
+
+
+    setStatus(
+      `Could not repair thumbnail for UID ${uid}: ${
+        error?.message ||
+        "Unknown error"
+      }`,
+      "error"
+    );
+
+
+  } finally {
+
+    /*
+     * Always clear candidate state after the repair attempt.
+     */
+    resetThumbnailState();
+
+
+    repairingThumbnailUid =
+      null;
+
+
+    /*
+     * A successful repair normally rerenders the Missing panel and
+     * removes this UID. If the repair failed, restore the remaining
+     * repair buttons.
+     */
+    setAllThumbnailRepairButtonsDisabled(
+      false
+    );
+  }
+}
+
+
+/**
+ * Requests a temporary signed URL for an existing catalogue MP4.
+ *
+ * This uses the same zulu-sign-media contract as the main PornFlix
+ * library:
+ *
+ *     { path: "/Filename.mp4" }
+ *
+ * and expects:
+ *
+ *     { url: "https://media....?expires=...&signature=..." }
+ */
+async function getAdminSignedVideoUrl(
+  originalUrl
+) {
+
+  if (
+    !originalUrl
+  ) {
+
+    throw new Error(
+      "No catalogue video URL was supplied."
+    );
+  }
+
+
+  let path;
+
+
+  try {
+
+    const parsedUrl =
+      new URL(
+        originalUrl
+      );
+
+
+    path =
+      parsedUrl.pathname;
+
+
+  } catch {
+
+    path =
+      originalUrl.startsWith(
+        "/"
+      )
+        ? originalUrl
+        : `/${originalUrl}`;
+  }
+
+
+  const {
+    data,
+    error
+  } =
+    await supabase.functions.invoke(
+      "zulu-sign-media",
+      {
+        body: {
+          path
+        }
+      }
+    );
+
+
+  if (
+    error
+  ) {
+
+    throw new Error(
+      `Could not sign video URL: ${
+        error.message ||
+        "Edge Function request failed"
+      }`
+    );
+  }
+
+
+  if (
+    !data?.url
+  ) {
+
+    throw new Error(
+      data?.error ||
+      "Signing service did not return a video URL."
+    );
+  }
+
+
+  return data.url;
+}
+
+
+/**
+ * Updates the working label of one thumbnail repair button.
+ */
+function setThumbnailRepairButtonText(
+  button,
+  text
+) {
+
+  if (
+    !button
+  ) {
+
+    return;
+  }
+
+
+  button.innerHTML =
+    `
+      <i data-lucide="loader-circle"></i>
+
+      <span>
+        ${escapeHtml(
+          text
+        )}
+      </span>
+    `;
+
+
+  window.lucide?.createIcons();
+}
+
+
+/**
+ * Displays progress, success or failure information beneath one
+ * missing-thumbnail row.
+ */
+function setThumbnailRepairStatus(
+  uid,
+  message,
+  state =
+    "working"
+) {
+
+  const element =
+    document.querySelector(
+      `[data-thumbnail-repair-status="${cssEscapeValue(
+        uid
+      )}"]`
+    );
+
+
+  if (
+    !element
+  ) {
+
+    return;
+  }
+
+
+  element.hidden =
+    false;
+
+
+  element.textContent =
+    message;
+
+
+  element.classList.remove(
+    "is-working",
+    "is-success",
+    "is-error"
+  );
+
+
+  element.classList.add(
+    `is-${state}`
+  );
+}
+
+
+/**
+ * Prevents two repairs from using thumbnails.js shared candidate state
+ * simultaneously.
+ */
+function setAllThumbnailRepairButtonsDisabled(
+  disabled
+) {
+
+  document
+    .querySelectorAll(
+      ".admin-thumbnail-repair-button"
+    )
+    .forEach(
+      button => {
+
+        const uid =
+          button.dataset
+            .thumbnailRepairUid;
+
+
+        const item =
+          currentThumbnailData
+            ?.missing
+            ?.rows
+            ?.find(
+              row =>
+                String(
+                  row.uid
+                ) ===
+                String(
+                  uid
+                )
+            );
+
+
+        /*
+         * A row with no catalogue URL must remain disabled even after
+         * another repair finishes.
+         */
+        button.disabled =
+          disabled ||
+          !item?.url;
+      }
+    );
+}
+
+
+/**
+ * Escapes a value before using it inside a CSS attribute selector.
+ */
+function cssEscapeValue(
+  value
+) {
+
+  const stringValue =
+    String(
+      value
+    );
+
+
+  if (
+    window.CSS?.escape
+  ) {
+
+    return window.CSS.escape(
+      stringValue
+    );
+  }
+
+
+  return stringValue.replace(
+    /["\\]/g,
+    "\\$&"
+  );
+}
+
+
+/* =====================================================================
+   16. CATALOGUE INTEGRITY
+===================================================================== */
+
+/**
+ * Stores and renders the latest Catalogue Integrity snapshot returned by
+ * zulu-admin-dashboard.
  */
 function renderCatalogueIntegrity(
   integrity
 ) {
 
   currentIntegrityData =
-    integrity || {};
+    integrity ||
+    null;
 
 
-  const mappings =
-    [
-      {
-        key:
-          "duplicate_urls",
-
-        element:
-          integrityDuplicateUrls,
-
-        severity:
-          "problem"
-      },
-
-      {
-        key:
-          "duplicate_fingerprints",
-
-        element:
-          integrityDuplicateFingerprints,
-
-        severity:
-          "problem"
-      },
-
-      {
-        key:
-          "videos_without_actors",
-
-        element:
-          integrityNoActors,
-
-        severity:
-          "problem"
-      },
-
-      {
-        key:
-          "old_media_urls",
-
-        element:
-          integrityOldUrls,
-
-        severity:
-          "problem"
-      },
-
-      {
-        key:
-          "missing_filesize",
-
-        element:
-          integrityMissingFilesize,
-
-        severity:
-          "warning"
-      },
-
-      {
-        key:
-          "missing_duration",
-
-        element:
-          integrityMissingDuration,
-
-        severity:
-          "warning"
-      },
-
-      {
-        key:
-          "missing_resolution",
-
-        element:
-          integrityMissingResolution,
-
-        severity:
-          "warning"
-      },
-
-      {
-        key:
-          "missing_fingerprint",
-
-        element:
-          integrityMissingFingerprint,
-
-        severity:
-          "warning"
-      }
-    ];
-
-
-  for (
-    const mapping of mappings
+  if (
+    !integrity
   ) {
 
-    const result =
-      integrity?.[
-        mapping.key
-      ] || {
-        count:
-          0,
-
-        rows:
-          []
-      };
-
-
-    setNumber(
-      mapping.element,
-      result.count
+    renderCatalogueIntegrityError(
+      new Error(
+        "Catalogue Integrity data is unavailable."
+      )
     );
 
 
-    const card =
-      document.querySelector(
-        `[data-integrity-key="${mapping.key}"]`
-      );
-
-
-    if (
-      !card
-    ) {
-
-      continue;
-    }
-
-
-    /*
-     * Remove any previous health state before applying the current
-     * snapshot.
-     */
-    card.classList.remove(
-      "is-healthy",
-      "is-warning",
-      "is-problem"
-    );
-
-
-    if (
-      Number(
-        result.count ||
-        0
-      ) === 0
-    ) {
-
-      card.classList.add(
-        "is-healthy"
-      );
-
-
-    } else {
-
-      card.classList.add(
-        `is-${mapping.severity}`
-      );
-    }
+    return;
   }
 
 
+  const duplicateUrls =
+    getIntegrityCount(
+      integrity,
+      "duplicate_urls"
+    );
+
+
+  const duplicateFingerprints =
+    getIntegrityCount(
+      integrity,
+      "duplicate_fingerprints"
+    );
+
+
+  const noActors =
+    getIntegrityCount(
+      integrity,
+      "videos_without_actors"
+    );
+
+
+  const oldUrls =
+    getIntegrityCount(
+      integrity,
+      "old_media_urls"
+    );
+
+
+  const missingFilesize =
+    getIntegrityCount(
+      integrity,
+      "missing_filesize"
+    );
+
+
+  const missingDuration =
+    getIntegrityCount(
+      integrity,
+      "missing_duration"
+    );
+
+
+  const missingResolution =
+    getIntegrityCount(
+      integrity,
+      "missing_resolution"
+    );
+
+
+  const missingFingerprint =
+    getIntegrityCount(
+      integrity,
+      "missing_fingerprint"
+    );
+
+
+  setNumber(
+    integrityDuplicateUrls,
+    duplicateUrls
+  );
+
+
+  setNumber(
+    integrityDuplicateFingerprints,
+    duplicateFingerprints
+  );
+
+
+  setNumber(
+    integrityNoActors,
+    noActors
+  );
+
+
+  setNumber(
+    integrityOldUrls,
+    oldUrls
+  );
+
+
+  setNumber(
+    integrityMissingFilesize,
+    missingFilesize
+  );
+
+
+  setNumber(
+    integrityMissingDuration,
+    missingDuration
+  );
+
+
+  setNumber(
+    integrityMissingResolution,
+    missingResolution
+  );
+
+
+  setNumber(
+    integrityMissingFingerprint,
+    missingFingerprint
+  );
+
+
   /*
-   * Refreshing the dashboard invalidates any currently displayed
-   * integrity details.
+   * Duplicate URLs are a strong integrity problem.
    */
+  setIntegrityCardState(
+    "duplicate_urls",
+    duplicateUrls === 0
+      ? "healthy"
+      : "problem"
+  );
+
+
+  /*
+   * Duplicate fingerprints need human review rather than automatic
+   * deletion because two legitimate catalogue records can potentially
+   * reference identical media.
+   */
+  setIntegrityCardState(
+    "duplicate_fingerprints",
+    duplicateFingerprints === 0
+      ? "healthy"
+      : "warning"
+  );
+
+
+  setIntegrityCardState(
+    "videos_without_actors",
+    noActors === 0
+      ? "healthy"
+      : "warning"
+  );
+
+
+  setIntegrityCardState(
+    "old_media_urls",
+    oldUrls === 0
+      ? "healthy"
+      : "problem"
+  );
+
+
+  setIntegrityCardState(
+    "missing_filesize",
+    missingFilesize === 0
+      ? "healthy"
+      : "warning"
+  );
+
+
+  setIntegrityCardState(
+    "missing_duration",
+    missingDuration === 0
+      ? "healthy"
+      : "warning"
+  );
+
+
+  setIntegrityCardState(
+    "missing_resolution",
+    missingResolution === 0
+      ? "healthy"
+      : "warning"
+  );
+
+
+  setIntegrityCardState(
+    "missing_fingerprint",
+    missingFingerprint === 0
+      ? "healthy"
+      : "warning"
+  );
+
+
   closeIntegrityResults();
 
 
@@ -3253,12 +4151,210 @@ function renderCatalogueIntegrity(
 }
 
 
+/**
+ * Returns a count from a Catalogue Integrity section.
+ *
+ * zulu_catalogue_integrity() sections are expected to use:
+ *
+ *     {
+ *       count: 7,
+ *       rows: [...]
+ *     }
+ *
+ * The fallback also accepts an array directly.
+ */
+function getIntegrityCount(
+  integrity,
+  key
+) {
+
+  const section =
+    integrity?.[
+      key
+    ];
+
+
+  if (
+    Array.isArray(
+      section
+    )
+  ) {
+
+    return section.length;
+  }
+
+
+  const count =
+    Number(
+      section?.count
+    );
+
+
+  return Number.isFinite(
+    count
+  )
+    ? count
+    : 0;
+}
+
+
+/**
+ * Returns detailed rows from one Catalogue Integrity section.
+ */
+function getIntegrityRows(
+  integrity,
+  key
+) {
+
+  const section =
+    integrity?.[
+      key
+    ];
+
+
+  if (
+    Array.isArray(
+      section
+    )
+  ) {
+
+    return section;
+  }
+
+
+  if (
+    Array.isArray(
+      section?.rows
+    )
+  ) {
+
+    return section.rows;
+  }
+
+
+  return [];
+}
+
+
+/**
+ * Applies the state class to a Catalogue Integrity card.
+ */
+function setIntegrityCardState(
+  key,
+  state
+) {
+
+  const card =
+    document.querySelector(
+      `[data-integrity-key="${key}"]`
+    );
+
+
+  if (
+    !card
+  ) {
+
+    return;
+  }
+
+
+  card.classList.remove(
+    "is-loading",
+    "is-error",
+    "is-healthy",
+    "is-warning",
+    "is-problem",
+    "is-selected"
+  );
+
+
+  card.classList.add(
+    `is-${state}`
+  );
+}
+
+
+/**
+ * Displays a Catalogue Integrity failure.
+ */
+function renderCatalogueIntegrityError(
+  error
+) {
+
+  currentIntegrityData =
+    null;
+
+
+  const values = [
+    integrityDuplicateUrls,
+    integrityDuplicateFingerprints,
+    integrityNoActors,
+    integrityOldUrls,
+    integrityMissingFilesize,
+    integrityMissingDuration,
+    integrityMissingResolution,
+    integrityMissingFingerprint
+  ];
+
+
+  values.forEach(
+    element =>
+      setText(
+        element,
+        "—"
+      )
+  );
+
+
+  document
+    .querySelectorAll(
+      ".admin-integrity-card"
+    )
+    .forEach(
+      card => {
+
+        card.classList.remove(
+          "is-loading",
+          "is-healthy",
+          "is-warning",
+          "is-problem",
+          "is-selected"
+        );
+
+
+        card.classList.add(
+          "is-error"
+        );
+      }
+    );
+
+
+  if (
+    integrityResultsBody
+  ) {
+
+    integrityResultsBody.innerHTML =
+      `
+        <div class="admin-integrity-empty">
+          ${escapeHtml(
+            error?.message ||
+            "Catalogue Integrity is unavailable."
+          )}
+        </div>
+      `;
+  }
+
+
+  closeIntegrityResults();
+}
+
+
 /* =====================================================================
-   15. CATALOGUE INTEGRITY INTERACTION
+   17. CATALOGUE INTEGRITY INTERACTION
 ===================================================================== */
 
 /**
- * Opens the detailed result belonging to a Catalogue Integrity card.
+ * Opens one Catalogue Integrity diagnostic result.
  */
 function openIntegrityResult(
   key
@@ -3273,35 +4369,54 @@ function openIntegrityResult(
   }
 
 
-  const result =
-    currentIntegrityData[
+  const rows =
+    getIntegrityRows(
+      currentIntegrityData,
       key
-    ];
+    );
 
 
-  if (
-    !result
-  ) {
-
-    return;
-  }
-
-
-  /*
-   * Highlight only the currently selected card.
-   */
   document
     .querySelectorAll(
       ".admin-integrity-card"
     )
     .forEach(
-      card =>
+      card => {
+
         card.classList.toggle(
           "is-selected",
           card.dataset.integrityKey ===
             key
-        )
+        );
+      }
     );
+
+
+  const titles = {
+    duplicate_urls:
+      "Duplicate URLs",
+
+    duplicate_fingerprints:
+      "Duplicate Fingerprints",
+
+    videos_without_actors:
+      "Videos Without Actors",
+
+    old_media_urls:
+      "Old Media URLs",
+
+    missing_filesize:
+      "Missing Filesize",
+
+    missing_duration:
+      "Missing Duration",
+
+    missing_resolution:
+      "Missing Resolution",
+
+    missing_fingerprint:
+      "Missing Fingerprint"
+  };
 
 
   if (
@@ -3309,9 +4424,8 @@ function openIntegrityResult(
   ) {
 
     integrityResultsTitle.textContent =
-      getIntegrityResultTitle(
-        key
-      );
+      titles[key] ||
+      "Catalogue Integrity";
   }
 
 
@@ -3322,8 +4436,7 @@ function openIntegrityResult(
     integrityResultsBody.innerHTML =
       renderIntegrityRows(
         key,
-        result.rows ||
-        []
+        rows
       );
   }
 
@@ -3337,15 +4450,12 @@ function openIntegrityResult(
   }
 
 
-  /*
-   * Re-render Lucide in case any result renderer later adds icons.
-   */
   window.lucide?.createIcons();
 }
 
 
 /**
- * Closes the Catalogue Integrity diagnostic panel and clears selection.
+ * Closes Catalogue Integrity diagnostics.
  */
 function closeIntegrityResults() {
 
@@ -3363,61 +4473,18 @@ function closeIntegrityResults() {
       ".admin-integrity-card"
     )
     .forEach(
-      card =>
+      card => {
+
         card.classList.remove(
           "is-selected"
-        )
+        );
+      }
     );
 }
 
 
 /**
- * Returns the human-readable title for an integrity result.
- */
-function getIntegrityResultTitle(
-  key
-) {
-
-  const titles =
-  {
-    duplicate_urls:
-      "Duplicate URLs",
-
-    duplicate_fingerprints:
-      "Duplicate Files",
-
-    videos_without_actors:
-      "Videos Without Actors",
-
-    old_media_urls:
-      "Non-current Media URLs",
-
-    missing_filesize:
-      "Missing Filesize",
-
-    missing_duration:
-      "Missing Duration",
-
-    missing_resolution:
-      "Missing Resolution",
-
-    missing_fingerprint:
-      "Missing Fingerprint"
-  };
-
-
-  return titles[
-    key
-  ] || "Diagnostic Results";
-}
-
-
-/* =====================================================================
-   16. CATALOGUE INTEGRITY RESULT RENDERING
-===================================================================== */
-
-/**
- * Converts the rows belonging to an integrity check into HTML.
+ * Converts Catalogue Integrity rows to HTML.
  */
 function renderIntegrityRows(
   key,
@@ -3439,259 +4506,197 @@ function renderIntegrityRows(
   }
 
 
+  return rows
+    .map(
+      row =>
+        renderIntegrityRow(
+          key,
+          row
+        )
+    )
+    .join(
+      ""
+    );
+}
+
+
+/**
+ * Renders one Catalogue Integrity diagnostic record.
+ *
+ * The RPC can return ordinary video rows as well as duplicate groups,
+ * so this renderer intentionally supports both structures.
+ */
+function renderIntegrityRow(
+  key,
+  row
+) {
+
+  /* -------------------------------------------------------------------
+     DUPLICATE GROUPS
+  ------------------------------------------------------------------- */
+
   if (
     key ===
-      "duplicate_urls"
-  ) {
-
-    return rows
-      .map(
-        renderDuplicateUrlGroup
-      )
-      .join(
-        ""
-      );
-  }
-
-
-  if (
+      "duplicate_urls" ||
     key ===
       "duplicate_fingerprints"
   ) {
 
-    return rows
-      .map(
-        renderDuplicateFingerprintGroup
-      )
-      .join(
-        ""
-      );
-  }
+    const videos =
+      row.videos ||
+      row.rows ||
+      row.items ||
+      [];
 
 
-  if (
-    key ===
-      "videos_without_actors"
-  ) {
-
-    return rows
-      .map(
-        item =>
-          renderSimpleIntegrityVideo(
-            item,
-            "No actor records"
+    const groupValue =
+      key ===
+        "duplicate_urls"
+        ? (
+            row.url ||
+            row.value ||
+            row.duplicate_value ||
+            ""
           )
-      )
-      .join(
-        ""
-      );
-  }
+        : (
+            row.fingerprint ||
+            row.value ||
+            row.duplicate_value ||
+            ""
+          );
 
 
-  if (
-    key ===
-      "old_media_urls"
-  ) {
+    return `
+      <div class="admin-integrity-result">
 
-    return rows
-      .map(
-        item =>
-          renderSimpleIntegrityVideo(
-            item,
-            item.url ||
-            "Non-current media URL"
-          )
-      )
-      .join(
-        ""
-      );
-  }
+        <div class="admin-integrity-result-title">
 
+          <span class="admin-integrity-result-film">
+            ${
+              key ===
+                "duplicate_urls"
+                ? "Duplicate URL group"
+                : "Duplicate fingerprint group"
+            }
+          </span>
 
-  if (
-    key ===
-      "missing_filesize"
-  ) {
+        </div>
 
-    return rows
-      .map(
-        item =>
-          renderSimpleIntegrityVideo(
-            item,
-            "Filesize is missing"
-          )
-      )
-      .join(
-        ""
-      );
-  }
-
-
-  if (
-    key ===
-      "missing_duration"
-  ) {
-
-    return rows
-      .map(
-        item =>
-          renderSimpleIntegrityVideo(
-            item,
-            "Duration is missing"
-          )
-      )
-      .join(
-        ""
-      );
-  }
-
-
-  if (
-    key ===
-      "missing_resolution"
-  ) {
-
-    return rows
-      .map(
-        item =>
-          renderSimpleIntegrityVideo(
-            item,
-            "Resolution is missing"
-          )
-      )
-      .join(
-        ""
-      );
-  }
-
-
-  if (
-    key ===
-      "missing_fingerprint"
-  ) {
-
-    return rows
-      .map(
-        item =>
-          renderSimpleIntegrityVideo(
-            item,
-            "Fingerprint is missing"
-          )
-      )
-      .join(
-        ""
-      );
-  }
-
-
-  return "";
-}
-
-
-/**
- * Renders a duplicate URL group.
- */
-function renderDuplicateUrlGroup(
-  group
-) {
-
-  const videos =
-    Array.isArray(
-      group.videos
-    )
-      ? group.videos
-      : [];
-
-
-  return `
-    <div class="admin-integrity-result">
-
-      <div class="admin-integrity-result-title">
-        ${escapeHtml(
-          group.url ||
-          "Unknown URL"
-        )}
-      </div>
-
-      <div class="admin-integrity-result-meta">
-        <strong>${escapeHtml(
-          group.count ||
-          videos.length
-        )}</strong>
-        catalogue records use this URL.
-      </div>
-
-      <div class="admin-integrity-video-list">
 
         ${
-          videos
-            .map(
-              video =>
-                renderIntegrityVideoChip(
-                  video
-                )
-            )
-            .join(
-              ""
-            )
+          groupValue
+            ? `
+                <div class="admin-integrity-result-meta">
+
+                  <div>
+
+                    <strong>
+                      ${
+                        key ===
+                          "duplicate_urls"
+                          ? "URL:"
+                          : "Fingerprint:"
+                      }
+                    </strong>
+
+                    <span class="admin-integrity-file">
+                      ${escapeHtml(
+                        groupValue
+                      )}
+                    </span>
+
+                  </div>
+
+                </div>
+              `
+            : ""
+        }
+
+
+        ${
+          Array.isArray(
+            videos
+          ) &&
+          videos.length
+            ? `
+                <div class="admin-integrity-duplicates">
+
+                  ${videos
+                    .map(
+                      video => `
+                        <div class="admin-integrity-duplicate-item">
+
+                          <strong>
+                            UID ${escapeHtml(
+                              video.uid ??
+                              "—"
+                            )}
+                          </strong>
+
+                          <span>
+                            ${escapeHtml(
+                              video.film ||
+                              video.title ||
+                              "Untitled"
+                            )}
+                          </span>
+
+                        </div>
+                      `
+                    )
+                    .join(
+                      ""
+                    )}
+
+                </div>
+              `
+            : renderGenericIntegrityMeta(
+                row
+              )
         }
 
       </div>
-
-    </div>
-  `;
-}
+    `;
+  }
 
 
-/**
- * Renders a duplicate fingerprint group.
- */
-function renderDuplicateFingerprintGroup(
-  group
-) {
-
-  const videos =
-    Array.isArray(
-      group.videos
-    )
-      ? group.videos
-      : [];
-
+  /* -------------------------------------------------------------------
+     ORDINARY VIDEO RECORD
+  ------------------------------------------------------------------- */
 
   return `
     <div class="admin-integrity-result">
 
       <div class="admin-integrity-result-title">
-        ${escapeHtml(
-          group.count ||
-          videos.length
-        )}
-        records share one file fingerprint
-      </div>
-
-      <div class="admin-integrity-fingerprint">
-        ${escapeHtml(
-          group.fingerprint ||
-          "No fingerprint returned"
-        )}
-      </div>
-
-      <div class="admin-integrity-video-list">
 
         ${
-          videos
-            .map(
-              video =>
-                renderIntegrityVideoChip(
-                  video
-                )
-            )
-            .join(
-              ""
-            )
+          row.uid !==
+            undefined &&
+          row.uid !==
+            null
+            ? `
+                <span class="admin-integrity-result-uid">
+                  UID ${escapeHtml(
+                    row.uid
+                  )}
+                </span>
+              `
+            : ""
         }
 
+        <span class="admin-integrity-result-film">
+          ${escapeHtml(
+            row.film ||
+            row.title ||
+            "Untitled"
+          )}
+        </span>
+
       </div>
+
+      ${renderGenericIntegrityMeta(
+        row
+      )}
 
     </div>
   `;
@@ -3699,76 +4704,154 @@ function renderDuplicateFingerprintGroup(
 
 
 /**
- * Renders one simple integrity issue.
+ * Produces useful metadata for a Catalogue Integrity row without
+ * assuming one exact RPC row shape.
  */
-function renderSimpleIntegrityVideo(
-  item,
-  detail
+function renderGenericIntegrityMeta(
+  row
 ) {
 
+  const fields = [];
+
+
+  if (
+    row.url
+  ) {
+
+    fields.push(
+      [
+        "URL",
+        row.url
+      ]
+    );
+  }
+
+
+  if (
+    row.fingerprint
+  ) {
+
+    fields.push(
+      [
+        "Fingerprint",
+        row.fingerprint
+      ]
+    );
+  }
+
+
+  if (
+    row.filesize !==
+      undefined &&
+    row.filesize !==
+      null
+  ) {
+
+    fields.push(
+      [
+        "Filesize",
+        row.filesize
+      ]
+    );
+  }
+
+
+  if (
+    row.duration !==
+      undefined &&
+    row.duration !==
+      null
+  ) {
+
+    fields.push(
+      [
+        "Duration",
+        row.duration
+      ]
+    );
+  }
+
+
+  if (
+    row.resolution
+  ) {
+
+    fields.push(
+      [
+        "Resolution",
+        row.resolution
+      ]
+    );
+  }
+
+
+  if (
+    row.reason
+  ) {
+
+    fields.push(
+      [
+        "Reason",
+        row.reason
+      ]
+    );
+  }
+
+
+  if (
+    !fields.length
+  ) {
+
+    return "";
+  }
+
+
   return `
-    <div class="admin-integrity-result">
+    <div class="admin-integrity-result-meta">
 
-      <div class="admin-integrity-result-title">
+      ${fields
+        .map(
+          (
+            [
+              label,
+              value
+            ]
+          ) => `
+            <div>
 
-        UID ${escapeHtml(
-          item.uid
+              <strong>
+                ${escapeHtml(
+                  label
+                )}:
+              </strong>
+
+              <span class="admin-integrity-file">
+                ${escapeHtml(
+                  value
+                )}
+              </span>
+
+            </div>
+          `
+        )
+        .join(
+          ""
         )}
-        ·
-        ${escapeHtml(
-          item.film ||
-          "Untitled"
-        )}
-
-      </div>
-
-      <div class="admin-integrity-result-meta">
-        ${escapeHtml(
-          detail
-        )}
-      </div>
-
-    </div>
-  `;
-}
-
-
-/**
- * Renders a compact video record inside a grouped integrity issue.
- */
-function renderIntegrityVideoChip(
-  video
-) {
-
-  return `
-    <div class="admin-integrity-video">
-
-      <span class="admin-integrity-video-uid">
-        UID ${escapeHtml(
-          video.uid
-        )}
-      </span>
-
-      <span class="admin-integrity-video-film">
-        ${escapeHtml(
-          video.film ||
-          "Untitled"
-        )}
-      </span>
 
     </div>
   `;
 }
 
 /* =====================================================================
-   17. RECENT INGESTIONS TABLE
+   18. RECENT INGESTIONS
 ===================================================================== */
 
 /**
- * Renders the most recent ingestion records.
+ * Renders the recent ingestion journal returned by
+ * zulu-admin-dashboard.
  */
 function renderRecentIngestions(
-  rows
+  ingestions
 ) {
 
   if (
@@ -3783,16 +4866,11 @@ function renderRecentIngestions(
     "";
 
 
-  const recentRows =
-    Array.isArray(
-      rows
-    )
-      ? rows
-      : [];
-
-
   if (
-    !recentRows.length
+    !Array.isArray(
+      ingestions
+    ) ||
+    !ingestions.length
   ) {
 
     adminIngestionsBody.innerHTML =
@@ -3803,7 +4881,7 @@ function renderRecentIngestions(
             colspan="7"
             class="admin-table-empty"
           >
-            No ingestion records yet.
+            No ingestion records found.
           </td>
 
         </tr>
@@ -3815,7 +4893,7 @@ function renderRecentIngestions(
 
 
   for (
-    const ingestion of recentRows
+    const ingestion of ingestions
   ) {
 
     const row =
@@ -3896,7 +4974,9 @@ function createIngestionRow(
       <td class="admin-film-cell">
 
         <strong>
-          ${escapeHtml(displayFilm)}
+          ${escapeHtml(
+            displayFilm
+          )}
         </strong>
 
         <span>
@@ -3982,7 +5062,8 @@ function createIngestionRow(
 
 
 /**
- * Creates the hidden diagnostics row belonging to a summary row.
+ * Creates the hidden diagnostics row belonging to an ingestion summary
+ * row.
  */
 function createIngestionDetailRow(
   ingestion
@@ -4072,6 +5153,13 @@ function createIngestionDetailRow(
           )}
 
           ${detailItem(
+            "Updated",
+            formatDateTime(
+              ingestion.updated_at
+            )
+          )}
+
+          ${detailItem(
             "Video uploaded",
             formatDateTime(
               ingestion.video_uploaded_at
@@ -4083,6 +5171,11 @@ function createIngestionDetailRow(
             formatDateTime(
               ingestion.catalogued_at
             )
+          )}
+
+          ${detailItem(
+            "Thumbnail status",
+            ingestion.thumbnail_status
           )}
 
           ${detailItem(
@@ -4110,7 +5203,7 @@ function createIngestionDetailRow(
 
 
 /* =====================================================================
-   18. INGESTION EXPAND / COLLAPSE
+   19. INGESTION EXPAND / COLLAPSE
 ===================================================================== */
 
 /**
@@ -4163,7 +5256,7 @@ function toggleIngestionDetails(
 
 
 /* =====================================================================
-   19. INGESTION COMPONENT STATES
+   20. INGESTION COMPONENT STATES
 ===================================================================== */
 
 /**
@@ -4180,8 +5273,8 @@ function getVideoState(
 
 
   /*
-   * A Backblaze file ID or recorded upload timestamp is the strongest
-   * evidence that the video upload completed.
+   * A Backblaze file ID, recorded upload timestamp or public URL is
+   * strong evidence that the MP4 upload completed.
    */
   if (
     ingestion.backblaze_file_id ||
@@ -4223,8 +5316,12 @@ function getVideoState(
   if (
     status ===
       "failed" &&
-    ingestion.failed_stage ===
-      "video-upload"
+    (
+      ingestion.failed_stage ===
+        "video-upload" ||
+      ingestion.failed_stage ===
+        "upload"
+    )
   ) {
 
     return {
@@ -4281,7 +5378,7 @@ function getVideoState(
       "Pending",
 
     symbol:
-      "○",
+      "—",
 
     className:
       "muted"
@@ -4290,8 +5387,7 @@ function getVideoState(
 
 
 /**
- * Determines whether the video was successfully catalogued in
- * zulu_videos.
+ * Determines whether an ingestion reached the zulu_videos catalogue.
  */
 function getCatalogueState(
   ingestion
@@ -4303,10 +5399,6 @@ function getCatalogueState(
     );
 
 
-  /*
-   * A video UID or catalogued timestamp is definitive evidence that the
-   * catalogue insert completed.
-   */
   if (
     ingestion.video_uid !==
       null &&
@@ -4316,7 +5408,7 @@ function getCatalogueState(
 
     return {
       label:
-        "Catalogued",
+        `UID ${ingestion.video_uid}`,
 
       symbol:
         "✓",
@@ -4358,6 +5450,24 @@ function getCatalogueState(
 
       className:
         "active"
+    };
+  }
+
+
+  if (
+    status ===
+      "catalogued"
+  ) {
+
+    return {
+      label:
+        "Catalogued",
+
+      symbol:
+        "✓",
+
+      className:
+        "good"
     };
   }
 
@@ -4427,7 +5537,7 @@ function getCatalogueState(
       "Pending",
 
     symbol:
-      "○",
+      "—",
 
     className:
       "muted"
@@ -4436,7 +5546,14 @@ function getCatalogueState(
 
 
 /**
- * Determines the state of the thumbnail for one ingestion.
+ * Determines the thumbnail outcome recorded by the ingestion journal.
+ *
+ * IMPORTANT:
+ *
+ * This describes what happened during a particular ingestion.
+ *
+ * It is deliberately separate from Thumbnail Health, which checks
+ * whether images/{uid}.png ACTUALLY exists in Backblaze now.
  */
 function getThumbnailState(
   ingestion
@@ -4448,22 +5565,18 @@ function getThumbnailState(
     );
 
 
-  const thumbnailStatus =
+  const thumbnailStatusValue =
     normaliseStatus(
       ingestion.thumbnail_status
     );
 
 
-  /*
-   * A thumbnail upload timestamp or completed thumbnail status is
-   * definitive.
-   */
   if (
     ingestion.thumbnail_uploaded_at ||
-    thumbnailStatus ===
-      "complete" ||
-    thumbnailStatus ===
-      "uploaded"
+    thumbnailStatusValue ===
+      "uploaded" ||
+    thumbnailStatusValue ===
+      "complete"
   ) {
 
     return {
@@ -4479,9 +5592,6 @@ function getThumbnailState(
   }
 
 
-  /*
-   * The ingestion can deliberately complete without a thumbnail.
-   */
   if (
     status ===
       "complete_without_thumbnail"
@@ -4503,7 +5613,7 @@ function getThumbnailState(
   if (
     status ===
       "thumbnail_uploading" ||
-    thumbnailStatus ===
+    thumbnailStatusValue ===
       "uploading"
   ) {
 
@@ -4527,7 +5637,9 @@ function getThumbnailState(
       ingestion.failed_stage ===
         "thumbnail-upload" ||
       ingestion.failed_stage ===
-        "thumbnail_upload"
+        "thumbnail-generation" ||
+      ingestion.failed_stage ===
+        "thumbnail"
     )
   ) {
 
@@ -4585,7 +5697,7 @@ function getThumbnailState(
       "Pending",
 
     symbol:
-      "○",
+      "—",
 
     className:
       "muted"
@@ -4594,11 +5706,11 @@ function getThumbnailState(
 
 
 /* =====================================================================
-   20. INGESTION STATUS BADGES
+   21. STATUS BADGES
 ===================================================================== */
 
 /**
- * Converts the ingestion journal status into a styled badge.
+ * Renders the primary ingestion status badge.
  */
 function renderStatusBadge(
   status
@@ -4610,20 +5722,23 @@ function renderStatusBadge(
     );
 
 
-  const configuration =
-    getStatusConfiguration(
+  const config =
+    getStatusConfig(
       normalised
     );
 
 
   return `
     <span
-      class="admin-status-badge ${escapeHtml(
-        configuration.className
-      )}"
+      class="
+        admin-status-badge
+        ${escapeHtml(
+          config.className
+        )}
+      "
     >
       ${escapeHtml(
-        configuration.label
+        config.label
       )}
     </span>
   `;
@@ -4631,154 +5746,200 @@ function renderStatusBadge(
 
 
 /**
- * Returns display configuration for one ingestion status.
+ * Maps an ingestion state to its human-readable label and CSS state.
+ *
+ * These class names correspond to the corrected Stage 9 Admin CSS:
+ *
+ *     .admin-status-badge.complete
+ *     .admin-status-badge.warning
+ *     .admin-status-badge.failed
+ *     .admin-status-badge.cancelled
+ *     .admin-status-badge.duplicate
+ *     .admin-status-badge.pending
+ *     .admin-status-badge.active
+ *     .admin-status-badge.ready
  */
-function getStatusConfiguration(
+function getStatusConfig(
   status
 ) {
 
-  const statuses =
-  {
-    pending:
-      {
-        label:
-          "Pending",
+  switch (
+    status
+  ) {
 
-        className:
-          "pending"
-      },
+    case "complete":
 
-    analysing:
-      {
-        label:
-          "Analysing",
-
-        className:
-          "active"
-      },
-
-    ready:
-      {
-        label:
-          "Ready",
-
-        className:
-          "ready"
-      },
-
-    uploading:
-      {
-        label:
-          "Uploading",
-
-        className:
-          "active"
-      },
-
-    video_uploaded:
-      {
-        label:
-          "Video Uploaded",
-
-        className:
-          "active"
-      },
-
-    cataloguing:
-      {
-        label:
-          "Cataloguing",
-
-        className:
-          "active"
-      },
-
-    catalogued:
-      {
-        label:
-          "Catalogued",
-
-        className:
-          "active"
-      },
-
-    thumbnail_uploading:
-      {
-        label:
-          "Thumbnail Uploading",
-
-        className:
-          "active"
-      },
-
-    complete:
-      {
+      return {
         label:
           "Complete",
 
         className:
           "complete"
-      },
+      };
 
-    complete_without_thumbnail:
-      {
+
+    case "complete_without_thumbnail":
+
+      return {
         label:
-          "No Thumbnail",
+          "Without thumbnail",
 
         className:
           "warning"
-      },
+      };
 
-    failed:
-      {
+
+    case "failed":
+
+      return {
         label:
           "Failed",
 
         className:
           "failed"
-      },
+      };
 
-    cancelled:
-      {
+
+    case "cancelled":
+
+      return {
         label:
           "Cancelled",
 
         className:
           "cancelled"
-      },
+      };
 
-    duplicate:
-      {
+
+    case "duplicate":
+
+      return {
         label:
           "Duplicate",
 
         className:
           "duplicate"
-      }
-  };
+      };
 
 
-  return statuses[
-    status
-  ] || {
-    label:
-      humaniseStatus(
-        status
-      ),
+    case "pending":
 
-    className:
-      "pending"
-  };
+      return {
+        label:
+          "Pending",
+
+        className:
+          "pending"
+      };
+
+
+    case "ready":
+
+      return {
+        label:
+          "Ready",
+
+        className:
+          "ready"
+      };
+
+
+    case "analysing":
+
+      return {
+        label:
+          "Analysing",
+
+        className:
+          "active"
+      };
+
+
+    case "uploading":
+
+      return {
+        label:
+          "Uploading",
+
+        className:
+          "active"
+      };
+
+
+    case "video_uploaded":
+
+      return {
+        label:
+          "Video uploaded",
+
+        className:
+          "active"
+      };
+
+
+    case "cataloguing":
+
+      return {
+        label:
+          "Cataloguing",
+
+        className:
+          "active"
+      };
+
+
+    case "catalogued":
+
+      return {
+        label:
+          "Catalogued",
+
+        className:
+          "active"
+      };
+
+
+    case "thumbnail_uploading":
+
+      return {
+        label:
+          "Thumbnail upload",
+
+        className:
+          "active"
+      };
+
+
+    default:
+
+      return {
+        label:
+          humaniseStatus(
+            status ||
+            "unknown"
+          ),
+
+        className:
+          "pending"
+      };
+  }
 }
 
 
 /* =====================================================================
-   21. COMPONENT STATE RENDERING
+   22. COMPONENT STATE RENDERING
 ===================================================================== */
 
 /**
- * Renders the compact Video / Catalogue / Thumbnail state used by the
- * Recent Ingestions table.
+ * Renders one Video / Catalogue / Thumbnail component state.
+ *
+ * CSS uses:
+ *
+ *     .admin-component-state.good
+ *     .admin-component-state.bad
+ *     .admin-component-state.warning
+ *     .admin-component-state.active
+ *     .admin-component-state.muted
  */
 function renderState(
   state
@@ -4786,9 +5947,12 @@ function renderState(
 
   return `
     <span
-      class="admin-component-state ${escapeHtml(
-        state.className
-      )}"
+      class="
+        admin-component-state
+        ${escapeHtml(
+          state.className
+        )}
+      "
     >
 
       <span class="admin-component-symbol">
@@ -4809,14 +5973,14 @@ function renderState(
 
 
 /* =====================================================================
-   22. INGESTION DETAIL HELPERS
+   23. INGESTION DETAIL HELPERS
 ===================================================================== */
 
 /**
- * Renders one item inside an expanded ingestion diagnostics row.
+ * Renders one field inside the expanded ingestion diagnostics grid.
  *
- * Empty values are still displayed as "—" so the Admin page makes it
- * obvious which ingestion metadata has not been populated.
+ * Empty values are displayed as an em dash so each ingestion has a
+ * consistent diagnostic structure.
  */
 function detailItem(
   label,
@@ -4824,14 +5988,13 @@ function detailItem(
 ) {
 
   const displayValue =
-    value ===
-      null ||
-    value ===
-      undefined ||
-    value ===
-      ""
+    value === null ||
+    value === undefined ||
+    value === ""
       ? "—"
-      : value;
+      : String(
+          value
+        );
 
 
   return `
@@ -4855,11 +6018,49 @@ function detailItem(
 
 
 /* =====================================================================
-   23. DASHBOARD STATUS
+   24. TABLE ERROR STATE
 ===================================================================== */
 
 /**
- * Updates the main dashboard status banner.
+ * Displays a dashboard failure inside Recent Ingestions.
+ */
+function renderTableError(
+  error
+) {
+
+  if (
+    !adminIngestionsBody
+  ) {
+
+    return;
+  }
+
+
+  adminIngestionsBody.innerHTML =
+    `
+      <tr>
+
+        <td
+          colspan="7"
+          class="admin-table-error"
+        >
+          ${escapeHtml(
+            error?.message ||
+            "Could not load ingestion history."
+          )}
+        </td>
+
+      </tr>
+    `;
+}
+
+
+/* =====================================================================
+   25. PAGE STATUS
+===================================================================== */
+
+/**
+ * Updates the main Admin page status message.
  */
 function setStatus(
   message,
@@ -4880,20 +6081,24 @@ function setStatus(
 
 
   adminStatus.classList.remove(
-    "loading",
-    "success",
-    "error"
+    "admin-status-loading",
+    "admin-status-success",
+    "admin-status-error"
   );
 
 
   adminStatus.classList.add(
-    state
+    `admin-status-${state}`
   );
 }
 
 
+/* =====================================================================
+   26. REFRESH BUTTON STATE
+===================================================================== */
+
 /**
- * Sets the refresh button's busy state.
+ * Enables or disables the main Refresh button.
  */
 function setRefreshState(
   loading
@@ -4908,78 +6113,69 @@ function setRefreshState(
 
 
   adminRefresh.disabled =
-    loading;
+    Boolean(
+      loading
+    );
 
 
   adminRefresh.classList.toggle(
     "loading",
-    loading
+    Boolean(
+      loading
+    )
   );
 
 
-  const icon =
+  const label =
     adminRefresh.querySelector(
-      "svg"
+      "span"
     );
 
 
   if (
-    icon
+    label
   ) {
 
-    icon.classList.toggle(
-      "admin-spin",
+    label.textContent =
       loading
-    );
+        ? "Refreshing…"
+        : "Refresh";
   }
 }
 
 
 /* =====================================================================
-   24. TABLE ERROR STATE
+   27. BASIC DOM HELPERS
 ===================================================================== */
 
 /**
- * Displays an error in the Recent Ingestions table if the main Admin
- * dashboard request fails.
+ * Sets plain text on an element if that element exists.
  */
-function renderTableError(
-  error
+function setText(
+  element,
+  value
 ) {
 
   if (
-    !adminIngestionsBody
+    !element
   ) {
 
     return;
   }
 
 
-  adminIngestionsBody.innerHTML =
-    `
-      <tr>
-
-        <td
-          colspan="7"
-          class="admin-table-empty admin-table-error"
-        >
-          ${escapeHtml(
-            error?.message ||
-            "Could not load ingestion history."
-          )}
-        </td>
-
-      </tr>
-    `;
+  element.textContent =
+    value === null ||
+    value === undefined
+      ? ""
+      : String(
+          value
+        );
 }
 
 
-/* =====================================================================
-   25. BASIC DOM HELPERS
-===================================================================== */
-
 /**
- * Writes a formatted number into a dashboard element.
+ * Formats and displays a numeric dashboard counter.
  */
 function setNumber(
   element,
@@ -5000,57 +6196,38 @@ function setNumber(
     );
 
 
-  element.textContent =
-    Number.isFinite(
+  if (
+    !Number.isFinite(
       number
     )
-      ? number.toLocaleString()
-      : "0";
-}
-
-
-/**
- * Writes text into an element.
- */
-function setText(
-  element,
-  value
-) {
-
-  if (
-    !element
   ) {
+
+    element.textContent =
+      "—";
+
 
     return;
   }
 
 
   element.textContent =
-    value ===
-      null ||
-    value ===
-      undefined
-      ? ""
-      : String(
-          value
-        );
+    number.toLocaleString();
 }
 
 
 /* =====================================================================
-   26. STATUS NORMALISATION
+   28. STATUS / TEXT NORMALISATION
 ===================================================================== */
 
 /**
- * Converts a status value into the lowercase underscore format used by
- * the ingestion journal.
+ * Converts a status into the lowercase underscore form used internally.
  */
 function normaliseStatus(
-  status
+  value
 ) {
 
   return String(
-    status ||
+    value ||
     ""
   )
     .trim()
@@ -5063,16 +6240,24 @@ function normaliseStatus(
 
 
 /**
- * Converts an internal status string into a human-readable fallback.
+ * Converts an internal state name to a readable label.
+ *
+ * Example:
+ *
+ *     complete_without_thumbnail
+ *
+ * becomes:
+ *
+ *     Complete without thumbnail
  */
 function humaniseStatus(
-  status
+  value
 ) {
 
   const text =
     String(
-      status ||
-      "Unknown"
+      value ||
+      ""
     )
       .replace(
         /_/g,
@@ -5089,38 +6274,26 @@ function humaniseStatus(
   }
 
 
-  return text
-    .split(
-      " "
+  return (
+    text.charAt(
+      0
+    ).toUpperCase() +
+    text.slice(
+      1
     )
-    .map(
-      word =>
-        word
-          ? word[0].toUpperCase() +
-            word.slice(
-              1
-            )
-          : ""
-    )
-    .join(
-      " "
-    );
+  );
 }
 
 
-/* =====================================================================
-   27. FILENAME HELPERS
-===================================================================== */
-
 /**
- * Removes a final .mp4 extension from a filename for display purposes.
+ * Removes a trailing .mp4 extension from a filename.
  */
 function stripMp4Extension(
-  filename
+  value
 ) {
 
   if (
-    !filename
+    !value
   ) {
 
     return "";
@@ -5128,7 +6301,7 @@ function stripMp4Extension(
 
 
   return String(
-    filename
+    value
   ).replace(
     /\.mp4$/i,
     ""
@@ -5137,11 +6310,11 @@ function stripMp4Extension(
 
 
 /* =====================================================================
-   28. DATE / TIME FORMATTING
+   29. DATE / TIME FORMATTING
 ===================================================================== */
 
 /**
- * Converts an ISO timestamp into a compact local date/time.
+ * Formats an ISO timestamp for the Admin interface.
  */
 function formatDateTime(
   value
@@ -5167,9 +6340,7 @@ function formatDateTime(
     )
   ) {
 
-    return String(
-      value
-    );
+    return "—";
   }
 
 
@@ -5189,6 +6360,9 @@ function formatDateTime(
         "2-digit",
 
       minute:
+        "2-digit",
+
+      second:
         "2-digit"
     }
   );
@@ -5196,27 +6370,43 @@ function formatDateTime(
 
 
 /* =====================================================================
-   29. FILESIZE FORMATTING
+   30. FILESIZE FORMATTING
 ===================================================================== */
 
 /**
- * Converts bytes into a readable storage value.
+ * Converts a byte count to a compact human-readable filesize.
+ *
+ * Used by:
+ *
+ *     • ingestion diagnostics
+ *     • Thumbnail Health
+ *     • Video Storage Health
  */
 function formatBytes(
-  bytes
+  value
 ) {
 
-  const number =
+  if (
+    value === null ||
+    value === undefined ||
+    value === ""
+  ) {
+
+    return "—";
+  }
+
+
+  const bytes =
     Number(
-      bytes
+      value
     );
 
 
   if (
     !Number.isFinite(
-      number
+      bytes
     ) ||
-    number < 0
+    bytes < 0
   ) {
 
     return "—";
@@ -5224,80 +6414,611 @@ function formatBytes(
 
 
   if (
-    number === 0
+    bytes === 0
   ) {
 
     return "0 B";
   }
 
 
-  const units =
-    [
-      "B",
-      "KB",
-      "MB",
-      "GB",
-      "TB"
-    ];
+  const units = [
+    "B",
+    "KB",
+    "MB",
+    "GB",
+    "TB",
+    "PB"
+  ];
 
 
-  const base =
-    1024;
-
-
-  const index =
+  const unitIndex =
     Math.min(
       Math.floor(
         Math.log(
-          number
+          bytes
         ) /
         Math.log(
-          base
+          1024
         )
       ),
-      units.length -
-        1
+      units.length - 1
     );
 
 
-  const value =
-    number /
+  const size =
+    bytes /
     Math.pow(
-      base,
-      index
+      1024,
+      unitIndex
     );
 
 
-  return `${
-    value >= 100 ||
-    index === 0
-      ? value.toFixed(
-          0
-        )
-      : value.toFixed(
-          2
-        )
-  } ${units[index]}`;
+  const decimals =
+    unitIndex === 0
+      ? 0
+      : size >= 100
+        ? 0
+        : size >= 10
+          ? 1
+          : 2;
+
+
+  return `${size.toFixed(
+    decimals
+  )} ${units[unitIndex]}`;
+}
+
+/* =====================================================================
+   31. SAFE VALUE HELPERS
+===================================================================== */
+
+/**
+ * Returns the first useful value from a list.
+ *
+ * This is primarily useful for diagnostic data where an Edge Function
+ * or RPC may expose the same conceptual field under slightly different
+ * names while the backend evolves.
+ */
+function firstValue(
+  ...values
+) {
+
+  for (
+    const value of values
+  ) {
+
+    if (
+      value !== null &&
+      value !== undefined &&
+      value !== ""
+    ) {
+
+      return value;
+    }
+  }
+
+
+  return null;
+}
+
+
+/**
+ * Safely converts an unknown value to an array.
+ */
+function asArray(
+  value
+) {
+
+  return Array.isArray(
+    value
+  )
+    ? value
+    : [];
+}
+
+
+/**
+ * Returns a finite number or the supplied fallback.
+ */
+function safeNumber(
+  value,
+  fallback =
+    0
+) {
+
+  const number =
+    Number(
+      value
+    );
+
+
+  return Number.isFinite(
+    number
+  )
+    ? number
+    : fallback;
 }
 
 
 /* =====================================================================
-   30. HTML ESCAPING
+   32. URL / FILENAME HELPERS
 ===================================================================== */
 
 /**
- * Escapes arbitrary values before inserting them into generated HTML.
+ * Extracts the final filename component from a URL or path.
  *
- * This is important because film titles, filenames, URLs, error messages
- * and other ingestion metadata can contain HTML-significant characters.
+ * This helper is intentionally diagnostic-only. The authoritative
+ * catalogue ↔ Backblaze filename reconciliation remains server-side in
+ * zulu-video-health.
+ */
+function filenameFromUrl(
+  value
+) {
+
+  if (
+    !value
+  ) {
+
+    return "";
+  }
+
+
+  try {
+
+    const parsed =
+      new URL(
+        value
+      );
+
+
+    const pathname =
+      parsed.pathname ||
+      "";
+
+
+    const parts =
+      pathname.split(
+        "/"
+      );
+
+
+    const filename =
+      parts[
+        parts.length - 1
+      ] ||
+      "";
+
+
+    return safeDecodeURIComponent(
+      filename
+    );
+
+
+  } catch {
+
+    const withoutQuery =
+      String(
+        value
+      ).split(
+        "?"
+      )[0];
+
+
+    const parts =
+      withoutQuery.split(
+        "/"
+      );
+
+
+    return safeDecodeURIComponent(
+      parts[
+        parts.length - 1
+      ] ||
+      ""
+    );
+  }
+}
+
+
+/**
+ * decodeURIComponent() wrapper that leaves malformed values unchanged.
+ */
+function safeDecodeURIComponent(
+  value
+) {
+
+  try {
+
+    return decodeURIComponent(
+      value
+    );
+
+
+  } catch {
+
+    return String(
+      value ||
+      ""
+    );
+  }
+}
+
+
+/* =====================================================================
+   33. DIAGNOSTIC BOOLEAN HELPERS
+===================================================================== */
+
+/**
+ * Converts common database / API boolean representations into a real
+ * boolean.
+ */
+function toBoolean(
+  value
+) {
+
+  if (
+    value === true ||
+    value === 1
+  ) {
+
+    return true;
+  }
+
+
+  if (
+    typeof value ===
+      "string"
+  ) {
+
+    const normalised =
+      value
+        .trim()
+        .toLowerCase();
+
+
+    return (
+      normalised ===
+        "true" ||
+      normalised ===
+        "1" ||
+      normalised ===
+        "yes" ||
+      normalised ===
+        "y"
+    );
+  }
+
+
+  return false;
+}
+
+
+/* =====================================================================
+   34. TEXT FALLBACK HELPERS
+===================================================================== */
+
+/**
+ * Returns a display-safe string for optional diagnostic values.
+ */
+function displayValue(
+  value,
+  fallback =
+    "—"
+) {
+
+  if (
+    value === null ||
+    value === undefined ||
+    value === ""
+  ) {
+
+    return fallback;
+  }
+
+
+  return String(
+    value
+  );
+}
+
+
+/**
+ * Truncates very long diagnostic values without changing the underlying
+ * data.
+ */
+function truncateText(
+  value,
+  maximumLength =
+    180
+) {
+
+  const text =
+    String(
+      value ||
+      ""
+    );
+
+
+  if (
+    text.length <=
+      maximumLength
+  ) {
+
+    return text;
+  }
+
+
+  return `${text.slice(
+    0,
+    Math.max(
+      0,
+      maximumLength - 1
+    )
+  )}…`;
+}
+
+
+/* =====================================================================
+   35. OPTIONAL COPY HELPER
+===================================================================== */
+
+/**
+ * Copies diagnostic text when Clipboard API access is available.
+ *
+ * The current Admin dashboard does not require this helper for normal
+ * operation, but keeping it here allows diagnostic rows to gain a Copy
+ * action without duplicating clipboard logic later.
+ */
+async function copyText(
+  value
+) {
+
+  const text =
+    String(
+      value ||
+      ""
+    );
+
+
+  if (
+    !text
+  ) {
+
+    return false;
+  }
+
+
+  if (
+    !navigator.clipboard?.writeText
+  ) {
+
+    return false;
+  }
+
+
+  try {
+
+    await navigator.clipboard.writeText(
+      text
+    );
+
+
+    return true;
+
+
+  } catch (
+    error
+  ) {
+
+    console.warn(
+      "Could not copy text:",
+      error
+    );
+
+
+    return false;
+  }
+}
+
+
+/* =====================================================================
+   36. ERROR NORMALISATION
+===================================================================== */
+
+/**
+ * Produces a useful message from the different error shapes returned by
+ * JavaScript, Supabase and Edge Functions.
+ */
+function getErrorMessage(
+  error,
+  fallback =
+    "Unknown error"
+) {
+
+  if (
+    !error
+  ) {
+
+    return fallback;
+  }
+
+
+  if (
+    typeof error ===
+      "string"
+  ) {
+
+    return error;
+  }
+
+
+  if (
+    error.message
+  ) {
+
+    return String(
+      error.message
+    );
+  }
+
+
+  if (
+    error.error
+  ) {
+
+    return String(
+      error.error
+    );
+  }
+
+
+  if (
+    error.details
+  ) {
+
+    return String(
+      error.details
+    );
+  }
+
+
+  return fallback;
+}
+
+
+/* =====================================================================
+   37. SAFE JSON DISPLAY
+===================================================================== */
+
+/**
+ * Converts diagnostic objects to readable JSON without allowing an
+ * unexpected circular reference to break Admin rendering.
+ */
+function safeJson(
+  value
+) {
+
+  try {
+
+    return JSON.stringify(
+      value,
+      null,
+      2
+    );
+
+
+  } catch {
+
+    return String(
+      value ??
+      ""
+    );
+  }
+}
+
+
+/* =====================================================================
+   38. SORTING HELPERS
+===================================================================== */
+
+/**
+ * Compares two values numerically when possible.
+ */
+function compareNumbers(
+  a,
+  b
+) {
+
+  return (
+    safeNumber(
+      a
+    ) -
+    safeNumber(
+      b
+    )
+  );
+}
+
+
+/**
+ * Compares two optional strings using the browser's locale-aware
+ * comparison.
+ */
+function compareText(
+  a,
+  b
+) {
+
+  return String(
+    a ||
+    ""
+  ).localeCompare(
+    String(
+      b ||
+      ""
+    ),
+    undefined,
+    {
+      sensitivity:
+        "base",
+
+      numeric:
+        true
+    }
+  );
+}
+
+
+/* =====================================================================
+   39. GENERIC EMPTY RESULT
+===================================================================== */
+
+/**
+ * Creates a standard empty diagnostic message.
+ */
+function renderEmptyResult(
+  message =
+    "✓ No issues found."
+) {
+
+  return `
+    <div class="admin-diagnostic-empty">
+      ${escapeHtml(
+        message
+      )}
+    </div>
+  `;
+}
+
+
+/* =====================================================================
+   40. HTML ESCAPING
+===================================================================== */
+
+/**
+ * Escapes arbitrary values before inserting them into innerHTML.
+ *
+ * All catalogue names, filenames, URLs, fingerprints, B2 IDs and error
+ * messages that enter an HTML template should pass through this helper.
+ *
+ * This is especially important on Admin because filenames and catalogue
+ * metadata ultimately originate outside the JavaScript source itself.
  */
 function escapeHtml(
   value
 ) {
 
+  if (
+    value === null ||
+    value === undefined
+  ) {
+
+    return "";
+  }
+
+
   return String(
-    value ??
-    ""
+    value
   )
     .replace(
       /&/g,
@@ -5321,3 +7042,7 @@ function escapeHtml(
     );
 }
 
+
+/* =====================================================================
+   END OF ADMIN.JS
+===================================================================== */
