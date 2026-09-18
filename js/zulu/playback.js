@@ -658,27 +658,25 @@ function clearViewTimer() {
 ===================================================================== */
 
 /**
- * Records a qualifying video view in Supabase.
+ * Records a video view after the viewer has watched for the required
+ * amount of time.
  *
- * The function does nothing when:
+ * A view is only marked as successfully logged AFTER Supabase confirms
+ * that the database insert succeeded.
  *
- *   - there is no active video UID;
- *   - a view has already been logged during this playback session.
+ * This is important because a temporary network or Supabase failure
+ * should not permanently prevent another logging attempt during the
+ * current playback session.
  *
- * A qualifying view inserts:
- *
- *     {
- *       video_uid: uid,
- *       watch_seconds: 15
- *     }
- *
- * into:
- *
- *     zulu_video_views
- *
- * @param {*} uid
+ * @param {string|number} uid
  */
-async function logVideoView(uid) {
+async function logVideoView(
+  uid
+) {
+
+  /* -----------------------------------------------------------------
+     VALIDATE REQUEST
+  ----------------------------------------------------------------- */
 
   if (
     !uid ||
@@ -688,15 +686,9 @@ async function logVideoView(uid) {
   }
 
 
-  /*
-   * Mark the session as counted before performing the database request.
-   *
-   * This prevents another call during the same playback session from
-   * creating a duplicate view.
-   */
-  viewLogged =
-    true;
-
+  /* -----------------------------------------------------------------
+     INSERT VIEW
+  ----------------------------------------------------------------- */
 
   const {
     error
@@ -714,11 +706,34 @@ async function logVideoView(uid) {
       });
 
 
+  /* -----------------------------------------------------------------
+     INSERT FAILED
+  -----------------------------------------------------------------
+
+     Do NOT set viewLogged.
+
+     Leaving it false means another logging attempt can be made during
+     this playback session.
+  ----------------------------------------------------------------- */
+
   if (error) {
 
     console.error(
-      "Error logging video view:",
+      "Could not log video view:",
       error
     );
+
+    return;
   }
+
+
+  /* -----------------------------------------------------------------
+     INSERT SUCCEEDED
+  -----------------------------------------------------------------
+
+     Only now do we consider this view successfully recorded.
+  ----------------------------------------------------------------- */
+
+  viewLogged =
+    true;
 }
