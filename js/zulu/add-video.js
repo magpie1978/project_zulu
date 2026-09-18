@@ -29,8 +29,8 @@ import {
 
    Controls the complete Add Video ingestion workflow.
 
-   The workflow is now persistent. A zulu_ingestions record is created
-   as soon as a local MP4 is selected and is updated as the video moves
+   The workflow is persistent. A zulu_ingestions record is created as
+   soon as a local MP4 is selected and is updated as the video moves
    through:
 
        pending
@@ -60,6 +60,42 @@ import {
 
        cataloguing
        catalogued
+
+   ENHANCED INGESTION UI
+   ---------------------
+
+   The Add Video modal now also contains a visual ingestion manager.
+
+   This shows:
+
+       Video analysed
+       Duplicate check
+       Thumbnail generated
+       Video uploaded
+       Catalogue entry created
+       Thumbnail published
+       Complete
+
+   Each stage can visually be:
+
+       ○ pending
+       ● active
+       ✓ complete
+       ⚠ warning
+       ✕ failed
+
+   The existing Backblaze byte-progress bar remains in use. The
+   ingestion manager's overall percentage additionally incorporates
+   the real Backblaze upload percentage while the MP4 is uploading.
+
+   IMPORTANT
+   ---------
+
+   The ingestion-manager DOM elements are optional.
+
+   This means this JavaScript can safely load even if the updated HTML
+   has not yet been deployed. The underlying upload workflow therefore
+   remains functional independently of the enhanced display.
 
    ===================================================================== */
 
@@ -149,6 +185,40 @@ const addVideoThumbnailStatus =
   );
 
 
+/*
+ * Enhanced ingestion-manager UI.
+ *
+ * All of these references are deliberately null-safe. The upload
+ * workflow must never depend on the decorative ingestion panel being
+ * present.
+ */
+
+const addVideoIngestion =
+  document.getElementById(
+    "add-video-ingestion"
+  );
+
+const addVideoIngestionName =
+  document.getElementById(
+    "add-video-ingestion-name"
+  );
+
+const addVideoIngestionSize =
+  document.getElementById(
+    "add-video-ingestion-size"
+  );
+
+const addVideoIngestionPercent =
+  document.getElementById(
+    "add-video-ingestion-percent"
+  );
+
+const addVideoIngestionResult =
+  document.getElementById(
+    "add-video-ingestion-result"
+  );
+
+
 /* =====================================================================
    02. MODULE STATE
 ===================================================================== */
@@ -186,6 +256,16 @@ let zuluActorNames =
 
 let onVideoAdded =
   null;
+
+
+/*
+ * Real Backblaze upload percentage.
+ *
+ * This is kept separately from the native progress element because it
+ * is also used to calculate the overall ingestion-manager percentage.
+ */
+let addVideoByteUploadPercent =
+  0;
 
 
 /* =====================================================================
@@ -305,8 +385,35 @@ function openAddVideoModal() {
  *
  * Closing is blocked while an actual upload is in progress.
  */
-function closeAddVideoModal() {
 
+/**
+ * Closes the Add Video modal.
+ *
+ * Closing is blocked while an actual upload is in progress.
+ *
+ * If the user closes the modal after selecting/analyzing a file but
+ * BEFORE upload begins, the persistent ingestion is marked cancelled.
+ *
+ * This prevents abandoned selections remaining indefinitely as:
+ *
+ *     pending
+ *     analysing
+ *     ready
+ *
+ * in zulu_ingestions.
+ *
+ * A successfully completed ingestion is never cancelled.
+ */
+async function closeAddVideoModal() {
+
+  /*
+   * Never allow the modal to close while an MP4 is actively being
+   * uploaded/catalogued.
+   *
+   * Apart from avoiding accidental interruption, this also prevents
+   * us from incorrectly marking a genuine in-progress ingestion as
+   * cancelled.
+   */
   if (
     addVideoUploadInProgress
   ) {
@@ -319,10 +426,32 @@ function closeAddVideoModal() {
         "Upload in progress — please wait for it to finish.";
     }
 
+
     return;
   }
 
 
+  /*
+   * Capture the current ingestion before resetting any local state.
+   */
+  const ingestionId =
+    addVideoIngestionId;
+
+
+  const shouldCancelIngestion =
+    Boolean(
+      ingestionId &&
+      !addVideoCompleted
+    );
+
+
+  /*
+   * Close the modal immediately.
+   *
+   * The server-side cancellation can happen afterwards; the user
+   * should not have to wait for a network round-trip merely to close
+   * the dialog.
+   */
   addVideoModal?.classList.remove(
     "open"
   );
@@ -334,14 +463,42 @@ function closeAddVideoModal() {
   );
 
 
+  /*
+   * Invalidate any outstanding metadata/thumbnail analysis.
+   *
+   * This is particularly important if the user closes the modal while
+   * generateThumbnailCandidates() is still running.
+   */
+  addVideoAnalysisToken +=
+    1;
+
+
+  /*
+   * If this was an unfinished pre-upload ingestion, preserve the
+   * history but explicitly mark it cancelled.
+   *
+   * cancelIngestion() is already best-effort and handles its own
+   * journal errors.
+   */
   if (
-    addVideoCompleted
+    shouldCancelIngestion
   ) {
 
-    resetAddVideoForm();
+    await cancelIngestion(
+      ingestionId
+    );
   }
-}
 
+
+  /*
+   * Always reset the local form after the modal closes.
+   *
+   * Previously this only happened after a completed upload. That meant
+   * cancelling a selected file could leave its title, actors, metadata
+   * and ingestion UUID sitting in the form when the modal was reopened.
+   */
+  resetAddVideoForm();
+}
 
 /**
  * Restores the Add Video form to its initial state.
@@ -365,6 +522,9 @@ function resetAddVideoForm() {
 
   addVideoAnalysisToken +=
     1;
+
+  addVideoByteUploadPercent =
+    0;
 
 
   if (
@@ -462,6 +622,22 @@ function resetAddVideoForm() {
 
   addVideoCompleted =
     false;
+
+
+  /*
+   * Hide and reset the enhanced ingestion display ready for the next
+   * file selection.
+   */
+  if (
+    addVideoIngestion
+  ) {
+
+    addVideoIngestion.hidden =
+      true;
+  }
+
+
+  resetIngestionStages();
 
 
   addActorRow();
@@ -1160,13 +1336,518 @@ async function completeIngestion(
 
 
 /* =====================================================================
-   10. FILE SELECTION
+   10. ENHANCED INGESTION UI
+   =====================================================================
+
+   The visual stage manager is deliberately kept separate from the
+   persistent zulu_ingestions state machine.
+
+   Database status is authoritative.
+
+   These helpers merely reflect progress in the Add Video modal.
+===================================================================== */
+
+
+/*
+ * Ordered visual stages.
+ *
+ * This order is also used to calculate the overall percentage.
+ */
+const INGESTION_STAGE_ORDER =
+  [
+    "analysis",
+    "duplicate",
+    "thumbnail-generation",
+    "video-upload",
+    "catalogue",
+    "thumbnail-upload",
+    "complete"
+  ];
+
+
+/**
+ * Returns the DOM element for a visual ingestion stage.
+ *
+ * @param {string} stage
+ * @returns {HTMLElement|null}
+ */
+function getIngestionStageElement(
+  stage
+) {
+
+  return addVideoIngestion
+    ?.querySelector(
+      `[data-stage="${stage}"]`
+    ) ||
+    null;
+}
+
+
+/**
+ * Returns the icon belonging to a visual ingestion stage.
+ *
+ * @param {string} stage
+ * @returns {HTMLElement|null}
+ */
+function getIngestionStageIcon(
+  stage
+) {
+
+  return getIngestionStageElement(
+    stage
+  )
+    ?.querySelector(
+      ".add-video-stage-icon"
+    ) ||
+    null;
+}
+
+
+/**
+ * Resets every visual stage to pending.
+ *
+ * This does not change anything in Supabase.
+ */
+function resetIngestionStages() {
+
+  addVideoByteUploadPercent =
+    0;
+
+
+  for (
+    const stage of
+    INGESTION_STAGE_ORDER
+  ) {
+
+    const element =
+      getIngestionStageElement(
+        stage
+      );
+
+
+    if (
+      !element
+    ) {
+
+      continue;
+    }
+
+
+    element.classList.remove(
+      "is-active",
+      "is-complete",
+      "is-warning",
+      "is-failed"
+    );
+
+
+    element.classList.add(
+      "is-pending"
+    );
+
+
+    const icon =
+      getIngestionStageIcon(
+        stage
+      );
+
+
+    if (
+      icon
+    ) {
+
+      icon.textContent =
+        "○";
+    }
+  }
+
+
+  if (
+    addVideoIngestionPercent
+  ) {
+
+    addVideoIngestionPercent.textContent =
+      "0%";
+  }
+
+
+  if (
+    addVideoIngestionResult
+  ) {
+
+    addVideoIngestionResult.hidden =
+      true;
+
+    addVideoIngestionResult.innerHTML =
+      "";
+  }
+}
+
+
+/**
+ * Changes one visual stage.
+ *
+ * Supported states:
+ *
+ *     pending
+ *     active
+ *     complete
+ *     warning
+ *     failed
+ *
+ * @param {string} stage
+ * @param {string} state
+ */
+function setIngestionStage(
+  stage,
+  state
+) {
+
+  const element =
+    getIngestionStageElement(
+      stage
+    );
+
+
+  if (
+    !element
+  ) {
+
+    return;
+  }
+
+
+  element.classList.remove(
+    "is-pending",
+    "is-active",
+    "is-complete",
+    "is-warning",
+    "is-failed"
+  );
+
+
+  element.classList.add(
+    `is-${state}`
+  );
+
+
+  const icon =
+    getIngestionStageIcon(
+      stage
+    );
+
+
+  if (
+    !icon
+  ) {
+
+    return;
+  }
+
+
+  switch (
+    state
+  ) {
+
+    case "active":
+
+      icon.textContent =
+        "●";
+
+      break;
+
+
+    case "complete":
+
+      icon.textContent =
+        "✓";
+
+      break;
+
+
+    case "warning":
+
+      icon.textContent =
+        "⚠";
+
+      break;
+
+
+    case "failed":
+
+      icon.textContent =
+        "✕";
+
+      break;
+
+
+    default:
+
+      icon.textContent =
+        "○";
+  }
+}
+
+
+/**
+ * Calculates and displays overall ingestion progress.
+ *
+ * Normally each of the seven visual stages contributes equally.
+ *
+ * During the video-upload stage, however, the stage receives partial
+ * credit based on the real Backblaze byte upload percentage. This
+ * prevents the headline percentage from appearing frozen during a
+ * long MP4 upload.
+ */
+function updateIngestionPercent() {
+
+  if (
+    !addVideoIngestionPercent
+  ) {
+
+    return;
+  }
+
+
+  let progressUnits =
+    0;
+
+
+  for (
+    const stage of
+    INGESTION_STAGE_ORDER
+  ) {
+
+    const element =
+      getIngestionStageElement(
+        stage
+      );
+
+
+    if (
+      !element
+    ) {
+
+      continue;
+    }
+
+
+    if (
+      element.classList.contains(
+        "is-complete"
+      ) ||
+      element.classList.contains(
+        "is-warning"
+      )
+    ) {
+
+      progressUnits +=
+        1;
+
+      continue;
+    }
+
+
+    /*
+     * Give the active MP4-upload stage proportional credit.
+     */
+    if (
+      stage ===
+        "video-upload" &&
+      element.classList.contains(
+        "is-active"
+      )
+    ) {
+
+      progressUnits +=
+        Math.max(
+          0,
+          Math.min(
+            100,
+            Number(
+              addVideoByteUploadPercent
+            ) ||
+            0
+          )
+        ) /
+        100;
+    }
+  }
+
+
+  const percent =
+    Math.round(
+      (
+        progressUnits /
+        INGESTION_STAGE_ORDER.length
+      ) *
+      100
+    );
+
+
+  addVideoIngestionPercent.textContent =
+    `${Math.max(
+      0,
+      Math.min(
+        100,
+        percent
+      )
+    )}%`;
+}
+
+
+/**
+ * Opens and initialises the visual ingestion manager for a newly
+ * selected local file.
+ *
+ * @param {File} file
+ */
+function initialiseIngestionUI(
+  file
+) {
+
+  if (
+    !addVideoIngestion
+  ) {
+
+    return;
+  }
+
+
+  addVideoIngestion.hidden =
+    false;
+
+
+  if (
+    addVideoIngestionName
+  ) {
+
+    addVideoIngestionName.textContent =
+      file.name;
+  }
+
+
+  if (
+    addVideoIngestionSize
+  ) {
+
+    addVideoIngestionSize.textContent =
+      formatBytes(
+        file.size
+      );
+  }
+
+
+  resetIngestionStages();
+
+
+  setIngestionStage(
+    "analysis",
+    "active"
+  );
+
+
+  updateIngestionPercent();
+}
+
+
+/**
+ * Displays the final successful ingestion summary.
+ *
+ * A failed/skipped thumbnail is represented as a warning rather than
+ * a fatal failure because the MP4 and catalogue record are already
+ * valid.
+ *
+ * @param {number|string} uid
+ * @param {string} thumbnailStatus
+ */
+function showIngestionComplete(
+  uid,
+  thumbnailStatus
+) {
+
+  setIngestionStage(
+    "complete",
+    "complete"
+  );
+
+
+  updateIngestionPercent();
+
+
+  if (
+    !addVideoIngestionResult
+  ) {
+
+    return;
+  }
+
+
+  const thumbnailText =
+    thumbnailStatus ===
+      "uploaded"
+      ? "✓ Published"
+      : "⚠ Default thumbnail";
+
+
+  addVideoIngestionResult.innerHTML =
+    `
+      <strong>INGESTION COMPLETE</strong><br>
+      Video UID: ${uid}<br>
+      Video: ✓ Uploaded<br>
+      Catalogue: ✓ Created<br>
+      Thumbnail: ${thumbnailText}
+    `;
+
+
+  addVideoIngestionResult.hidden =
+    false;
+}
+
+
+/**
+ * Marks a visual stage as failed.
+ *
+ * This function affects the UI only. Persistent failures continue to
+ * be written using markIngestionFailed() or by zulu-finalize-video.
+ *
+ * @param {string} stage
+ */
+function showIngestionFailure(
+  stage
+) {
+
+  setIngestionStage(
+    stage,
+    "failed"
+  );
+
+
+  updateIngestionPercent();
+}
+
+
+/* =====================================================================
+   11. FILE SELECTION
 ===================================================================== */
 
 /**
  * Handles selection of a local MP4.
  *
- * The ingestion record is created BEFORE video analysis begins.
+ * The persistent ingestion record is created BEFORE local video
+ * analysis begins.
+ *
+ * Visual workflow:
+ *
+ *     file selected
+ *          ↓
+ *     ● Video analysed
+ *          ↓
+ *     ✓ Video analysed
+ *     ● Thumbnail generated
+ *
+ * If a different file had previously been selected but never uploaded,
+ * its ingestion record is preserved and marked cancelled.
  */
 async function handleFileSelection() {
 
@@ -1177,6 +1858,10 @@ async function handleFileSelection() {
 
   /*
    * Invalidate any older asynchronous analysis immediately.
+   *
+   * If the user selects another file while metadata or thumbnail work
+   * is still running, the older result must not overwrite the new
+   * selection.
    */
   const analysisToken =
     ++addVideoAnalysisToken;
@@ -1190,8 +1875,8 @@ async function handleFileSelection() {
 
 
   /*
-   * If another file had already created an ingestion but had not begun
-   * uploading, preserve that history by marking it cancelled.
+   * Preserve the previous ingestion ID before clearing the active
+   * selection.
    */
   const previousIngestionId =
     addVideoIngestionId;
@@ -1201,6 +1886,10 @@ async function handleFileSelection() {
     null;
 
 
+  /*
+   * A previously selected file that never entered the actual upload
+   * stage is an abandoned ingestion rather than a failure.
+   */
   if (
     previousIngestionId &&
     !addVideoUploadInProgress
@@ -1212,6 +1901,9 @@ async function handleFileSelection() {
   }
 
 
+  /*
+   * File chooser may have been cleared rather than populated.
+   */
   if (
     !file
   ) {
@@ -1224,8 +1916,32 @@ async function handleFileSelection() {
         "";
     }
 
+
+    if (
+      addVideoIngestion
+    ) {
+
+      addVideoIngestion.hidden =
+        true;
+    }
+
+
+    resetIngestionStages();
+
+
     return;
   }
+
+
+  /*
+   * Immediately initialise the visual ingestion manager.
+   *
+   * This happens before the Edge Function call so the user gets instant
+   * feedback after choosing the file.
+   */
+  initialiseIngestionUI(
+    file
+  );
 
 
   const filename =
@@ -1239,6 +1955,9 @@ async function handleFileSelection() {
     );
 
 
+  /*
+   * Default the editable film title from the local filename.
+   */
   if (
     addVideoTitle
   ) {
@@ -1253,6 +1972,10 @@ async function handleFileSelection() {
     (1024 * 1024);
 
 
+  /*
+   * Preserve the existing compact file-information display as well as
+   * the richer Current Ingestion panel.
+   */
   if (
     addVideoFileInfo
   ) {
@@ -1262,13 +1985,23 @@ async function handleFileSelection() {
   }
 
 
+  /*
+   * Attempt to pre-populate actor fields from the filename.
+   */
   suggestActorsFromTitle(
     title
   );
 
 
   /*
-   * Create the persistent journal before analysis starts.
+   * Create the persistent ingestion journal BEFORE analysis starts.
+   *
+   * At this point Supabase only needs to know:
+   *
+   *     original_filename
+   *     filesize_bytes
+   *
+   * Metadata and fingerprint information are produced locally later.
    */
   try {
 
@@ -1284,8 +2017,11 @@ async function handleFileSelection() {
 
 
     /*
-     * The user may have selected another file while the Edge Function
-     * request was running.
+     * The Edge Function call above is asynchronous.
+     *
+     * The user could have selected another MP4 while we were waiting.
+     * If that happened, this newly-created record belongs to the stale
+     * selection and should be marked cancelled.
      */
     if (
       analysisToken !==
@@ -1307,7 +2043,10 @@ async function handleFileSelection() {
 
 
     /*
-     * Analysis has now officially started.
+     * Analysis has officially begun.
+     *
+     * Thumbnail generation is also considered to have started because
+     * it forms part of the local pre-upload preparation process.
      */
     await updateIngestionStatus(
       ingestionId,
@@ -1333,10 +2072,18 @@ async function handleFileSelection() {
     );
 
 
+    /*
+     * Only update the visible UI if this is still the active file.
+     */
     if (
       analysisToken ===
         addVideoAnalysisToken
     ) {
+
+      showIngestionFailure(
+        "analysis"
+      );
+
 
       handleUploadStatus(
         `Could not start ingestion: ${
@@ -1350,11 +2097,16 @@ async function handleFileSelection() {
 
 
 /* =====================================================================
-   11. VIDEO ANALYSIS / FINGERPRINTING
+   12. VIDEO ANALYSIS / FINGERPRINTING
 ===================================================================== */
 
 /**
  * Calculates a SHA-256 hash for a Blob.
+ *
+ * Used by the lightweight video fingerprinting system.
+ *
+ * @param {Blob} blob
+ * @returns {Promise<string>}
  */
 async function sha256Blob(
   blob
@@ -1390,7 +2142,33 @@ async function sha256Blob(
 
 
 /**
- * Reads video metadata and generates a lightweight content fingerprint.
+ * Reads local video metadata and generates a lightweight content
+ * fingerprint.
+ *
+ * Metadata collected:
+ *
+ *     filesize
+ *     duration
+ *     width
+ *     height
+ *
+ * Fingerprinting:
+ *
+ * Rather than hashing the complete MP4, which could be several GB,
+ * three 4 MB samples are SHA-256 hashed:
+ *
+ *     first 4 MB
+ *     middle 4 MB
+ *     final 4 MB
+ *
+ * Those hashes plus the exact filesize are then hashed again to create
+ * the final 64-character fingerprint.
+ *
+ * This is intended for fast duplicate detection rather than as a
+ * cryptographic proof that every byte of two files is identical.
+ *
+ * @param {File} file
+ * @returns {Promise<Object>}
  */
 async function extractVideoMetadata(
   file
@@ -1423,6 +2201,9 @@ async function extractVideoMetadata(
 
   try {
 
+    /*
+     * Wait for the browser to parse the MP4 metadata.
+     */
     await new Promise(
       (
         resolve,
@@ -1481,6 +2262,9 @@ async function extractVideoMetadata(
       4 * 1024 * 1024;
 
 
+    /*
+     * FIRST SAMPLE
+     */
     const firstChunk =
       file.slice(
         0,
@@ -1491,6 +2275,9 @@ async function extractVideoMetadata(
       );
 
 
+    /*
+     * MIDDLE SAMPLE
+     */
     const middleStart =
       Math.max(
         0,
@@ -1512,6 +2299,9 @@ async function extractVideoMetadata(
       );
 
 
+    /*
+     * FINAL SAMPLE
+     */
     const lastStart =
       Math.max(
         0,
@@ -1527,6 +2317,9 @@ async function extractVideoMetadata(
       );
 
 
+    /*
+     * Hash the three samples concurrently.
+     */
     const [
       firstSha256,
       middleSha256,
@@ -1547,6 +2340,12 @@ async function extractVideoMetadata(
       ]);
 
 
+    /*
+     * Include exact filesize in the fingerprint source.
+     *
+     * This reduces the chance that two files with identical sampled
+     * regions but different overall lengths are treated as duplicates.
+     */
     const fingerprintSource =
       [
         file.size,
@@ -1602,6 +2401,10 @@ async function extractVideoMetadata(
 
   } finally {
 
+    /*
+     * Release the temporary browser video resource regardless of
+     * whether metadata extraction succeeded.
+     */
     video.pause();
 
 
@@ -1619,6 +2422,15 @@ async function extractVideoMetadata(
 
 /**
  * Coordinates local metadata analysis and thumbnail generation.
+ *
+ * Metadata failure is fatal because the upload pipeline requires the
+ * fingerprint and other metadata.
+ *
+ * Thumbnail generation failure is deliberately NON-FATAL.
+ *
+ * @param {File} file
+ * @param {string} ingestionId
+ * @param {number} analysisToken
  */
 async function analyseSelectedFile(
   file,
@@ -1637,6 +2449,20 @@ async function analyseSelectedFile(
     }
 
 
+    /*
+     * The visual manager already marks analysis active when the file
+     * is selected. Keep it explicitly active here in case this
+     * function is ever called from another route in future.
+     */
+    setIngestionStage(
+      "analysis",
+      "active"
+    );
+
+
+    updateIngestionPercent();
+
+
     addVideoMetadata =
       await extractVideoMetadata(
         file
@@ -1651,6 +2477,12 @@ async function analyseSelectedFile(
 
     /*
      * Ignore stale analysis results.
+     *
+     * All three checks matter:
+     *
+     *     same File object
+     *     same analysis generation
+     *     same persistent ingestion UUID
      */
     if (
       addVideoFile
@@ -1671,13 +2503,59 @@ async function analyseSelectedFile(
 
 
     /*
+     * Core MP4 analysis is now complete.
+     */
+    setIngestionStage(
+      "analysis",
+      "complete"
+    );
+
+
+    /*
+     * Thumbnail generation is the next visible stage.
+     */
+    setIngestionStage(
+      "thumbnail-generation",
+      "active"
+    );
+
+
+    updateIngestionPercent();
+
+
+    /*
      * Thumbnail generation remains OPTIONAL.
+     *
+     * If it fails, the video can still continue through Backblaze and
+     * catalogue creation and will ultimately use the default thumbnail.
      */
     try {
 
       await generateThumbnailCandidates(
         file
       );
+
+
+      /*
+       * Re-check for a stale file because thumbnail generation itself
+       * can take time.
+       */
+      if (
+        addVideoFile
+          ?.files?.[0] !==
+            file ||
+        analysisToken !==
+          addVideoAnalysisToken ||
+        ingestionId !==
+          addVideoIngestionId
+      ) {
+
+        console.log(
+          "Ignoring thumbnail result for previous file."
+        );
+
+        return;
+      }
 
 
       await updateIngestionStatus(
@@ -1687,6 +2565,25 @@ async function analyseSelectedFile(
           thumbnail_status:
             "ready"
         }
+      );
+
+
+      setIngestionStage(
+        "thumbnail-generation",
+        "complete"
+      );
+
+
+      updateIngestionPercent();
+
+
+      /*
+       * At this stage analysis is finished but upload has not started.
+       * Duplicate checking happens when the user presses Upload Video,
+       * so leave that stage pending.
+       */
+      handleUploadStatus(
+        "Video ready to upload."
       );
 
     } catch (thumbnailError) {
@@ -1710,7 +2607,20 @@ async function analyseSelectedFile(
 
 
       /*
-       * Thumbnail failure is non-fatal.
+       * Show this as a warning, not a failure.
+       */
+      setIngestionStage(
+        "thumbnail-generation",
+        "warning"
+      );
+
+
+      updateIngestionPercent();
+
+
+      /*
+       * Thumbnail failure is non-fatal, but preserve it in the
+       * persistent ingestion journal.
        */
       try {
 
@@ -1730,6 +2640,11 @@ async function analyseSelectedFile(
           journalError
         );
       }
+
+
+      handleUploadStatus(
+        "Video ready to upload — default thumbnail will be used."
+      );
     }
 
   } catch (error) {
@@ -1742,6 +2657,15 @@ async function analyseSelectedFile(
 
     addVideoMetadata =
       null;
+
+
+    /*
+     * Analysis is a fatal stage because the fingerprint and video
+     * metadata are prerequisites for the remainder of the ingestion.
+     */
+    showIngestionFailure(
+      "analysis"
+    );
 
 
     await markIngestionFailed(
@@ -1758,16 +2682,31 @@ async function analyseSelectedFile(
       addVideoThumbnailStatus.textContent =
         "Could not analyse this video.";
     }
+
+
+    handleUploadStatus(
+      `Video analysis failed: ${
+        error?.message ||
+        "Unknown error"
+      }`
+    );
   }
 }
 
 
 /* =====================================================================
-   12. DUPLICATE DETECTION
+   13. DUPLICATE DETECTION
 ===================================================================== */
 
 /**
  * Looks for an existing catalogue record with the same fingerprint.
+ *
+ * The fingerprint was calculated locally before any MP4 is uploaded,
+ * allowing duplicate detection to happen without wasting Backblaze
+ * storage or bandwidth.
+ *
+ * @param {string} fingerprint
+ * @returns {Promise<Object|null>}
  */
 async function findDuplicateVideoByFingerprint(
   fingerprint
@@ -1813,11 +2752,18 @@ async function findDuplicateVideoByFingerprint(
 
 
 /* =====================================================================
-   13. BUILD SUBMISSION PAYLOAD
+   14. BUILD SUBMISSION PAYLOAD
 ===================================================================== */
 
 /**
- * Collects and normalises the Add Video form values.
+ * Collects and normalises the current Add Video form values.
+ *
+ * Actor duplicates are removed before submission.
+ *
+ * Tags are entered as a comma-separated list and converted into an
+ * array.
+ *
+ * @returns {Object}
  */
 function getAddVideoPayload() {
 
@@ -1884,11 +2830,17 @@ function getAddVideoPayload() {
 
 
 /* =====================================================================
-   14. STATUS / PROGRESS HELPERS
+   15. STATUS / PROGRESS HELPERS
 ===================================================================== */
 
 /**
- * Displays the current workflow message.
+ * Displays the current workflow message beneath the Add Video form.
+ *
+ * This existing text status remains useful alongside the richer visual
+ * ingestion manager because it can describe fine-grained operations
+ * such as checksum generation and Backblaze authorisation.
+ *
+ * @param {string} message
  */
 function handleUploadStatus(
   message
@@ -1905,19 +2857,48 @@ function handleUploadStatus(
 
 
 /**
- * Updates the Backblaze upload progress bar.
+ * Updates the real Backblaze upload progress bar.
+ *
+ * The same percentage is also passed into the enhanced ingestion
+ * manager. This allows the overall percentage to move smoothly while
+ * the potentially long MP4 upload is taking place.
+ *
+ * @param {Object} progress
+ * @param {number} progress.percent
+ * @param {string} progress.text
  */
 function handleUploadProgress({
   percent,
   text
 }) {
 
+  /*
+   * Protect against undefined, NaN or out-of-range values coming from
+   * an uploader.
+   */
+  const safePercent =
+    Math.max(
+      0,
+      Math.min(
+        100,
+        Number(
+          percent
+        ) ||
+        0
+      )
+    );
+
+
+  addVideoByteUploadPercent =
+    safePercent;
+
+
   if (
     addVideoProgress
   ) {
 
     addVideoProgress.value =
-      percent;
+      safePercent;
   }
 
 
@@ -1928,37 +2909,66 @@ function handleUploadProgress({
     addVideoProgressText.textContent =
       text;
   }
+
+
+  /*
+   * Recalculate the headline percentage only if the visual MP4 upload
+   * stage is currently active.
+   */
+  const videoUploadStage =
+    getIngestionStageElement(
+      "video-upload"
+    );
+
+
+  if (
+    videoUploadStage
+      ?.classList.contains(
+        "is-active"
+      )
+  ) {
+
+    updateIngestionPercent();
+  }
 }
 
 
 /* =====================================================================
-   15. SUBMISSION / INGESTION PIPELINE
+   16. SUBMISSION / INGESTION PIPELINE
    =====================================================================
 
    Workflow:
 
        Validate
-           ↓
+          ↓
        Duplicate check
-           ↓
+          ↓
        ready
-           ↓
+          ↓
        uploading
-           ↓
+          ↓
        video_uploaded
-           ↓
+          ↓
        zulu-finalize-video
-           ↓
+          ↓
        catalogued
-           ↓
+          ↓
        thumbnail_uploading
-           ↓
+          ↓
        complete / complete_without_thumbnail
+
+   The persistent ingestion state and visual ingestion state are
+   intentionally separate:
+
+       Supabase state = authoritative recovery/audit information
+       Visual state   = live user feedback
 
 ===================================================================== */
 
 /**
  * Processes the complete Add Video submission.
+ *
+ * Chunk 3 continues with the body of this function.
  */
 async function handleSubmit() {
 
@@ -2024,6 +3034,9 @@ async function handleSubmit() {
 
   /*
    * Analysis must have completed successfully.
+   *
+   * If metadata is still null the user may simply have clicked Upload
+   * before browser analysis finished, or analysis may have failed.
    */
   if (
     !addVideoMetadata
@@ -2038,7 +3051,7 @@ async function handleSubmit() {
 
 
   /*
-   * Every upload now requires its persistent ingestion record.
+   * Every upload requires its persistent ingestion record.
    */
   const ingestionId =
     addVideoIngestionId;
@@ -2059,6 +3072,18 @@ async function handleSubmit() {
   /* -----------------------------------------------------------------
      STEP 2: DUPLICATE CHECK
   ----------------------------------------------------------------- */
+
+  /*
+   * Duplicate checking begins only when Upload Video is pressed.
+   */
+  setIngestionStage(
+    "duplicate",
+    "active"
+  );
+
+
+  updateIngestionPercent();
+
 
   handleUploadStatus(
     "Checking for duplicate…"
@@ -2084,6 +3109,15 @@ async function handleSubmit() {
     );
 
 
+    /*
+     * An infrastructure/database failure during duplicate checking is a
+     * genuine ingestion failure.
+     */
+    showIngestionFailure(
+      "duplicate"
+    );
+
+
     await markIngestionFailed(
       ingestionId,
       "duplicate_check",
@@ -2105,6 +3139,23 @@ async function handleSubmit() {
   if (
     duplicateVideo
   ) {
+
+    /*
+     * The duplicate detector itself worked successfully, but the
+     * ingestion cannot continue because the selected video already
+     * exists.
+     *
+     * Visually use a failure/cross rather than a green tick so it is
+     * immediately obvious why no upload followed.
+     */
+    setIngestionStage(
+      "duplicate",
+      "failed"
+    );
+
+
+    updateIngestionPercent();
+
 
     handleUploadStatus(
       `Possible duplicate: "${duplicateVideo.film}" ` +
@@ -2153,6 +3204,18 @@ async function handleSubmit() {
   }
 
 
+  /*
+   * Duplicate check passed.
+   */
+  setIngestionStage(
+    "duplicate",
+    "complete"
+  );
+
+
+  updateIngestionPercent();
+
+
   /* -----------------------------------------------------------------
      STEP 3: BUILD CANONICAL FILENAME
   ----------------------------------------------------------------- */
@@ -2161,6 +3224,12 @@ async function handleSubmit() {
     `${payload.film}.mp4`;
 
 
+  /*
+   * currentStage is used by the catch handler later to decide whether
+   * this JavaScript owns persistence of a fatal error.
+   *
+   * Catalogue failures are owned by zulu-finalize-video.
+   */
   let currentStage =
     "ready";
 
@@ -2168,7 +3237,11 @@ async function handleSubmit() {
   try {
 
     /*
-     * Persist the final title and analysis-derived fingerprint.
+     * Persist the final title, canonical filename and analysis-derived
+     * fingerprint before any upload begins.
+     *
+     * The ingestion has now completed all local preparation and is
+     * ready to move into storage.
      */
     await updateIngestionStatus(
       ingestionId,
@@ -2247,12 +3320,33 @@ async function handleSubmit() {
     }
 
 
+    /*
+     * Reset the byte-level percentage used by the enhanced ingestion
+     * manager.
+     */
+    addVideoByteUploadPercent =
+      0;
+
+
     /* ---------------------------------------------------------------
        STEP 5: UPLOAD VIDEO TO BACKBLAZE
     --------------------------------------------------------------- */
 
     currentStage =
       "uploading";
+
+
+    /*
+     * The visual upload stage begins before the persistent status
+     * update so the user gets immediate feedback.
+     */
+    setIngestionStage(
+      "video-upload",
+      "active"
+    );
+
+
+    updateIngestionPercent();
 
 
     await updateIngestionStatus(
@@ -2265,7 +3359,11 @@ async function handleSubmit() {
 
 
     /*
-     * Large files use multipart upload.
+     * Large files use the multipart Backblaze uploader.
+     *
+     * The existing uploader reports real byte-level progress through
+     * handleUploadProgress(), which now also feeds the headline
+     * ingestion percentage.
      */
     if (
       isLargeFile(
@@ -2299,6 +3397,9 @@ async function handleSubmit() {
 
       /*
        * Normal Backblaze uploads require a complete-file SHA-1.
+       *
+       * This happens after duplicate detection, so we do not waste time
+       * calculating the complete checksum for a known duplicate.
        */
       handleUploadStatus(
         "Calculating checksum…"
@@ -2325,6 +3426,9 @@ async function handleSubmit() {
 
       /*
        * Obtain a temporary Backblaze upload URL/token.
+       *
+       * Permanent B2 credentials remain on the server and are never
+       * exposed to this browser module.
        */
       handleUploadStatus(
         "Preparing secure Backblaze upload…"
@@ -2403,7 +3507,14 @@ async function handleSubmit() {
 
     /*
      * The MP4 has successfully reached Backblaze.
+     *
+     * Force both progress systems to 100% for this stage even if the
+     * final XHR/multipart callback rounded slightly below 100.
      */
+    addVideoByteUploadPercent =
+      100;
+
+
     if (
       addVideoProgress
     ) {
@@ -2420,6 +3531,18 @@ async function handleSubmit() {
       addVideoProgressText.textContent =
         `100% — ${formatBytes(payload.file.size)}`;
     }
+
+
+    /*
+     * The storage stage is now complete.
+     */
+    setIngestionStage(
+      "video-upload",
+      "complete"
+    );
+
+
+    updateIngestionPercent();
 
 
     console.log(
@@ -2448,9 +3571,11 @@ async function handleSubmit() {
     /*
      * Record successful storage.
      *
-     * This journal write is best-effort because the MP4 is already
-     * safely stored. A temporary journal failure must not cause the UI
-     * to claim that the MP4 itself failed to upload.
+     * This journal write is deliberately best-effort because the MP4
+     * is already safely stored in Backblaze.
+     *
+     * A temporary journal failure here must not cause the UI to claim
+     * that the actual MP4 upload failed.
      */
     try {
 
@@ -2489,17 +3614,41 @@ async function handleSubmit() {
       "cataloguing";
 
 
+    /*
+     * Catalogue creation is now the active visual stage.
+     */
+    setIngestionStage(
+      "catalogue",
+      "active"
+    );
+
+
+    updateIngestionPercent();
+
+
     handleUploadStatus(
       "Creating catalogue entry…"
     );
 
 
     /*
-     * zulu-finalize-video now receives ingestion_id.
+     * zulu-finalize-video receives the persistent ingestion UUID.
      *
-     * That function owns:
+     * The Edge Function owns the protected catalogue stages:
      *
-     *     video_uploaded → cataloguing → catalogued
+     *     video_uploaded
+     *          ↓
+     *     cataloguing
+     *          ↓
+     *     catalogued
+     *
+     * It also creates:
+     *
+     *     zulu_videos
+     *     actor relationships
+     *     search refresh
+     *
+     * and writes video_uid back to zulu_ingestions.
      */
     const {
       data:
@@ -2565,8 +3714,17 @@ async function handleSubmit() {
 
 
       /*
-       * zulu-finalize-video records catalogue-stage failures itself.
+       * zulu-finalize-video owns persistence of catalogue-stage
+       * failures, so the browser does not call markIngestionFailed()
+       * here.
+       *
+       * Visually, however, catalogue creation has failed.
        */
+      showIngestionFailure(
+        "catalogue"
+      );
+
+
       throw finalizeError;
     }
 
@@ -2575,6 +3733,15 @@ async function handleSubmit() {
       !finalizeData
         ?.success
     ) {
+
+      /*
+       * The Edge Function returned normally but reported that
+       * finalisation did not succeed.
+       */
+      showIngestionFailure(
+        "catalogue"
+      );
+
 
       throw new Error(
         finalizeData?.error ||
@@ -2589,6 +3756,19 @@ async function handleSubmit() {
     );
 
 
+    /*
+     * Catalogue entry now exists and the ingestion record should
+     * contain video_uid.
+     */
+    setIngestionStage(
+      "catalogue",
+      "complete"
+    );
+
+
+    updateIngestionPercent();
+
+
     /* ---------------------------------------------------------------
        STEP 8: THUMBNAIL
        ---------------------------------------------------------------
@@ -2597,11 +3777,16 @@ async function handleSubmit() {
 
        At this point:
 
-           MP4       ✓
-           Catalogue ✓
+           MP4        ✓
+           Catalogue  ✓
 
-       Therefore a thumbnail problem must not undo or invalidate the
+       Therefore a thumbnail problem must never undo or invalidate the
        successful video ingestion.
+
+       The visual manager reflects this distinction:
+
+           ✓ = thumbnail published
+           ⚠ = default thumbnail will be used
     --------------------------------------------------------------- */
 
     const thumbnailBlob =
@@ -2620,6 +3805,18 @@ async function handleSubmit() {
 
         currentStage =
           "thumbnail_uploading";
+
+
+        /*
+         * Begin visual thumbnail publishing.
+         */
+        setIngestionStage(
+          "thumbnail-upload",
+          "active"
+        );
+
+
+        updateIngestionPercent();
 
 
         await updateIngestionStatus(
@@ -2645,6 +3842,18 @@ async function handleSubmit() {
         finalThumbnailStatus =
           "uploaded";
 
+
+        /*
+         * Thumbnail is now available from the media store.
+         */
+        setIngestionStage(
+          "thumbnail-upload",
+          "complete"
+        );
+
+
+        updateIngestionPercent();
+
       } catch (thumbnailUploadError) {
 
         console.error(
@@ -2654,12 +3863,24 @@ async function handleSubmit() {
 
 
         /*
-         * Do not throw.
+         * Do NOT throw.
          *
          * The MP4 and catalogue entry are already valid.
+         *
+         * The ingestion will ultimately become
+         * complete_without_thumbnail.
          */
         finalThumbnailStatus =
           "failed";
+
+
+        setIngestionStage(
+          "thumbnail-upload",
+          "warning"
+        );
+
+
+        updateIngestionPercent();
       }
 
     } else {
@@ -2672,6 +3893,19 @@ async function handleSubmit() {
 
       finalThumbnailStatus =
         "skipped";
+
+
+      /*
+       * No thumbnail is a warning rather than a fatal ingestion
+       * failure.
+       */
+      setIngestionStage(
+        "thumbnail-upload",
+        "warning"
+      );
+
+
+      updateIngestionPercent();
     }
 
 
@@ -2684,10 +3918,25 @@ async function handleSubmit() {
 
        failed / skipped
            → complete_without_thumbnail
+
+       zulu-ingestion-status is responsible for selecting the final
+       persistent status from finalThumbnailStatus.
     --------------------------------------------------------------- */
 
     await completeIngestion(
       ingestionId,
+      finalThumbnailStatus
+    );
+
+
+    /*
+     * The persistent ingestion has now reached its final state.
+     *
+     * Update the visual manager only after the server confirms
+     * completion.
+     */
+    showIngestionComplete(
+      finalizeData.uid,
       finalThumbnailStatus
     );
 
@@ -2718,6 +3967,9 @@ async function handleSubmit() {
        STEP 11: DISPLAY SUCCESS
     --------------------------------------------------------------- */
 
+    /*
+     * Ensure the native upload bar also remains at 100%.
+     */
     if (
       addVideoProgress
     ) {
@@ -2736,6 +3988,10 @@ async function handleSubmit() {
     }
 
 
+    /*
+     * Preserve the existing detailed status message beneath the
+     * enhanced ingestion manager.
+     */
     if (
       finalThumbnailStatus ===
         "uploaded"
@@ -2754,6 +4010,9 @@ async function handleSubmit() {
     }
 
 
+    /*
+     * Lock the Upload button after success.
+     */
     if (
       addVideoSubmit
     ) {
@@ -2763,6 +4022,9 @@ async function handleSubmit() {
     }
 
 
+    /*
+     * Cancel becomes Close after successful ingestion.
+     */
     if (
       addVideoCancel
     ) {
@@ -2771,10 +4033,23 @@ async function handleSubmit() {
         "Close";
     }
 
+
   } catch (error) {
 
     /* ---------------------------------------------------------------
        INGESTION FAILURE
+       ---------------------------------------------------------------
+
+       This catch can receive failures from:
+
+           ready journal update
+           checksum generation
+           Backblaze authorization
+           Backblaze upload
+           catalogue finalisation
+           final completion journal
+
+       Ownership of the persistent error depends on the stage.
     --------------------------------------------------------------- */
 
     console.error(
@@ -2805,9 +4080,69 @@ async function handleSubmit() {
 
 
     /*
+     * Ensure the visual manager identifies the appropriate failing
+     * stage.
+     *
+     * Some failure routes already set the stage before throwing, but
+     * doing this defensively makes the UI reliable for unexpected
+     * exceptions too.
+     */
+    if (
+      currentStage ===
+        "ready"
+    ) {
+
+      /*
+       * The failure happened while preparing the final ready state.
+       * Duplicate checking has already succeeded, so the next logical
+       * visible stage is video upload.
+       */
+      showIngestionFailure(
+        "video-upload"
+      );
+
+    } else if (
+      currentStage ===
+        "uploading"
+    ) {
+
+      showIngestionFailure(
+        "video-upload"
+      );
+
+    } else if (
+      currentStage ===
+        "cataloguing"
+    ) {
+
+      showIngestionFailure(
+        "catalogue"
+      );
+
+    } else if (
+      currentStage ===
+        "thumbnail_uploading"
+    ) {
+
+      /*
+       * Normally thumbnail errors are caught inside their own nested
+       * try/catch and converted to warnings.
+       *
+       * Reaching this branch therefore indicates an unexpected error
+       * around the thumbnail/completion portion of the workflow.
+       */
+      showIngestionFailure(
+        "thumbnail-upload"
+      );
+    }
+
+
+    /*
      * Once catalogue creation has succeeded, thumbnail/completion
-     * journal errors must not rewrite the ingestion as a generic
-     * upload failure.
+     * journal errors must not rewrite the persistent ingestion as a
+     * generic pre-upload failure.
+     *
+     * We preserve that existing behaviour here.
      */
     handleUploadStatus(
       `Upload failed: ${
@@ -2816,16 +4151,21 @@ async function handleSubmit() {
       }`
     );
 
+
   } finally {
 
     /* ---------------------------------------------------------------
-       RESTORE UI STATE
+       STEP 12: RESTORE UI STATE
     --------------------------------------------------------------- */
 
     addVideoUploadInProgress =
       false;
 
 
+    /*
+     * File selection is locked only while the actual upload pipeline
+     * is running.
+     */
     if (
       addVideoFile
     ) {
@@ -2839,6 +4179,9 @@ async function handleSubmit() {
       addVideoCompleted
     ) {
 
+      /*
+       * Successful ingestion remains visible until the modal is closed.
+       */
       if (
         addVideoSubmit
       ) {
@@ -2861,6 +4204,10 @@ async function handleSubmit() {
 
     } else {
 
+      /*
+       * Failed or interrupted workflows can be inspected and, where
+       * appropriate, retried/reselected.
+       */
       if (
         addVideoSubmit
       ) {
@@ -2883,3 +4230,5 @@ async function handleSubmit() {
     }
   }
 }
+
+
