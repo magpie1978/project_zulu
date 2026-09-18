@@ -6,6 +6,9 @@ import {
 import {
   generateThumbnailCandidatesFromUrl,
   getSelectedThumbnailBlob,
+  getSelectedThumbnailCandidate,
+  selectPreviousThumbnailCandidate,
+  selectNextThumbnailCandidate,
   resetThumbnailState,
   uploadThumbnailToBackblaze
 } from "./thumbnails.js";
@@ -3270,6 +3273,371 @@ function attachThumbnailRepairEvents() {
  *
  * It creates only the missing images/{uid}.png object.
  */
+
+/**
+ * Builds the manual thumbnail-selection interface used during a repair.
+ *
+ * Nothing is uploaded at this point. The user must explicitly press
+ * Upload Thumbnail.
+ */
+function showThumbnailRepairCandidatePicker(
+  uid
+) {
+
+  const row =
+    document.querySelector(
+      `[data-thumbnail-repair-row="${cssEscapeValue(
+        uid
+      )}"]`
+    );
+
+
+  if (!row) {
+
+    throw new Error(
+      "Could not find the thumbnail repair row."
+    );
+  }
+
+
+  let picker =
+    row.querySelector(
+      ".admin-thumbnail-repair-picker"
+    );
+
+
+  if (!picker) {
+
+    picker =
+      document.createElement(
+        "div"
+      );
+
+
+    picker.className =
+      "admin-thumbnail-repair-picker";
+
+
+    row.appendChild(
+      picker
+    );
+  }
+
+
+  picker.innerHTML =
+    `
+      <div class="admin-thumbnail-repair-preview-wrap">
+
+        <img
+          class="admin-thumbnail-repair-preview"
+          data-thumbnail-repair-preview="${escapeHtml(
+            uid
+          )}"
+          alt="Thumbnail candidate"
+        >
+
+      </div>
+
+
+      <div class="admin-thumbnail-repair-navigation">
+
+        <button
+          type="button"
+          class="admin-thumbnail-picker-button"
+          data-thumbnail-repair-prev="${escapeHtml(
+            uid
+          )}"
+        >
+          <i data-lucide="chevron-left"></i>
+          <span>Previous</span>
+        </button>
+
+
+        <div
+          class="admin-thumbnail-repair-counter"
+          data-thumbnail-repair-counter="${escapeHtml(
+            uid
+          )}"
+        ></div>
+
+
+        <button
+          type="button"
+          class="admin-thumbnail-picker-button"
+          data-thumbnail-repair-next="${escapeHtml(
+            uid
+          )}"
+        >
+          <span>Next</span>
+          <i data-lucide="chevron-right"></i>
+        </button>
+
+      </div>
+
+
+      <div
+        class="admin-thumbnail-repair-candidate-detail"
+        data-thumbnail-repair-detail="${escapeHtml(
+          uid
+        )}"
+      ></div>
+
+
+      <div class="admin-thumbnail-repair-confirm-actions">
+
+        <button
+          type="button"
+          class="admin-thumbnail-upload-selected"
+          data-thumbnail-repair-upload="${escapeHtml(
+            uid
+          )}"
+        >
+          <i data-lucide="upload"></i>
+          <span>Upload Thumbnail</span>
+        </button>
+
+
+        <button
+          type="button"
+          class="admin-thumbnail-cancel-selection"
+          data-thumbnail-repair-cancel="${escapeHtml(
+            uid
+          )}"
+        >
+          Cancel
+        </button>
+
+      </div>
+    `;
+
+
+  const previousButton =
+    picker.querySelector(
+      `[data-thumbnail-repair-prev="${cssEscapeValue(
+        uid
+      )}"]`
+    );
+
+
+  const nextButton =
+    picker.querySelector(
+      `[data-thumbnail-repair-next="${cssEscapeValue(
+        uid
+      )}"]`
+    );
+
+
+  previousButton?.addEventListener(
+    "click",
+    () => {
+
+      selectPreviousThumbnailCandidate();
+
+      updateThumbnailRepairCandidatePreview(
+        uid
+      );
+    }
+  );
+
+
+  nextButton?.addEventListener(
+    "click",
+    () => {
+
+      selectNextThumbnailCandidate();
+
+      updateThumbnailRepairCandidatePreview(
+        uid
+      );
+    }
+  );
+
+
+  updateThumbnailRepairCandidatePreview(
+    uid
+  );
+
+
+  window.lucide?.createIcons();
+}
+
+
+/**
+ * Refreshes the Admin preview after Previous / Next changes the selected
+ * candidate.
+ */
+function updateThumbnailRepairCandidatePreview(
+  uid
+) {
+
+  const candidate =
+    getSelectedThumbnailCandidate();
+
+
+  if (!candidate) {
+
+    return;
+  }
+
+
+  const preview =
+    document.querySelector(
+      `[data-thumbnail-repair-preview="${cssEscapeValue(
+        uid
+      )}"]`
+    );
+
+
+  const counter =
+    document.querySelector(
+      `[data-thumbnail-repair-counter="${cssEscapeValue(
+        uid
+      )}"]`
+    );
+
+
+  const detail =
+    document.querySelector(
+      `[data-thumbnail-repair-detail="${cssEscapeValue(
+        uid
+      )}"]`
+    );
+
+
+  if (preview) {
+
+    /*
+     * Revoke the Admin-specific preview URL whenever the candidate
+     * changes.
+     */
+    if (
+      preview.dataset.objectUrl
+    ) {
+
+      URL.revokeObjectURL(
+        preview.dataset.objectUrl
+      );
+    }
+
+
+    const objectUrl =
+      URL.createObjectURL(
+        candidate.blob
+      );
+
+
+    preview.dataset.objectUrl =
+      objectUrl;
+
+
+    preview.src =
+      objectUrl;
+  }
+
+
+  if (counter) {
+
+    counter.textContent =
+      `${candidate.number} of ${candidate.count}`;
+  }
+
+
+  if (detail) {
+
+    const seconds =
+      Math.round(
+        candidate.time
+      );
+
+
+    const faces =
+      Number(
+        candidate.faceCount ||
+        0
+      );
+
+
+    if (
+      faces >= 2
+    ) {
+
+      detail.textContent =
+        `Suggested frame — ${faces} faces detected at ${seconds}s`;
+
+    } else if (
+      faces === 1
+    ) {
+
+      detail.textContent =
+        `Alternative frame — 1 face detected at ${seconds}s`;
+
+    } else {
+
+      detail.textContent =
+        `Fallback frame at ${seconds}s`;
+    }
+  }
+}
+
+
+/**
+ * Waits for the user to either approve the currently displayed candidate
+ * or cancel the repair.
+ */
+function waitForThumbnailRepairChoice(
+  uid
+) {
+
+  return new Promise(
+    resolve => {
+
+      const uploadButton =
+        document.querySelector(
+          `[data-thumbnail-repair-upload="${cssEscapeValue(
+            uid
+          )}"]`
+        );
+
+
+      const cancelButton =
+        document.querySelector(
+          `[data-thumbnail-repair-cancel="${cssEscapeValue(
+            uid
+          )}"]`
+        );
+
+
+      uploadButton?.addEventListener(
+        "click",
+        () => {
+
+          resolve(
+            "upload"
+          );
+        },
+        {
+          once: true
+        }
+      );
+
+
+      cancelButton?.addEventListener(
+        "click",
+        () => {
+
+          resolve(
+            "cancel"
+          );
+        },
+        {
+          once: true
+        }
+      );
+    }
+  );
+}
+
+
 async function repairMissingThumbnail(
   uid
 ) {
@@ -3440,19 +3808,83 @@ async function repairMissingThumbnail(
       );
 
 
+/* ===============================================================
+   STEP 2B — LET USER CHOOSE THE FRAME
+=============================================================== */
+
+    showThumbnailRepairCandidatePicker(
+      uid
+    );
+    
+    
+    setThumbnailRepairButtonText(
+      button,
+      "Choose Thumbnail"
+    );
+    
+    
+    setThumbnailRepairStatus(
+      uid,
+      "Choose a thumbnail, then press Upload Thumbnail.",
+      "working"
+    );
+    
+    
+    const choice =
+      await waitForThumbnailRepairChoice(
+        uid
+      );
+    
+    
+    if (
+      choice === "cancel"
+    ) {
+    
+      setThumbnailRepairStatus(
+        uid,
+        "Thumbnail repair cancelled.",
+        ""
+      );
+    
+    
+      if (
+        button
+      ) {
+    
+        button.classList.remove(
+          "is-working",
+          "is-error",
+          "is-success"
+        );
+    
+    
+        button.innerHTML =
+          `
+            <i data-lucide="wand-sparkles"></i>
+            <span>Repair Thumbnail</span>
+          `;
+      }
+    
+    
+      window.lucide?.createIcons();
+    
+    
+      return;
+    }
+    
+    
     const thumbnailBlob =
       getSelectedThumbnailBlob();
-
-
+    
+    
     if (
       !thumbnailBlob
     ) {
-
+    
       throw new Error(
-        "Thumbnail analysis completed but no image was selected."
+        "No thumbnail candidate is selected."
       );
     }
-
 
     /* ===============================================================
        STEP 3 — UPLOAD images/{uid}.png
