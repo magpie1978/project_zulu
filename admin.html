@@ -13,7 +13,7 @@
 
   <link
     rel="stylesheet"
-    href="style/admin.css?v=20260918-3"
+    href="style/admin.css"
   >
 
   <script src="https://unpkg.com/lucide@latest"></script>
@@ -798,6 +798,405 @@
 
 
     <!-- ===================================================
+         VIDEO STORAGE HEALTH
+    ==================================================== -->
+
+    <section
+      class="admin-section"
+      aria-labelledby="admin-video-health-heading"
+    >
+
+      <div class="admin-section-heading admin-section-heading-row">
+
+        <div>
+
+          <div class="admin-section-kicker">
+            BACKBLAZE STORAGE
+          </div>
+
+          <h2 id="admin-video-health-heading">
+            Video Storage Health
+          </h2>
+
+        </div>
+
+
+        <div
+          id="admin-video-health-status"
+          class="admin-last-refreshed"
+        >
+          Checking Backblaze…
+        </div>
+
+      </div>
+
+
+      <!-- =================================================
+           VIDEO STORAGE COVERAGE
+      ================================================== -->
+
+      <div
+        id="admin-video-health-coverage"
+        class="admin-video-health-coverage"
+      >
+
+        <div class="admin-video-health-coverage-icon">
+          <i data-lucide="hard-drive"></i>
+        </div>
+
+        <div>
+
+          <div
+            id="admin-video-health-coverage-title"
+            class="admin-video-health-coverage-title"
+          >
+            Checking video storage…
+          </div>
+
+          <div
+            id="admin-video-health-coverage-detail"
+            class="admin-video-health-coverage-detail"
+          >
+            Reconciling the catalogue against Backblaze B2.
+          </div>
+
+        </div>
+
+      </div>
+
+
+      <!-- =================================================
+           PRIMARY STORAGE COUNTS
+      ================================================== -->
+
+      <div class="admin-video-health-grid admin-video-health-grid-primary">
+
+        <!-- CATALOGUE -->
+
+        <article
+          class="admin-video-health-card admin-video-health-card-static"
+        >
+
+          <div class="admin-video-health-icon">
+            <i data-lucide="database"></i>
+          </div>
+
+          <div class="admin-video-health-content">
+
+            <div class="admin-video-health-label">
+              Catalogue
+            </div>
+
+            <div
+              id="admin-video-health-catalogue"
+              class="admin-video-health-value"
+            >
+              —
+            </div>
+
+          </div>
+
+        </article>
+
+
+        <!-- B2 VIDEOS -->
+
+        <article
+          class="admin-video-health-card admin-video-health-card-static"
+        >
+
+          <div class="admin-video-health-icon">
+            <i data-lucide="cloud"></i>
+          </div>
+
+          <div class="admin-video-health-content">
+
+            <div class="admin-video-health-label">
+              B2 Videos
+            </div>
+
+            <div
+              id="admin-video-health-b2"
+              class="admin-video-health-value"
+            >
+              —
+            </div>
+
+          </div>
+
+        </article>
+
+
+        <!-- MATCHED -->
+
+        <article
+          class="admin-video-health-card admin-video-health-card-static"
+        >
+
+          <div class="admin-video-health-icon">
+            <i data-lucide="circle-check"></i>
+          </div>
+
+          <div class="admin-video-health-content">
+
+            <div class="admin-video-health-label">
+              Matched
+            </div>
+
+            <div
+              id="admin-video-health-matched"
+              class="admin-video-health-value"
+            >
+              —
+            </div>
+
+          </div>
+
+        </article>
+
+      </div>
+
+
+      <!-- =================================================
+           VIDEO STORAGE DIAGNOSTICS
+      ================================================== -->
+
+      <div class="admin-video-health-group">
+
+        <div class="admin-video-health-group-heading">
+          Diagnostics
+        </div>
+
+
+        <div class="admin-video-health-grid admin-video-health-grid-diagnostics">
+
+          <!-- MISSING -->
+
+          <button
+            type="button"
+            class="admin-video-health-card admin-video-health-card-action"
+            data-video-health-key="missing"
+          >
+
+            <div class="admin-video-health-icon">
+              <i data-lucide="file-x"></i>
+            </div>
+
+            <div class="admin-video-health-content">
+
+              <div class="admin-video-health-label">
+                Missing
+              </div>
+
+              <div
+                id="admin-video-health-missing"
+                class="admin-video-health-value"
+              >
+                —
+              </div>
+
+            </div>
+
+            <i
+              data-lucide="chevron-right"
+              class="admin-video-health-chevron"
+            ></i>
+
+          </button>
+
+
+          <!-- ORPHANED -->
+
+          <button
+            type="button"
+            class="admin-video-health-card admin-video-health-card-action"
+            data-video-health-key="orphaned"
+          >
+
+            <div class="admin-video-health-icon">
+              <i data-lucide="unlink"></i>
+            </div>
+
+            <div class="admin-video-health-content">
+
+              <div class="admin-video-health-label">
+                Orphaned
+              </div>
+
+              <div
+                id="admin-video-health-orphaned"
+                class="admin-video-health-value"
+              >
+                —
+              </div>
+
+            </div>
+
+            <i
+              data-lucide="chevron-right"
+              class="admin-video-health-chevron"
+            ></i>
+
+          </button>
+
+
+          <!-- CASE MISMATCH -->
+
+          <button
+            type="button"
+            class="admin-video-health-card admin-video-health-card-action"
+            data-video-health-key="case_mismatch"
+          >
+
+            <div class="admin-video-health-icon">
+              <i data-lucide="case-sensitive"></i>
+            </div>
+
+            <div class="admin-video-health-content">
+
+              <div class="admin-video-health-label">
+                Case Mismatch
+              </div>
+
+              <div
+                id="admin-video-health-case-mismatch"
+                class="admin-video-health-value"
+              >
+                —
+              </div>
+
+            </div>
+
+            <i
+              data-lucide="chevron-right"
+              class="admin-video-health-chevron"
+            ></i>
+
+          </button>
+
+
+          <!-- URL / FILENAME ERROR -->
+
+          <button
+            type="button"
+            class="admin-video-health-card admin-video-health-card-action"
+            data-video-health-key="url_filename_error"
+          >
+
+            <div class="admin-video-health-icon">
+              <i data-lucide="link-2-off"></i>
+            </div>
+
+            <div class="admin-video-health-content">
+
+              <div class="admin-video-health-label">
+                URL / Filename Error
+              </div>
+
+              <div
+                id="admin-video-health-url-error"
+                class="admin-video-health-value"
+              >
+                —
+              </div>
+
+            </div>
+
+            <i
+              data-lucide="chevron-right"
+              class="admin-video-health-chevron"
+            ></i>
+
+          </button>
+
+
+          <!-- INVALID -->
+
+          <button
+            type="button"
+            class="admin-video-health-card admin-video-health-card-action"
+            data-video-health-key="invalid"
+          >
+
+            <div class="admin-video-health-icon">
+              <i data-lucide="triangle-alert"></i>
+            </div>
+
+            <div class="admin-video-health-content">
+
+              <div class="admin-video-health-label">
+                Invalid
+              </div>
+
+              <div
+                id="admin-video-health-invalid"
+                class="admin-video-health-value"
+              >
+                —
+              </div>
+
+            </div>
+
+            <i
+              data-lucide="chevron-right"
+              class="admin-video-health-chevron"
+            ></i>
+
+          </button>
+
+        </div>
+
+      </div>
+
+
+      <!-- =================================================
+           VIDEO STORAGE DIAGNOSTIC RESULTS
+      ================================================== -->
+
+      <div
+        id="admin-video-health-results"
+        class="admin-video-health-results"
+        hidden
+      >
+
+        <div class="admin-video-health-results-header">
+
+          <div>
+
+            <div class="admin-section-kicker">
+              STORAGE DIAGNOSTICS
+            </div>
+
+            <h3 id="admin-video-health-results-title">
+              Results
+            </h3>
+
+          </div>
+
+
+          <button
+            type="button"
+            id="admin-video-health-results-close"
+            class="admin-video-health-close"
+            aria-label="Close video storage results"
+          >
+            <i data-lucide="x"></i>
+          </button>
+
+        </div>
+
+
+        <div
+          id="admin-video-health-results-body"
+          class="admin-video-health-results-body"
+        ></div>
+
+      </div>
+
+    </section>
+
+
+    <!-- ===================================================
          THUMBNAIL HEALTH
     ==================================================== -->
 
@@ -972,7 +1371,7 @@
         >
 
           <div class="admin-thumbnail-icon">
-            <i data-lucide="file-warning"></i>
+            <i data-lucide="triangle-alert"></i>
           </div>
 
           <div class="admin-thumbnail-content">
@@ -1015,7 +1414,7 @@
           <div>
 
             <div class="admin-section-kicker">
-              THUMBNAIL DIAGNOSTICS
+              STORAGE DIAGNOSTICS
             </div>
 
             <h3 id="admin-thumbnail-results-title">
@@ -1061,7 +1460,7 @@
         <div>
 
           <div class="admin-section-kicker">
-            ACTIVITY
+            RECENT ACTIVITY
           </div>
 
           <h2 id="admin-ingestions-heading">
@@ -1074,7 +1473,9 @@
         <div
           id="admin-last-refreshed"
           class="admin-last-refreshed"
-        ></div>
+        >
+          —
+        </div>
 
       </div>
 
@@ -1096,22 +1497,24 @@
               </th>
 
               <th>
-                Video
+                Stage
               </th>
 
               <th>
-                Catalogue
+                Video UID
               </th>
 
               <th>
-                Thumbnail
+                Created
               </th>
 
               <th>
-                Date
+                Updated
               </th>
 
-              <th aria-label="Details"></th>
+              <th class="admin-table-expand-heading">
+                Details
+              </th>
 
             </tr>
 
@@ -1124,9 +1527,9 @@
 
               <td
                 colspan="7"
-                class="admin-table-loading"
+                class="admin-table-empty"
               >
-                Loading ingestions…
+                Loading…
               </td>
 
             </tr>
@@ -1143,12 +1546,12 @@
 
 
   <!-- =====================================================
-       JAVASCRIPT
+       SCRIPT
   ====================================================== -->
 
   <script
     type="module"
-    src="js/zulu/admin.js?v=20260918-3"
+    src="js/zulu/admin.js"
   ></script>
 
 </body>
