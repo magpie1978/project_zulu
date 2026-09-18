@@ -1,0 +1,537 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1"
+  >
+
+  <title>PornFlix — Admin</title>
+
+  <link
+    rel="stylesheet"
+    href="style/zulu.css"
+  >
+
+  <link
+    rel="stylesheet"
+    href="style/admin.css"
+  >
+
+  <script src="https://unpkg.com/lucide@latest"></script>
+
+  <link
+    rel="icon"
+    href="favicon.ico"
+    sizes="any"
+  >
+</head>
+
+
+<body class="admin-page">
+
+  <!-- =====================================================
+       HEADER
+  ====================================================== -->
+
+  <header class="admin-header">
+
+    <div class="admin-header-brand">
+
+      <a
+        href="pornflix.html"
+        class="admin-logo-link"
+        aria-label="Return to PornFlix"
+      >
+        <img
+          src="PORNFLIX.png"
+          alt="PornFlix"
+          class="admin-logo"
+        >
+      </a>
+
+      <div class="admin-header-title">
+
+        <span class="admin-header-kicker">
+          ADMIN
+        </span>
+
+        <h1>
+          Library Health
+        </h1>
+
+      </div>
+
+    </div>
+
+
+    <div class="admin-header-actions">
+
+      <button
+        id="admin-refresh"
+        class="admin-button admin-button-secondary"
+        type="button"
+      >
+        <i data-lucide="refresh-cw"></i>
+        <span>Refresh</span>
+      </button>
+
+
+      <a
+        href="pornflix.html"
+        class="admin-button admin-button-secondary"
+      >
+        <i data-lucide="arrow-left"></i>
+        <span>Back to Library</span>
+      </a>
+
+    </div>
+
+  </header>
+
+
+  <!-- =====================================================
+       MAIN
+  ====================================================== -->
+
+  <main class="admin-main">
+
+    <!-- ===================================================
+         PAGE STATUS
+    ==================================================== -->
+
+    <div
+      id="admin-status"
+      class="admin-status"
+      role="status"
+    >
+      Loading library health…
+    </div>
+
+
+    <!-- ===================================================
+         LIBRARY SUMMARY
+    ==================================================== -->
+
+    <section
+      class="admin-section"
+      aria-labelledby="admin-library-heading"
+    >
+
+      <div class="admin-section-heading">
+
+        <div>
+
+          <div class="admin-section-kicker">
+            CATALOGUE
+          </div>
+
+          <h2 id="admin-library-heading">
+            Library
+          </h2>
+
+        </div>
+
+      </div>
+
+
+      <div class="admin-stat-grid">
+
+        <article class="admin-stat-card">
+
+          <div class="admin-stat-icon">
+            <i data-lucide="film"></i>
+          </div>
+
+          <div class="admin-stat-content">
+
+            <div class="admin-stat-label">
+              Videos
+            </div>
+
+            <div
+              id="admin-stat-videos"
+              class="admin-stat-value"
+            >
+              —
+            </div>
+
+          </div>
+
+        </article>
+
+
+        <article class="admin-stat-card">
+
+          <div class="admin-stat-icon">
+            <i data-lucide="users"></i>
+          </div>
+
+          <div class="admin-stat-content">
+
+            <div class="admin-stat-label">
+              Actors
+            </div>
+
+            <div
+              id="admin-stat-actors"
+              class="admin-stat-value"
+            >
+              —
+            </div>
+
+          </div>
+
+        </article>
+
+
+        <article class="admin-stat-card">
+
+          <div class="admin-stat-icon">
+            <i data-lucide="eye"></i>
+          </div>
+
+          <div class="admin-stat-content">
+
+            <div class="admin-stat-label">
+              Views
+            </div>
+
+            <div
+              id="admin-stat-views"
+              class="admin-stat-value"
+            >
+              —
+            </div>
+
+          </div>
+
+        </article>
+
+
+        <article class="admin-stat-card">
+
+          <div class="admin-stat-icon">
+            <i data-lucide="history"></i>
+          </div>
+
+          <div class="admin-stat-content">
+
+            <div class="admin-stat-label">
+              Ingestions
+            </div>
+
+            <div
+              id="admin-stat-ingestions"
+              class="admin-stat-value"
+            >
+              —
+            </div>
+
+          </div>
+
+        </article>
+
+      </div>
+
+    </section>
+
+
+    <!-- ===================================================
+         INGESTION HEALTH
+    ==================================================== -->
+
+    <section
+      class="admin-section"
+      aria-labelledby="admin-health-heading"
+    >
+
+      <div class="admin-section-heading">
+
+        <div>
+
+          <div class="admin-section-kicker">
+            INGESTION JOURNAL
+          </div>
+
+          <h2 id="admin-health-heading">
+            Health
+          </h2>
+
+        </div>
+
+      </div>
+
+
+      <div class="admin-health-grid">
+
+        <!-- COMPLETE -->
+
+        <article class="admin-health-card">
+
+          <div class="admin-health-symbol admin-health-good">
+            ✓
+          </div>
+
+          <div>
+
+            <div class="admin-health-label">
+              Complete
+            </div>
+
+            <div
+              id="admin-health-complete"
+              class="admin-health-value"
+            >
+              —
+            </div>
+
+          </div>
+
+        </article>
+
+
+        <!-- WITHOUT THUMBNAIL -->
+
+        <article class="admin-health-card">
+
+          <div class="admin-health-symbol admin-health-warning">
+            ⚠
+          </div>
+
+          <div>
+
+            <div class="admin-health-label">
+              Without thumbnail
+            </div>
+
+            <div
+              id="admin-health-no-thumbnail"
+              class="admin-health-value"
+            >
+              —
+            </div>
+
+          </div>
+
+        </article>
+
+
+        <!-- FAILED -->
+
+        <article class="admin-health-card">
+
+          <div class="admin-health-symbol admin-health-bad">
+            ✕
+          </div>
+
+          <div>
+
+            <div class="admin-health-label">
+              Failed
+            </div>
+
+            <div
+              id="admin-health-failed"
+              class="admin-health-value"
+            >
+              —
+            </div>
+
+          </div>
+
+        </article>
+
+
+        <!-- INCOMPLETE -->
+
+        <article class="admin-health-card">
+
+          <div class="admin-health-symbol admin-health-warning">
+            !
+          </div>
+
+          <div>
+
+            <div class="admin-health-label">
+              Incomplete
+            </div>
+
+            <div
+              id="admin-health-incomplete"
+              class="admin-health-value"
+            >
+              —
+            </div>
+
+          </div>
+
+        </article>
+
+
+        <!-- CANCELLED -->
+
+        <article class="admin-health-card">
+
+          <div class="admin-health-symbol admin-health-muted">
+            —
+          </div>
+
+          <div>
+
+            <div class="admin-health-label">
+              Cancelled
+            </div>
+
+            <div
+              id="admin-health-cancelled"
+              class="admin-health-value"
+            >
+              —
+            </div>
+
+          </div>
+
+        </article>
+
+
+        <!-- DUPLICATES -->
+
+        <article class="admin-health-card">
+
+          <div class="admin-health-symbol admin-health-muted">
+            =
+          </div>
+
+          <div>
+
+            <div class="admin-health-label">
+              Duplicates
+            </div>
+
+            <div
+              id="admin-health-duplicates"
+              class="admin-health-value"
+            >
+              —
+            </div>
+
+          </div>
+
+        </article>
+
+      </div>
+
+    </section>
+
+
+    <!-- ===================================================
+         RECENT INGESTIONS
+    ==================================================== -->
+
+    <section
+      class="admin-section"
+      aria-labelledby="admin-ingestions-heading"
+    >
+
+      <div class="admin-section-heading admin-section-heading-row">
+
+        <div>
+
+          <div class="admin-section-kicker">
+            ACTIVITY
+          </div>
+
+          <h2 id="admin-ingestions-heading">
+            Recent Ingestions
+          </h2>
+
+        </div>
+
+
+        <div
+          id="admin-last-refreshed"
+          class="admin-last-refreshed"
+        ></div>
+
+      </div>
+
+
+      <div class="admin-table-wrap">
+
+        <table class="admin-table">
+
+          <thead>
+
+            <tr>
+
+              <th>
+                Film
+              </th>
+
+              <th>
+                Status
+              </th>
+
+              <th>
+                Video
+              </th>
+
+              <th>
+                Catalogue
+              </th>
+
+              <th>
+                Thumbnail
+              </th>
+
+              <th>
+                Date
+              </th>
+
+              <th aria-label="Details"></th>
+
+            </tr>
+
+          </thead>
+
+
+          <tbody id="admin-ingestions-body">
+
+            <tr>
+
+              <td
+                colspan="7"
+                class="admin-table-loading"
+              >
+                Loading ingestions…
+              </td>
+
+            </tr>
+
+          </tbody>
+
+        </table>
+
+      </div>
+
+    </section>
+
+  </main>
+
+
+  <!-- =====================================================
+       JAVASCRIPT
+  ====================================================== -->
+
+  <script
+    type="module"
+    src="js/zulu/admin.js"
+  ></script>
+
+</body>
+
+</html>
