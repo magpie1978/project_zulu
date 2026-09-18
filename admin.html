@@ -13,7 +13,7 @@
 
   <link
     rel="stylesheet"
-    href="style/admin.css"
+    href="style/admin.css?v=20260918-3"
   >
 
   <script src="https://unpkg.com/lucide@latest"></script>
@@ -424,377 +424,628 @@
 
 
     <!-- ===================================================
-     CATALOGUE INTEGRITY
-==================================================== -->
+         CATALOGUE INTEGRITY
+    ==================================================== -->
 
-<section
-  class="admin-section"
-  aria-labelledby="admin-integrity-heading"
->
+    <section
+      class="admin-section"
+      aria-labelledby="admin-integrity-heading"
+    >
 
-  <div class="admin-section-heading">
+      <div class="admin-section-heading">
 
-    <div>
+        <div>
 
-      <div class="admin-section-kicker">
-        CATALOGUE DIAGNOSTICS
+          <div class="admin-section-kicker">
+            CATALOGUE DIAGNOSTICS
+          </div>
+
+          <h2 id="admin-integrity-heading">
+            Catalogue Integrity
+          </h2>
+
+        </div>
+
       </div>
 
-      <h2 id="admin-integrity-heading">
-        Catalogue Integrity
-      </h2>
 
-    </div>
+      <!-- =================================================
+           CORE INTEGRITY
+      ================================================== -->
 
-  </div>
+      <div class="admin-integrity-group">
 
-
-  <!-- =================================================
-       CORE INTEGRITY
-  ================================================== -->
-
-  <div class="admin-integrity-group">
-
-    <div class="admin-integrity-group-heading">
-      Integrity
-    </div>
+        <div class="admin-integrity-group-heading">
+          Integrity
+        </div>
 
 
-    <div class="admin-integrity-grid">
+        <div class="admin-integrity-grid">
 
-      <button
-        type="button"
-        class="admin-integrity-card"
-        data-integrity-key="duplicate_urls"
+          <button
+            type="button"
+            class="admin-integrity-card"
+            data-integrity-key="duplicate_urls"
+          >
+
+            <div class="admin-integrity-icon">
+              <i data-lucide="link-2"></i>
+            </div>
+
+            <div class="admin-integrity-content">
+
+              <div class="admin-integrity-label">
+                Duplicate URLs
+              </div>
+
+              <div
+                id="admin-integrity-duplicate-urls"
+                class="admin-integrity-value"
+              >
+                —
+              </div>
+
+            </div>
+
+            <i
+              data-lucide="chevron-right"
+              class="admin-integrity-chevron"
+            ></i>
+
+          </button>
+
+
+          <button
+            type="button"
+            class="admin-integrity-card"
+            data-integrity-key="duplicate_fingerprints"
+          >
+
+            <div class="admin-integrity-icon">
+              <i data-lucide="copy"></i>
+            </div>
+
+            <div class="admin-integrity-content">
+
+              <div class="admin-integrity-label">
+                Duplicate Files
+              </div>
+
+              <div
+                id="admin-integrity-duplicate-fingerprints"
+                class="admin-integrity-value"
+              >
+                —
+              </div>
+
+            </div>
+
+            <i
+              data-lucide="chevron-right"
+              class="admin-integrity-chevron"
+            ></i>
+
+          </button>
+
+
+          <button
+            type="button"
+            class="admin-integrity-card"
+            data-integrity-key="videos_without_actors"
+          >
+
+            <div class="admin-integrity-icon">
+              <i data-lucide="user-x"></i>
+            </div>
+
+            <div class="admin-integrity-content">
+
+              <div class="admin-integrity-label">
+                Videos Without Actors
+              </div>
+
+              <div
+                id="admin-integrity-no-actors"
+                class="admin-integrity-value"
+              >
+                —
+              </div>
+
+            </div>
+
+            <i
+              data-lucide="chevron-right"
+              class="admin-integrity-chevron"
+            ></i>
+
+          </button>
+
+
+          <button
+            type="button"
+            class="admin-integrity-card"
+            data-integrity-key="old_media_urls"
+          >
+
+            <div class="admin-integrity-icon">
+              <i data-lucide="external-link"></i>
+            </div>
+
+            <div class="admin-integrity-content">
+
+              <div class="admin-integrity-label">
+                Non-current URLs
+              </div>
+
+              <div
+                id="admin-integrity-old-urls"
+                class="admin-integrity-value"
+              >
+                —
+              </div>
+
+            </div>
+
+            <i
+              data-lucide="chevron-right"
+              class="admin-integrity-chevron"
+            ></i>
+
+          </button>
+
+        </div>
+
+      </div>
+
+
+      <!-- =================================================
+           METADATA COVERAGE
+      ================================================== -->
+
+      <div class="admin-integrity-group">
+
+        <div class="admin-integrity-group-heading">
+          Metadata Coverage
+        </div>
+
+
+        <div class="admin-integrity-grid">
+
+          <button
+            type="button"
+            class="admin-integrity-card"
+            data-integrity-key="missing_filesize"
+          >
+
+            <div class="admin-integrity-icon">
+              <i data-lucide="hard-drive"></i>
+            </div>
+
+            <div class="admin-integrity-content">
+
+              <div class="admin-integrity-label">
+                Missing Filesize
+              </div>
+
+              <div
+                id="admin-integrity-missing-filesize"
+                class="admin-integrity-value"
+              >
+                —
+              </div>
+
+            </div>
+
+            <i
+              data-lucide="chevron-right"
+              class="admin-integrity-chevron"
+            ></i>
+
+          </button>
+
+
+          <button
+            type="button"
+            class="admin-integrity-card"
+            data-integrity-key="missing_duration"
+          >
+
+            <div class="admin-integrity-icon">
+              <i data-lucide="clock"></i>
+            </div>
+
+            <div class="admin-integrity-content">
+
+              <div class="admin-integrity-label">
+                Missing Duration
+              </div>
+
+              <div
+                id="admin-integrity-missing-duration"
+                class="admin-integrity-value"
+              >
+                —
+              </div>
+
+            </div>
+
+            <i
+              data-lucide="chevron-right"
+              class="admin-integrity-chevron"
+            ></i>
+
+          </button>
+
+
+          <button
+            type="button"
+            class="admin-integrity-card"
+            data-integrity-key="missing_resolution"
+          >
+
+            <div class="admin-integrity-icon">
+              <i data-lucide="monitor"></i>
+            </div>
+
+            <div class="admin-integrity-content">
+
+              <div class="admin-integrity-label">
+                Missing Resolution
+              </div>
+
+              <div
+                id="admin-integrity-missing-resolution"
+                class="admin-integrity-value"
+              >
+                —
+              </div>
+
+            </div>
+
+            <i
+              data-lucide="chevron-right"
+              class="admin-integrity-chevron"
+            ></i>
+
+          </button>
+
+
+          <button
+            type="button"
+            class="admin-integrity-card"
+            data-integrity-key="missing_fingerprint"
+          >
+
+            <div class="admin-integrity-icon">
+              <i data-lucide="fingerprint"></i>
+            </div>
+
+            <div class="admin-integrity-content">
+
+              <div class="admin-integrity-label">
+                Missing Fingerprint
+              </div>
+
+              <div
+                id="admin-integrity-missing-fingerprint"
+                class="admin-integrity-value"
+              >
+                —
+              </div>
+
+            </div>
+
+            <i
+              data-lucide="chevron-right"
+              class="admin-integrity-chevron"
+            ></i>
+
+          </button>
+
+        </div>
+
+      </div>
+
+
+      <!-- =================================================
+           CATALOGUE DIAGNOSTIC RESULTS
+      ================================================== -->
+
+      <div
+        id="admin-integrity-results"
+        class="admin-integrity-results"
+        hidden
       >
 
-        <div class="admin-integrity-icon">
-          <i data-lucide="link-2"></i>
-        </div>
+        <div class="admin-integrity-results-header">
 
-        <div class="admin-integrity-content">
+          <div>
 
-          <div class="admin-integrity-label">
-            Duplicate URLs
+            <div
+              id="admin-integrity-results-kicker"
+              class="admin-section-kicker"
+            >
+              DIAGNOSTIC RESULTS
+            </div>
+
+            <h3 id="admin-integrity-results-title">
+              Results
+            </h3>
+
           </div>
 
-          <div
-            id="admin-integrity-duplicate-urls"
-            class="admin-integrity-value"
+
+          <button
+            type="button"
+            id="admin-integrity-results-close"
+            class="admin-integrity-close"
+            aria-label="Close integrity results"
           >
-            —
-          </div>
+            <i data-lucide="x"></i>
+          </button>
 
         </div>
 
-        <i
-          data-lucide="chevron-right"
-          class="admin-integrity-chevron"
-        ></i>
-
-      </button>
-
-
-      <button
-        type="button"
-        class="admin-integrity-card"
-        data-integrity-key="duplicate_fingerprints"
-      >
-
-        <div class="admin-integrity-icon">
-          <i data-lucide="copy"></i>
-        </div>
-
-        <div class="admin-integrity-content">
-
-          <div class="admin-integrity-label">
-            Duplicate Files
-          </div>
-
-          <div
-            id="admin-integrity-duplicate-fingerprints"
-            class="admin-integrity-value"
-          >
-            —
-          </div>
-
-        </div>
-
-        <i
-          data-lucide="chevron-right"
-          class="admin-integrity-chevron"
-        ></i>
-
-      </button>
-
-
-      <button
-        type="button"
-        class="admin-integrity-card"
-        data-integrity-key="videos_without_actors"
-      >
-
-        <div class="admin-integrity-icon">
-          <i data-lucide="user-x"></i>
-        </div>
-
-        <div class="admin-integrity-content">
-
-          <div class="admin-integrity-label">
-            Videos Without Actors
-          </div>
-
-          <div
-            id="admin-integrity-no-actors"
-            class="admin-integrity-value"
-          >
-            —
-          </div>
-
-        </div>
-
-        <i
-          data-lucide="chevron-right"
-          class="admin-integrity-chevron"
-        ></i>
-
-      </button>
-
-
-      <button
-        type="button"
-        class="admin-integrity-card"
-        data-integrity-key="old_media_urls"
-      >
-
-        <div class="admin-integrity-icon">
-          <i data-lucide="external-link"></i>
-        </div>
-
-        <div class="admin-integrity-content">
-
-          <div class="admin-integrity-label">
-            Non-current URLs
-          </div>
-
-          <div
-            id="admin-integrity-old-urls"
-            class="admin-integrity-value"
-          >
-            —
-          </div>
-
-        </div>
-
-        <i
-          data-lucide="chevron-right"
-          class="admin-integrity-chevron"
-        ></i>
-
-      </button>
-
-    </div>
-
-  </div>
-
-
-  <!-- =================================================
-       METADATA COVERAGE
-  ================================================== -->
-
-  <div class="admin-integrity-group">
-
-    <div class="admin-integrity-group-heading">
-      Metadata Coverage
-    </div>
-
-
-    <div class="admin-integrity-grid">
-
-      <button
-        type="button"
-        class="admin-integrity-card"
-        data-integrity-key="missing_filesize"
-      >
-
-        <div class="admin-integrity-icon">
-          <i data-lucide="hard-drive"></i>
-        </div>
-
-        <div class="admin-integrity-content">
-
-          <div class="admin-integrity-label">
-            Missing Filesize
-          </div>
-
-          <div
-            id="admin-integrity-missing-filesize"
-            class="admin-integrity-value"
-          >
-            —
-          </div>
-
-        </div>
-
-        <i
-          data-lucide="chevron-right"
-          class="admin-integrity-chevron"
-        ></i>
-
-      </button>
-
-
-      <button
-        type="button"
-        class="admin-integrity-card"
-        data-integrity-key="missing_duration"
-      >
-
-        <div class="admin-integrity-icon">
-          <i data-lucide="clock"></i>
-        </div>
-
-        <div class="admin-integrity-content">
-
-          <div class="admin-integrity-label">
-            Missing Duration
-          </div>
-
-          <div
-            id="admin-integrity-missing-duration"
-            class="admin-integrity-value"
-          >
-            —
-          </div>
-
-        </div>
-
-        <i
-          data-lucide="chevron-right"
-          class="admin-integrity-chevron"
-        ></i>
-
-      </button>
-
-
-      <button
-        type="button"
-        class="admin-integrity-card"
-        data-integrity-key="missing_resolution"
-      >
-
-        <div class="admin-integrity-icon">
-          <i data-lucide="monitor"></i>
-        </div>
-
-        <div class="admin-integrity-content">
-
-          <div class="admin-integrity-label">
-            Missing Resolution
-          </div>
-
-          <div
-            id="admin-integrity-missing-resolution"
-            class="admin-integrity-value"
-          >
-            —
-          </div>
-
-        </div>
-
-        <i
-          data-lucide="chevron-right"
-          class="admin-integrity-chevron"
-        ></i>
-
-      </button>
-
-
-      <button
-        type="button"
-        class="admin-integrity-card"
-        data-integrity-key="missing_fingerprint"
-      >
-
-        <div class="admin-integrity-icon">
-          <i data-lucide="fingerprint"></i>
-        </div>
-
-        <div class="admin-integrity-content">
-
-          <div class="admin-integrity-label">
-            Missing Fingerprint
-          </div>
-
-          <div
-            id="admin-integrity-missing-fingerprint"
-            class="admin-integrity-value"
-          >
-            —
-          </div>
-
-        </div>
-
-        <i
-          data-lucide="chevron-right"
-          class="admin-integrity-chevron"
-        ></i>
-
-      </button>
-
-    </div>
-
-  </div>
-
-
-  <!-- =================================================
-       DIAGNOSTIC RESULTS
-  ================================================== -->
-
-  <div
-    id="admin-integrity-results"
-    class="admin-integrity-results"
-    hidden
-  >
-
-    <div class="admin-integrity-results-header">
-
-      <div>
 
         <div
-          id="admin-integrity-results-kicker"
-          class="admin-section-kicker"
-        >
-          DIAGNOSTIC RESULTS
+          id="admin-integrity-results-body"
+          class="admin-integrity-results-body"
+        ></div>
+
+      </div>
+
+    </section>
+
+
+    <!-- ===================================================
+         THUMBNAIL HEALTH
+    ==================================================== -->
+
+    <section
+      class="admin-section"
+      aria-labelledby="admin-thumbnail-heading"
+    >
+
+      <div class="admin-section-heading admin-section-heading-row">
+
+        <div>
+
+          <div class="admin-section-kicker">
+            BACKBLAZE STORAGE
+          </div>
+
+          <h2 id="admin-thumbnail-heading">
+            Thumbnail Health
+          </h2>
+
         </div>
 
-        <h3 id="admin-integrity-results-title">
-          Results
-        </h3>
+
+        <div
+          id="admin-thumbnail-status"
+          class="admin-last-refreshed"
+        >
+          Checking Backblaze…
+        </div>
 
       </div>
 
 
-      <button
-        type="button"
-        id="admin-integrity-results-close"
-        class="admin-integrity-close"
-        aria-label="Close integrity results"
+      <!-- =================================================
+           THUMBNAIL SUMMARY
+      ================================================== -->
+
+      <div class="admin-thumbnail-grid">
+
+        <!-- EXPECTED -->
+
+        <article
+          class="admin-thumbnail-card admin-thumbnail-card-static"
+        >
+
+          <div class="admin-thumbnail-icon">
+            <i data-lucide="images"></i>
+          </div>
+
+          <div class="admin-thumbnail-content">
+
+            <div class="admin-thumbnail-label">
+              Expected
+            </div>
+
+            <div
+              id="admin-thumbnail-expected"
+              class="admin-thumbnail-value"
+            >
+              —
+            </div>
+
+          </div>
+
+        </article>
+
+
+        <!-- PRESENT -->
+
+        <article
+          class="admin-thumbnail-card admin-thumbnail-card-static"
+        >
+
+          <div class="admin-thumbnail-icon">
+            <i data-lucide="image-check"></i>
+          </div>
+
+          <div class="admin-thumbnail-content">
+
+            <div class="admin-thumbnail-label">
+              Present
+            </div>
+
+            <div
+              id="admin-thumbnail-present"
+              class="admin-thumbnail-value"
+            >
+              —
+            </div>
+
+          </div>
+
+        </article>
+
+
+        <!-- MISSING -->
+
+        <button
+          type="button"
+          class="admin-thumbnail-card admin-thumbnail-card-action"
+          data-thumbnail-key="missing"
+        >
+
+          <div class="admin-thumbnail-icon">
+            <i data-lucide="image-off"></i>
+          </div>
+
+          <div class="admin-thumbnail-content">
+
+            <div class="admin-thumbnail-label">
+              Missing
+            </div>
+
+            <div
+              id="admin-thumbnail-missing"
+              class="admin-thumbnail-value"
+            >
+              —
+            </div>
+
+          </div>
+
+          <i
+            data-lucide="chevron-right"
+            class="admin-thumbnail-chevron"
+          ></i>
+
+        </button>
+
+
+        <!-- ORPHANED -->
+
+        <button
+          type="button"
+          class="admin-thumbnail-card admin-thumbnail-card-action"
+          data-thumbnail-key="orphaned"
+        >
+
+          <div class="admin-thumbnail-icon">
+            <i data-lucide="unlink"></i>
+          </div>
+
+          <div class="admin-thumbnail-content">
+
+            <div class="admin-thumbnail-label">
+              Orphaned
+            </div>
+
+            <div
+              id="admin-thumbnail-orphaned"
+              class="admin-thumbnail-value"
+            >
+              —
+            </div>
+
+          </div>
+
+          <i
+            data-lucide="chevron-right"
+            class="admin-thumbnail-chevron"
+          ></i>
+
+        </button>
+
+
+        <!-- INVALID -->
+
+        <button
+          type="button"
+          class="admin-thumbnail-card admin-thumbnail-card-action"
+          data-thumbnail-key="invalid"
+        >
+
+          <div class="admin-thumbnail-icon">
+            <i data-lucide="file-warning"></i>
+          </div>
+
+          <div class="admin-thumbnail-content">
+
+            <div class="admin-thumbnail-label">
+              Invalid
+            </div>
+
+            <div
+              id="admin-thumbnail-invalid"
+              class="admin-thumbnail-value"
+            >
+              —
+            </div>
+
+          </div>
+
+          <i
+            data-lucide="chevron-right"
+            class="admin-thumbnail-chevron"
+          ></i>
+
+        </button>
+
+      </div>
+
+
+      <!-- =================================================
+           THUMBNAIL DIAGNOSTIC RESULTS
+      ================================================== -->
+
+      <div
+        id="admin-thumbnail-results"
+        class="admin-thumbnail-results"
+        hidden
       >
-        <i data-lucide="x"></i>
-      </button>
 
-    </div>
+        <div class="admin-thumbnail-results-header">
+
+          <div>
+
+            <div class="admin-section-kicker">
+              THUMBNAIL DIAGNOSTICS
+            </div>
+
+            <h3 id="admin-thumbnail-results-title">
+              Results
+            </h3>
+
+          </div>
 
 
-    <div
-      id="admin-integrity-results-body"
-      class="admin-integrity-results-body"
-    ></div>
+          <button
+            type="button"
+            id="admin-thumbnail-results-close"
+            class="admin-thumbnail-close"
+            aria-label="Close thumbnail results"
+          >
+            <i data-lucide="x"></i>
+          </button>
 
-  </div>
+        </div>
 
-</section>
+
+        <div
+          id="admin-thumbnail-results-body"
+          class="admin-thumbnail-results-body"
+        ></div>
+
+      </div>
+
+    </section>
+
 
     <!-- ===================================================
          RECENT INGESTIONS
@@ -897,7 +1148,7 @@
 
   <script
     type="module"
-    src="js/zulu/admin.js"
+    src="js/zulu/admin.js?v=20260918-3"
   ></script>
 
 </body>
