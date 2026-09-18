@@ -783,7 +783,466 @@ a {
 
 
 /* =====================================================================
-   11. THUMBNAIL HEALTH
+   11. VIDEO STORAGE HEALTH — COVERAGE
+===================================================================== */
+
+.admin-video-health-coverage {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+
+  min-height: 76px;
+  margin-bottom: 14px;
+  padding: 15px 18px;
+
+  border: 1px solid #292929;
+  border-radius: 9px;
+
+  background: #141414;
+
+  transition:
+    border-color 0.15s ease,
+    opacity 0.15s ease;
+}
+
+
+.admin-video-health-coverage.is-loading {
+  opacity: 0.62;
+}
+
+
+.admin-video-health-coverage.is-healthy {
+  border-color: rgba(76, 175, 80, 0.32);
+}
+
+
+.admin-video-health-coverage.is-warning {
+  border-color: rgba(240, 173, 78, 0.42);
+}
+
+
+.admin-video-health-coverage.is-error {
+  border-color: rgba(229, 9, 20, 0.45);
+  opacity: 0.75;
+}
+
+
+.admin-video-health-coverage-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  width: 40px;
+  height: 40px;
+
+  flex: 0 0 40px;
+
+  border-radius: 9px;
+
+  background: #222;
+  color: #888;
+}
+
+
+.admin-video-health-coverage.is-healthy
+.admin-video-health-coverage-icon {
+  background: rgba(76, 175, 80, 0.1);
+  color: #66bb6a;
+}
+
+
+.admin-video-health-coverage.is-warning
+.admin-video-health-coverage-icon {
+  background: rgba(240, 173, 78, 0.1);
+  color: #f0ad4e;
+}
+
+
+.admin-video-health-coverage.is-error
+.admin-video-health-coverage-icon {
+  background: rgba(229, 9, 20, 0.1);
+  color: #ef5350;
+}
+
+
+.admin-video-health-coverage-icon svg {
+  width: 20px;
+  height: 20px;
+}
+
+
+.admin-video-health-coverage-title {
+  margin-bottom: 3px;
+
+  color: #fff;
+
+  font-size: 15px;
+  font-weight: 700;
+}
+
+
+.admin-video-health-coverage-detail {
+  color: #888;
+
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+
+/* =====================================================================
+   12. VIDEO STORAGE HEALTH — CARDS
+===================================================================== */
+
+.admin-video-health-group {
+  margin-top: 20px;
+}
+
+
+.admin-video-health-group-heading {
+  margin-bottom: 10px;
+
+  color: #777;
+
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+
+.admin-video-health-grid {
+  display: grid;
+  gap: 12px;
+}
+
+
+.admin-video-health-grid-primary {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+
+.admin-video-health-grid-diagnostics {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+
+.admin-video-health-card {
+  position: relative;
+
+  display: flex;
+  align-items: center;
+  gap: 14px;
+
+  min-width: 0;
+  min-height: 92px;
+  padding: 16px 17px;
+
+  border: 1px solid #292929;
+  border-radius: 9px;
+
+  background: #141414;
+  color: #fff;
+
+  text-align: left;
+
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    opacity 0.15s ease;
+}
+
+
+.admin-video-health-card-static {
+  cursor: default;
+}
+
+
+.admin-video-health-card-action {
+  padding-right: 42px;
+
+  cursor: pointer;
+}
+
+
+.admin-video-health-card-action:hover {
+  background: #181818;
+  border-color: #3a3a3a;
+}
+
+
+.admin-video-health-card-action.is-selected {
+  background: #191919;
+  border-color: #555;
+}
+
+
+.admin-video-health-card.is-loading {
+  opacity: 0.62;
+}
+
+
+.admin-video-health-card.is-healthy {
+  border-color: rgba(76, 175, 80, 0.28);
+}
+
+
+.admin-video-health-card.is-warning {
+  border-color: rgba(240, 173, 78, 0.4);
+}
+
+
+.admin-video-health-card.is-problem {
+  border-color: rgba(229, 9, 20, 0.48);
+}
+
+
+.admin-video-health-card.is-error {
+  border-color: rgba(229, 9, 20, 0.45);
+  opacity: 0.72;
+}
+
+
+.admin-video-health-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  width: 38px;
+  height: 38px;
+
+  flex: 0 0 38px;
+
+  border-radius: 8px;
+
+  background: #222;
+  color: #888;
+}
+
+
+.admin-video-health-card.is-healthy
+.admin-video-health-icon {
+  background: rgba(76, 175, 80, 0.1);
+  color: #66bb6a;
+}
+
+
+.admin-video-health-card.is-warning
+.admin-video-health-icon {
+  background: rgba(240, 173, 78, 0.1);
+  color: #f0ad4e;
+}
+
+
+.admin-video-health-card.is-problem
+.admin-video-health-icon,
+.admin-video-health-card.is-error
+.admin-video-health-icon {
+  background: rgba(229, 9, 20, 0.1);
+  color: #ef5350;
+}
+
+
+.admin-video-health-icon svg {
+  width: 19px;
+  height: 19px;
+}
+
+
+.admin-video-health-content {
+  min-width: 0;
+}
+
+
+.admin-video-health-label {
+  margin-bottom: 3px;
+
+  overflow: hidden;
+
+  color: #999;
+
+  font-size: 12px;
+  font-weight: 600;
+
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+
+.admin-video-health-value {
+  color: #fff;
+
+  font-size: 23px;
+  font-weight: 700;
+}
+
+
+.admin-video-health-chevron {
+  position: absolute;
+  top: 50%;
+  right: 14px;
+
+  width: 16px;
+  height: 16px;
+
+  color: #555;
+
+  transform: translateY(-50%);
+}
+
+
+.admin-video-health-card.is-selected
+.admin-video-health-chevron {
+  color: #bbb;
+}
+
+
+/* =====================================================================
+   13. VIDEO STORAGE HEALTH — RESULTS
+===================================================================== */
+
+.admin-video-health-results {
+  margin-top: 18px;
+
+  overflow: hidden;
+
+  border: 1px solid #303030;
+  border-radius: 10px;
+
+  background: #101010;
+}
+
+
+.admin-video-health-results[hidden] {
+  display: none;
+}
+
+
+.admin-video-health-results-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+
+  padding: 17px 19px;
+
+  border-bottom: 1px solid #292929;
+
+  background: #161616;
+}
+
+
+.admin-video-health-results-header h3 {
+  margin: 4px 0 0;
+
+  font-size: 17px;
+}
+
+
+.admin-video-health-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  width: 32px;
+  height: 32px;
+  padding: 0;
+
+  border: 0;
+  border-radius: 6px;
+
+  background: transparent;
+  color: #777;
+
+  cursor: pointer;
+}
+
+
+.admin-video-health-close:hover {
+  background: #292929;
+  color: #fff;
+}
+
+
+.admin-video-health-close svg {
+  width: 17px;
+  height: 17px;
+}
+
+
+.admin-video-health-results-body {
+  padding: 8px 19px 18px;
+}
+
+
+.admin-video-health-empty {
+  padding: 24px 4px 12px;
+
+  color: #66bb6a;
+
+  font-size: 13px;
+}
+
+
+.admin-video-health-result {
+  padding: 15px 4px;
+
+  border-bottom: 1px solid #242424;
+}
+
+
+.admin-video-health-result:last-child {
+  border-bottom: 0;
+}
+
+
+.admin-video-health-result-title {
+  margin-bottom: 7px;
+
+  overflow-wrap: anywhere;
+
+  color: #fff;
+
+  font-size: 13px;
+  font-weight: 700;
+}
+
+
+.admin-video-health-result-meta {
+  color: #888;
+
+  font-size: 11px;
+  line-height: 1.7;
+}
+
+
+.admin-video-health-result-meta strong {
+  color: #aaa;
+}
+
+
+.admin-video-health-path,
+.admin-video-health-file-id {
+  margin-top: 7px;
+
+  overflow-wrap: anywhere;
+
+  color: #666;
+
+  font-family:
+    ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    Monaco,
+    Consolas,
+    monospace;
+
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+
+/* =====================================================================
+   14. THUMBNAIL HEALTH
 ===================================================================== */
 
 .admin-thumbnail-grid {
@@ -851,7 +1310,7 @@ a {
 
 
 /* =====================================================================
-   12. THUMBNAIL HEALTH STATES
+   15. THUMBNAIL HEALTH STATES
 ===================================================================== */
 
 .admin-thumbnail-card.is-loading {
@@ -881,7 +1340,7 @@ a {
 
 
 /* =====================================================================
-   13. THUMBNAIL HEALTH ICONS
+   16. THUMBNAIL HEALTH ICONS
 ===================================================================== */
 
 .admin-thumbnail-icon {
@@ -901,20 +1360,24 @@ a {
 }
 
 
-.admin-thumbnail-card.is-healthy .admin-thumbnail-icon {
+.admin-thumbnail-card.is-healthy
+.admin-thumbnail-icon {
   background: rgba(76, 175, 80, 0.1);
   color: #66bb6a;
 }
 
 
-.admin-thumbnail-card.is-warning .admin-thumbnail-icon {
+.admin-thumbnail-card.is-warning
+.admin-thumbnail-icon {
   background: rgba(240, 173, 78, 0.1);
   color: #f0ad4e;
 }
 
 
-.admin-thumbnail-card.is-problem .admin-thumbnail-icon,
-.admin-thumbnail-card.is-error .admin-thumbnail-icon {
+.admin-thumbnail-card.is-problem
+.admin-thumbnail-icon,
+.admin-thumbnail-card.is-error
+.admin-thumbnail-icon {
   background: rgba(229, 9, 20, 0.1);
   color: #ef5350;
 }
@@ -968,13 +1431,13 @@ a {
 }
 
 
-.admin-thumbnail-card.is-selected .admin-thumbnail-chevron {
+.admin-thumbnail-card.is-selected
+.admin-thumbnail-chevron {
   color: #bbb;
 }
 
-
 /* =====================================================================
-   14. THUMBNAIL HEALTH RESULTS
+   17. THUMBNAIL HEALTH RESULTS
 ===================================================================== */
 
 .admin-thumbnail-results {
@@ -1064,7 +1527,7 @@ a {
 
 
 /* =====================================================================
-   15. THUMBNAIL RESULT RECORDS
+   18. THUMBNAIL RESULT RECORDS
 ===================================================================== */
 
 .admin-thumbnail-result {
@@ -1154,7 +1617,7 @@ a {
 
 
 /* =====================================================================
-   16. INGESTION TABLE
+   19. INGESTION TABLE
 ===================================================================== */
 
 .admin-table-wrap {
@@ -1217,7 +1680,7 @@ a {
 
 
 /* =====================================================================
-   17. FILM / DATE CELLS
+   20. FILM / DATE CELLS
 ===================================================================== */
 
 .admin-film-cell {
@@ -1258,7 +1721,7 @@ a {
 
 
 /* =====================================================================
-   18. STATUS BADGES
+   21. STATUS BADGES
 ===================================================================== */
 
 .admin-status-badge {
@@ -1307,7 +1770,7 @@ a {
 
 
 /* =====================================================================
-   19. VIDEO / CATALOGUE / THUMBNAIL STATES
+   22. VIDEO / CATALOGUE / THUMBNAIL STATES
 ===================================================================== */
 
 .admin-component-state {
@@ -1350,7 +1813,7 @@ a {
 
 
 /* =====================================================================
-   20. EXPAND BUTTON
+   23. EXPAND BUTTON
 ===================================================================== */
 
 .admin-expand-cell {
@@ -1398,7 +1861,7 @@ a {
 
 
 /* =====================================================================
-   21. INGESTION DETAIL ROW
+   24. INGESTION DETAIL ROW
 ===================================================================== */
 
 .admin-ingestion-detail-row[hidden] {
@@ -1459,7 +1922,7 @@ a {
 
 
 /* =====================================================================
-   22. TABLE LOADING / EMPTY / ERROR
+   25. TABLE LOADING / EMPTY / ERROR
 ===================================================================== */
 
 .admin-table-loading,
@@ -1487,13 +1950,15 @@ a {
 
 
 /* =====================================================================
-   23. ACCESSIBILITY / KEYBOARD FOCUS
+   26. ACCESSIBILITY / KEYBOARD FOCUS
 ===================================================================== */
 
 .admin-button:focus-visible,
 .admin-integrity-card:focus-visible,
+.admin-video-health-card-action:focus-visible,
 .admin-thumbnail-card-action:focus-visible,
 .admin-integrity-close:focus-visible,
+.admin-video-health-close:focus-visible,
 .admin-thumbnail-close:focus-visible,
 .admin-expand-button:focus-visible {
   outline: 2px solid #777;
@@ -1502,7 +1967,7 @@ a {
 
 
 /* =====================================================================
-   24. RESPONSIVE — MEDIUM SCREENS
+   27. RESPONSIVE — MEDIUM SCREENS
 ===================================================================== */
 
 @media (
@@ -1551,6 +2016,30 @@ a {
   }
 
 
+  /*
+   * Keep the three summary cards on one line where possible.
+   */
+  .admin-video-health-grid-primary {
+    grid-template-columns:
+      repeat(
+        3,
+        minmax(0, 1fr)
+      );
+  }
+
+
+  /*
+   * Five diagnostic cards are too cramped at this width.
+   */
+  .admin-video-health-grid-diagnostics {
+    grid-template-columns:
+      repeat(
+        2,
+        minmax(0, 1fr)
+      );
+  }
+
+
   .admin-thumbnail-grid {
     grid-template-columns:
       repeat(
@@ -1572,7 +2061,7 @@ a {
 
 
 /* =====================================================================
-   25. RESPONSIVE — SMALL SCREENS
+   28. RESPONSIVE — SMALL SCREENS
 ===================================================================== */
 
 @media (
@@ -1646,6 +2135,8 @@ a {
   .admin-stat-grid,
   .admin-health-grid,
   .admin-integrity-grid,
+  .admin-video-health-grid-primary,
+  .admin-video-health-grid-diagnostics,
   .admin-thumbnail-grid {
     grid-template-columns:
       minmax(
@@ -1661,26 +2152,36 @@ a {
 
 
   .admin-integrity-card,
+  .admin-video-health-card,
   .admin-thumbnail-card {
     min-height: 80px;
   }
 
 
+  .admin-video-health-coverage {
+    align-items: flex-start;
+  }
+
+
   .admin-integrity-results-header,
+  .admin-video-health-results-header,
   .admin-thumbnail-results-header {
     padding: 14px 15px;
   }
 
 
   .admin-integrity-results-body,
+  .admin-video-health-results-body,
   .admin-thumbnail-results-body {
     padding-right: 15px;
     padding-left: 15px;
   }
 
 
+  .admin-video-health-results-body,
   .admin-thumbnail-results-body {
     max-height: 500px;
+    overflow-y: auto;
   }
 
 
@@ -1703,7 +2204,7 @@ a {
 
 
 /* =====================================================================
-   26. RESPONSIVE — VERY SMALL SCREENS
+   29. RESPONSIVE — VERY SMALL SCREENS
 ===================================================================== */
 
 @media (
@@ -1735,14 +2236,22 @@ a {
   .admin-stat-card,
   .admin-health-card,
   .admin-integrity-card,
+  .admin-video-health-card,
   .admin-thumbnail-card {
     padding-left: 14px;
   }
 
 
   .admin-integrity-card,
+  .admin-video-health-card-action,
   .admin-thumbnail-card-action {
     padding-right: 38px;
+  }
+
+
+  .admin-video-health-coverage {
+    padding-right: 14px;
+    padding-left: 14px;
   }
 
 }
