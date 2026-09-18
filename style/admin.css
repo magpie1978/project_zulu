@@ -1735,6 +1735,128 @@ a {
 }
 
 
+
+/* =========================================================
+   THUMBNAIL REPAIR BUTTON
+   ========================================================= */
+
+.admin-thumbnail-repair-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+
+  margin-top: 12px;
+  padding: 8px 13px;
+
+  appearance: none;
+  -webkit-appearance: none;
+
+  border: 1px solid #3f3f3f;
+  border-radius: 7px;
+
+  background: #1d1d1d;
+  color: #d8d8d8;
+
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1;
+
+  cursor: pointer;
+
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease,
+    transform 0.15s ease;
+}
+
+
+.admin-thumbnail-repair-button svg {
+  width: 15px;
+  height: 15px;
+  stroke-width: 2;
+}
+
+
+/* Hover */
+
+.admin-thumbnail-repair-button:hover:not(:disabled) {
+  background: #292929;
+  border-color: #5a5a5a;
+  color: #fff;
+}
+
+
+/* Small tactile click */
+
+.admin-thumbnail-repair-button:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+
+/* Keyboard focus */
+
+.admin-thumbnail-repair-button:focus-visible {
+  outline: 2px solid #777;
+  outline-offset: 2px;
+}
+
+
+/* Disabled */
+
+.admin-thumbnail-repair-button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+
+/* =========================================================
+   WORKING
+   ========================================================= */
+
+.admin-thumbnail-repair-button.is-working {
+  background: rgba(33, 150, 243, 0.10);
+  border-color: rgba(100, 181, 246, 0.45);
+  color: #90caf9;
+}
+
+
+.admin-thumbnail-repair-button.is-working svg {
+  animation: admin-spin 0.9s linear infinite;
+}
+
+
+/* =========================================================
+   SUCCESS
+   ========================================================= */
+
+.admin-thumbnail-repair-button.is-success {
+  background: rgba(76, 175, 80, 0.10);
+  border-color: rgba(102, 187, 106, 0.45);
+  color: #81c784;
+}
+
+
+/* =========================================================
+   ERROR / RETRY
+   ========================================================= */
+
+.admin-thumbnail-repair-button.is-error {
+  background: rgba(229, 9, 20, 0.10);
+  border-color: rgba(239, 83, 80, 0.45);
+  color: #ef777d;
+}
+
+
+.admin-thumbnail-repair-button.is-error:hover:not(:disabled) {
+  background: rgba(229, 9, 20, 0.17);
+  border-color: rgba(239, 83, 80, 0.65);
+  color: #ff8a8f;
+}
+
+
 /* =====================================================================
    19. INGESTION TABLE
 ===================================================================== */
