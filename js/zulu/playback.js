@@ -664,11 +664,19 @@ function clearViewTimer() {
  * A view is only marked as successfully logged AFTER Supabase confirms
  * that the database insert succeeded.
  *
- * This is important because a temporary network or Supabase failure
- * should not permanently prevent another logging attempt during the
- * current playback session.
+ * If the insert fails because of a temporary network or Supabase
+ * problem, another attempt is made after 5 seconds.
+ *
+ * Retries continue while:
+ *
+ *     - the same video is still active; and
+ *     - the view has not already been logged successfully.
+ *
+ * If the viewer closes the video or opens another video before the
+ * retry occurs, the retry is abandoned.
  *
  * @param {string|number} uid
+ *        UID of the video whose view should be recorded.
  */
 async function logVideoView(
   uid
@@ -676,6 +684,15 @@ async function logVideoView(
 
   /* -----------------------------------------------------------------
      VALIDATE REQUEST
+     -----------------------------------------------------------------
+
+     Do nothing if:
+
+         - there is no video UID; or
+         - this playback session has already successfully logged a view.
+
+     The viewLogged flag prevents multiple successful inserts for the
+     same playback session.
   ----------------------------------------------------------------- */
 
   if (
@@ -687,7 +704,13 @@ async function logVideoView(
 
 
   /* -----------------------------------------------------------------
-     INSERT VIEW
+     ATTEMPT TO RECORD VIEW
+     -----------------------------------------------------------------
+
+     Insert one view into zulu_video_views.
+
+     watch_seconds remains fixed at 15 because this function is first
+     called by the existing 15-second playback timer.
   ----------------------------------------------------------------- */
 
   const {
@@ -708,12 +731,17 @@ async function logVideoView(
 
   /* -----------------------------------------------------------------
      INSERT FAILED
-  -----------------------------------------------------------------
+     -----------------------------------------------------------------
 
-     Do NOT set viewLogged.
+     IMPORTANT:
 
-     Leaving it false means another logging attempt can be made during
-     this playback session.
+     Do NOT set viewLogged to true here.
+
+     The database has not confirmed that the view was recorded, so the
+     playback session must remain eligible for another attempt.
+
+     Wait 5 seconds before trying again. This avoids immediately
+     hammering Supabase during a temporary connection or service issue.
   ----------------------------------------------------------------- */
 
   if (error) {
@@ -723,15 +751,57 @@ async function logVideoView(
       error
     );
 
+
+    setTimeout(
+      () => {
+
+        /* -------------------------------------------------------------
+           VERIFY PLAYBACK SESSION BEFORE RETRYING
+           -------------------------------------------------------------
+
+           Only retry if:
+
+               1. The video currently open is still the same video that
+                  originally generated this view.
+
+               2. Another attempt has not already successfully recorded
+                  the view.
+
+           This prevents a delayed retry from recording a view after
+           the original video has been closed or replaced by another
+           video.
+        ------------------------------------------------------------- */
+
+        if (
+          activeVideoUid === uid &&
+          !viewLogged
+        ) {
+
+          logVideoView(
+            uid
+          );
+        }
+      },
+
+      5000
+    );
+
+
     return;
   }
 
 
   /* -----------------------------------------------------------------
      INSERT SUCCEEDED
-  -----------------------------------------------------------------
+     -----------------------------------------------------------------
 
-     Only now do we consider this view successfully recorded.
+     Supabase has now confirmed that the view exists in
+     zulu_video_views.
+
+     Only at this point do we mark the playback session as logged.
+
+     Any pending retry callback will see viewLogged === true and will
+     therefore do nothing.
   ----------------------------------------------------------------- */
 
   viewLogged =
