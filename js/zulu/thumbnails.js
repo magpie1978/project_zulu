@@ -1213,6 +1213,445 @@ function canvasToPngBlob(
 }
 
 
+/* =================================================================================================================
+   REMOTE VIDEO THUMBNAIL GENERATION
+   =================================================================================================================
+
+   Used by the Admin Library Health repair workflow.
+
+   Unlike generateThumbnailCandidates(), this function does NOT require
+   a local File object.
+
+   Instead it receives an authenticated/signed media URL for an MP4
+   already stored in Backblaze.
+
+   The browser's <video> element seeks directly into the remote MP4.
+   Because the media endpoint supports Range requests, the browser does
+   not need to download the complete video before thumbnail generation.
+
+   The same face detector, scoring system and selected-thumbnail state
+   used by Add Video are reused here.
+=================================================================================================================== */
+
+export async function generateThumbnailCandidatesFromUrl(
+  videoUrl,
+  {
+    onStatus
+  } = {}
+) {
+
+  if (
+    !videoUrl
+  ) {
+
+    throw new Error(
+      "No video URL was supplied for thumbnail repair."
+    );
+  }
+
+
+  thumbnailCandidates = [];
+  selectedThumbnailIndex = 0;
+  selectedThumbnailBlob = null;
+
+
+  onStatus?.(
+    "Loading face detector…"
+  );
+
+
+  const detector =
+    await loadFaceDetector();
+
+
+  const video =
+    document.createElement(
+      "video"
+    );
+
+
+  /*
+   * The Admin page and media hostname are different origins.
+   *
+   * crossOrigin must be set BEFORE src. This allows the decoded video
+   * frame to be drawn to canvas without tainting it, provided the media
+   * response includes the appropriate CORS header.
+   */
+  video.crossOrigin =
+    "anonymous";
+
+  video.preload =
+    "metadata";
+
+  video.muted =
+    true;
+
+  video.playsInline =
+    true;
+
+
+  /*
+   * Setting src only after all video properties have been configured is
+   * deliberate.
+   */
+  video.src =
+    videoUrl;
+
+
+  try {
+
+    onStatus?.(
+      "Reading video metadata…"
+    );
+
+
+    await new Promise(
+      (
+        resolve,
+        reject
+      ) => {
+
+        const timeout =
+          window.setTimeout(
+            () => {
+
+              cleanup();
+
+              reject(
+                new Error(
+                  "Timed out while loading video metadata."
+                )
+              );
+            },
+            30000
+          );
+
+
+        const cleanup =
+          () => {
+
+            window.clearTimeout(
+              timeout
+            );
+
+            video.removeEventListener(
+              "loadedmetadata",
+              onLoaded
+            );
+
+            video.removeEventListener(
+              "error",
+              onError
+            );
+          };
+
+
+        const onLoaded =
+          () => {
+
+            cleanup();
+            resolve();
+          };
+
+
+        const onError =
+          () => {
+
+            cleanup();
+
+            reject(
+              new Error(
+                "Could not read the remote video for thumbnail repair."
+              )
+            );
+          };
+
+
+        video.addEventListener(
+          "loadedmetadata",
+          onLoaded,
+          {
+            once: true
+          }
+        );
+
+
+        video.addEventListener(
+          "error",
+          onError,
+          {
+            once: true
+          }
+        );
+
+
+        video.load();
+      }
+    );
+
+
+    const duration =
+      video.duration;
+
+
+    if (
+      !Number.isFinite(
+        duration
+      ) ||
+      duration <= 0
+    ) {
+
+      throw new Error(
+        "Video duration is unavailable."
+      );
+    }
+
+
+    /*
+     * Use the same sampling positions as normal Add Video ingestion so
+     * repaired thumbnails are generated using exactly the same strategy.
+     */
+    const percentages = [
+      0.05,
+      0.10,
+      0.15,
+      0.20,
+      0.25,
+      0.30,
+      0.35,
+      0.40,
+      0.50,
+      0.60,
+      0.70,
+      0.80,
+      0.85,
+      0.90,
+      0.95
+    ];
+
+
+    const canvas =
+      document.createElement(
+        "canvas"
+      );
+
+
+    const ctx =
+      canvas.getContext(
+        "2d",
+        {
+          willReadFrequently: true
+        }
+      );
+
+
+    if (
+      !ctx
+    ) {
+
+      throw new Error(
+        "Could not create thumbnail canvas."
+      );
+    }
+
+
+    const targetWidth =
+      Math.min(
+        video.videoWidth,
+        960
+      );
+
+
+    if (
+      !targetWidth ||
+      !video.videoHeight
+    ) {
+
+      throw new Error(
+        "Video dimensions are unavailable."
+      );
+    }
+
+
+    const scale =
+      targetWidth /
+      video.videoWidth;
+
+
+    canvas.width =
+      targetWidth;
+
+
+    canvas.height =
+      Math.round(
+        video.videoHeight *
+        scale
+      );
+
+
+    /*
+     * Inspect fifteen points throughout the existing MP4.
+     *
+     * Range-capable playback means each seek should retrieve only the
+     * portions of the MP4 required by the browser.
+     */
+    for (
+      let i = 0;
+      i < percentages.length;
+      i++
+    ) {
+
+      const time =
+        Math.max(
+          0,
+          Math.min(
+            duration - 0.25,
+            duration *
+              percentages[i]
+          )
+        );
+
+
+      onStatus?.(
+        `Checking frame ${i + 1} of ${percentages.length}…`
+      );
+
+
+      await seekVideo(
+        video,
+        time
+      );
+
+
+      ctx.drawImage(
+        video,
+        0,
+        0,
+        canvas.width,
+        canvas.height
+      );
+
+
+      /*
+       * If the media response does not permit cross-origin canvas use,
+       * accessing the canvas here will throw a SecurityError. That error
+       * is intentionally allowed to propagate to Admin so the repair
+       * cannot accidentally upload an invalid image.
+       */
+      const result =
+        detector.detect(
+          canvas
+        );
+
+
+      const detections =
+        result?.detections ||
+        [];
+
+
+      const scoring =
+        scoreThumbnailFrame(
+          detections,
+          canvas.width,
+          canvas.height
+        );
+
+
+      const blob =
+        await canvasToPngBlob(
+          canvas
+        );
+
+
+      thumbnailCandidates.push(
+        {
+          time,
+
+          blob,
+
+          score:
+            scoring.score,
+
+          faceCount:
+            scoring.faceCount,
+
+          combinedFaceRatio:
+            scoring.combinedFaceRatio
+        }
+      );
+    }
+
+
+    if (
+      !thumbnailCandidates.length
+    ) {
+
+      throw new Error(
+        "No thumbnail candidates could be generated."
+      );
+    }
+
+
+    thumbnailCandidates.sort(
+      (
+        a,
+        b
+      ) =>
+        b.score -
+        a.score
+    );
+
+
+    /*
+     * This sets selectedThumbnailBlob to the highest-scoring candidate,
+     * exactly as the normal Add Video workflow does.
+     */
+    showThumbnailCandidate(
+      0
+    );
+
+
+    const selected =
+      thumbnailCandidates[0];
+
+
+    onStatus?.(
+      selected.faceCount >= 2
+        ? `Best frame found — ${selected.faceCount} faces detected.`
+        : selected.faceCount === 1
+          ? "Best frame found — 1 face detected."
+          : "Best available frame found."
+    );
+
+
+    return {
+      count:
+        thumbnailCandidates.length,
+
+      selectedTime:
+        selected.time,
+
+      faceCount:
+        selected.faceCount,
+
+      score:
+        selected.score
+    };
+
+
+  } finally {
+
+    video.pause();
+
+    video.removeAttribute(
+      "src"
+    );
+
+    video.load();
+  }
+}
+
+
 /* =====================================================================
    09. THUMBNAIL PREVIEW / SELECTION
 ===================================================================== */
