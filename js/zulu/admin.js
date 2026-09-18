@@ -2774,10 +2774,11 @@ function openThumbnailResult(
    * Stage 10.1 repair buttons are dynamically created when the Missing
    * diagnostic panel is rendered.
    */
-  attachThumbnailRepairEvents();
-
-
-  window.lucide?.createIcons();
+    attachThumbnailRepairEvents();
+    attachThumbnailDeleteEvents();
+    
+    
+    window.lucide?.createIcons();
 }
 
 
@@ -3022,97 +3023,164 @@ function renderMissingThumbnail(
  * Stage 10.1 remains read-only for orphaned objects. Deletion belongs to
  * the later storage-cleanup stage.
  */
+/**
+ * Renders one Backblaze thumbnail whose numeric UID no longer exists
+ * in zulu_videos.
+ *
+ * The Delete Orphan action does NOT delete directly from the browser.
+ *
+ * Instead:
+ *
+ *   1. Admin sends UID + filename + exact B2 file ID
+ *   2. zulu-thumbnail-health rechecks zulu_videos
+ *   3. the Edge Function deletes the exact B2 file version
+ *   4. Admin reruns Thumbnail Health
+ */
 function renderOrphanedThumbnail(
   item
 ) {
 
+  const uid =
+    Number(
+      item.uid
+    );
+
+
+  const fileName =
+    item.file_name ||
+    "";
+
+
+  const fileId =
+    item.file_id ||
+    "";
+
+
+  const canDelete =
+    Number.isInteger(
+      uid
+    ) &&
+    uid > 0 &&
+    Boolean(
+      fileName
+    ) &&
+    Boolean(
+      fileId
+    );
+
+
   return `
-    <div class="admin-thumbnail-result">
+    <div
+      class="admin-thumbnail-result"
+      data-thumbnail-orphan-row="${escapeHtml(
+        uid
+      )}"
+    >
 
-      <div class="admin-thumbnail-result-title">
+      <div class="admin-thumbnail-result-main">
 
-        <span class="admin-thumbnail-result-uid">
-          UID ${escapeHtml(
-            item.uid
-          )}
-        </span>
+        <div class="admin-thumbnail-result-title">
 
-        <span class="admin-thumbnail-result-film">
-          Orphaned thumbnail
-        </span>
-
-      </div>
-
-
-      <div class="admin-thumbnail-result-meta">
-
-        <div>
-
-          <strong>
-            File:
-          </strong>
-
-          <span class="admin-thumbnail-file">
-            ${escapeHtml(
-              item.file_name ||
-              ""
+          <span class="admin-thumbnail-result-uid">
+            UID ${escapeHtml(
+              uid
             )}
+          </span>
+
+          <span class="admin-thumbnail-result-film">
+            Orphaned thumbnail
           </span>
 
         </div>
 
 
-        <div>
+        <div class="admin-thumbnail-result-meta">
 
-          <strong>
-            Size:
-          </strong>
+          <div>
+            <strong>
+              File:
+            </strong>
 
-          ${escapeHtml(
-            formatBytes(
-              item.size_bytes
-            )
-          )}
+            <span class="admin-thumbnail-file">
+              ${escapeHtml(
+                fileName
+              )}
+            </span>
+          </div>
+
+
+          <div>
+            <strong>
+              Size:
+            </strong>
+
+            ${escapeHtml(
+              formatBytes(
+                item.size_bytes
+              )
+            )}
+          </div>
+
+
+          <div>
+            <strong>
+              Uploaded:
+            </strong>
+
+            ${escapeHtml(
+              formatDateTime(
+                item.uploaded_at
+              )
+            )}
+          </div>
+
+
+          <div>
+            <strong>
+              B2 file ID:
+            </strong>
+
+            <span class="admin-thumbnail-file">
+              ${escapeHtml(
+                fileId
+              )}
+            </span>
+          </div>
 
         </div>
-
-
-        <div>
-
-          <strong>
-            Uploaded:
-          </strong>
-
-          ${escapeHtml(
-            formatDateTime(
-              item.uploaded_at
-            )
-          )}
-
-        </div>
-
-
-        ${
-          item.file_id
-            ? `
-                <div>
-
-                  <strong>
-                    B2 file ID:
-                  </strong>
-
-                  <span class="admin-thumbnail-file">
-                    ${escapeHtml(
-                      item.file_id
-                    )}
-                  </span>
-
-                </div>
-              `
-            : ""
-        }
 
       </div>
+
+
+      <div class="admin-thumbnail-repair-actions">
+
+        <button
+          type="button"
+          class="admin-thumbnail-delete-button"
+          data-thumbnail-delete-uid="${escapeHtml(
+            uid
+          )}"
+          ${canDelete ? "" : "disabled"}
+        >
+
+          <i data-lucide="trash-2"></i>
+
+          <span>
+            Delete Orphan
+          </span>
+
+        </button>
+
+      </div>
+
+
+      <div
+        class="admin-thumbnail-repair-status"
+        data-thumbnail-delete-status="${escapeHtml(
+          uid
+        )}"
+        hidden
+      ></div>
 
     </div>
   `;
@@ -4365,6 +4433,483 @@ function cssEscapeValue(
     /["\\]/g,
     "\\$&"
   );
+}
+
+
+
+/* =====================================================================
+   STAGE 10 — ORPHANED THUMBNAIL CLEANUP
+===================================================================== */
+
+/*
+ * Only one orphan deletion may run at a time.
+ */
+let deletingThumbnailUid =
+  null;
+
+
+/**
+ * Connects the dynamically-rendered Delete Orphan buttons.
+ */
+function attachThumbnailDeleteEvents() {
+
+  document
+    .querySelectorAll(
+      ".admin-thumbnail-delete-button"
+    )
+    .forEach(
+      button => {
+
+        button.addEventListener(
+          "click",
+          () => {
+
+            const uid =
+              Number(
+                button.dataset
+                  .thumbnailDeleteUid
+              );
+
+
+            if (
+              !Number.isInteger(
+                uid
+              ) ||
+              uid <= 0
+            ) {
+
+              return;
+            }
+
+
+            deleteOrphanedThumbnail(
+              uid,
+              button
+            );
+          }
+        );
+      }
+    );
+}
+
+
+/**
+ * Deletes one orphaned thumbnail through the protected
+ * zulu-thumbnail-health Edge Function.
+ *
+ * The browser does not possess B2 credentials.
+ */
+async function deleteOrphanedThumbnail(
+  uid,
+  button
+) {
+
+  /*
+   * Prevent concurrent cleanup operations.
+   */
+  if (
+    deletingThumbnailUid !==
+      null
+  ) {
+
+    return;
+  }
+
+
+  /*
+   * Retrieve the object from the latest server-generated health
+   * snapshot rather than trusting information stored in the button.
+   */
+  const item =
+    currentThumbnailData
+      ?.orphaned
+      ?.rows
+      ?.find(
+        row =>
+          Number(
+            row.uid
+          ) ===
+          Number(
+            uid
+          )
+      );
+
+
+  if (
+    !item
+  ) {
+
+    setThumbnailDeleteStatus(
+      uid,
+      "This orphan is no longer present in the current health results.",
+      "error"
+    );
+
+
+    return;
+  }
+
+
+  if (
+    !item.file_name ||
+    !item.file_id
+  ) {
+
+    setThumbnailDeleteStatus(
+      uid,
+      "This orphan does not contain enough Backblaze information to delete safely.",
+      "error"
+    );
+
+
+    return;
+  }
+
+
+  /*
+   * Every deletion requires explicit confirmation.
+   *
+   * There is intentionally no bulk-delete behaviour here.
+   */
+  const confirmed =
+    window.confirm(
+      `Delete orphaned thumbnail?\n\n` +
+      `${item.file_name}\n\n` +
+      `UID ${uid} does not exist in the current catalogue health check.\n\n` +
+      `The server will check the catalogue again immediately before deletion.`
+    );
+
+
+  if (
+    !confirmed
+  ) {
+
+    return;
+  }
+
+
+  deletingThumbnailUid =
+    uid;
+
+
+  /*
+   * Disable every Delete Orphan button while the operation is active.
+   */
+  setAllThumbnailDeleteButtonsDisabled(
+    true
+  );
+
+
+  if (
+    button
+  ) {
+
+    button.classList.remove(
+      "is-error",
+      "is-success"
+    );
+
+
+    button.classList.add(
+      "is-working"
+    );
+
+
+    button.innerHTML = `
+      <i data-lucide="loader-circle"></i>
+      <span>Deleting…</span>
+    `;
+  }
+
+
+  setThumbnailDeleteStatus(
+    uid,
+    "Checking catalogue and deleting the orphaned thumbnail…",
+    "working"
+  );
+
+
+  window.lucide?.createIcons();
+
+
+  try {
+
+    /* ---------------------------------------------------------------
+       DELETE THROUGH EDGE FUNCTION
+    --------------------------------------------------------------- */
+
+    const {
+      data,
+      error
+    } =
+      await supabase
+        .functions
+        .invoke(
+          "zulu-thumbnail-health",
+          {
+            body: {
+              action:
+                "delete_orphan",
+
+              uid:
+                item.uid,
+
+              file_name:
+                item.file_name,
+
+              file_id:
+                item.file_id
+            }
+          }
+        );
+
+
+    if (
+      error
+    ) {
+
+      throw new Error(
+        error.message ||
+        "Thumbnail cleanup request failed."
+      );
+    }
+
+
+    if (
+      !data ||
+      data.success !==
+        true
+    ) {
+
+      throw new Error(
+        data?.error ||
+        "Thumbnail deletion was unsuccessful."
+      );
+    }
+
+
+    /* ---------------------------------------------------------------
+       B2 REPORTED SUCCESS
+    --------------------------------------------------------------- */
+
+    if (
+      button
+    ) {
+
+      button.classList.remove(
+        "is-working"
+      );
+
+
+      button.classList.add(
+        "is-success"
+      );
+
+
+      button.innerHTML = `
+        <i data-lucide="check"></i>
+        <span>Deleted</span>
+      `;
+    }
+
+
+    setThumbnailDeleteStatus(
+      uid,
+      "Thumbnail deleted. Verifying storage health…",
+      "success"
+    );
+
+
+    window.lucide?.createIcons();
+
+
+    /* ---------------------------------------------------------------
+       RECONCILE AGAIN
+    --------------------------------------------------------------- */
+
+    const refreshed =
+      await loadThumbnailHealth();
+
+
+    /*
+     * Never assume that a successful API response means our diagnostic
+     * problem has disappeared.
+     *
+     * Verify against a fresh B2 inventory.
+     */
+    const stillOrphaned =
+      refreshed
+        ?.orphaned
+        ?.rows
+        ?.some(
+          row =>
+            Number(
+              row.uid
+            ) ===
+            Number(
+              uid
+            )
+        );
+
+
+    if (
+      stillOrphaned
+    ) {
+
+      throw new Error(
+        `Thumbnail ${item.file_name} was reported deleted but still appears in Thumbnail Health.`
+      );
+    }
+
+
+    /* ---------------------------------------------------------------
+       UPDATE DASHBOARD
+    --------------------------------------------------------------- */
+
+    renderThumbnailHealth(
+      refreshed
+    );
+
+
+    /*
+     * Keep the user in the Orphaned diagnostic panel.
+     *
+     * The deleted row will now be absent and the count should have
+     * decreased by one.
+     */
+    openThumbnailResult(
+      "orphaned"
+    );
+
+
+  } catch (error) {
+
+    console.error(
+      "ORPHAN THUMBNAIL DELETE FAILED:",
+      error
+    );
+
+
+    setThumbnailDeleteStatus(
+      uid,
+      error?.message ||
+      "Could not delete the orphaned thumbnail.",
+      "error"
+    );
+
+
+    if (
+      button
+    ) {
+
+      button.disabled =
+        false;
+
+
+      button.classList.remove(
+        "is-working",
+        "is-success"
+      );
+
+
+      button.classList.add(
+        "is-error"
+      );
+
+
+      button.innerHTML = `
+        <i data-lucide="trash-2"></i>
+        <span>Try Again</span>
+      `;
+    }
+
+
+    window.lucide?.createIcons();
+
+  } finally {
+
+    deletingThumbnailUid =
+      null;
+
+
+    setAllThumbnailDeleteButtonsDisabled(
+      false
+    );
+  }
+}
+
+
+/**
+ * Enables/disables all currently-rendered Delete Orphan buttons.
+ */
+function setAllThumbnailDeleteButtonsDisabled(
+  disabled
+) {
+
+  document
+    .querySelectorAll(
+      ".admin-thumbnail-delete-button"
+    )
+    .forEach(
+      button => {
+
+        button.disabled =
+          Boolean(
+            disabled
+          );
+      }
+    );
+}
+
+
+/**
+ * Displays progress, success or failure beneath one orphan row.
+ */
+function setThumbnailDeleteStatus(
+  uid,
+  message,
+  state = ""
+) {
+
+  const status =
+    document.querySelector(
+      `[data-thumbnail-delete-status="${cssEscapeValue(
+        uid
+      )}"]`
+    );
+
+
+  if (
+    !status
+  ) {
+
+    return;
+  }
+
+
+  status.hidden =
+    false;
+
+
+  status.textContent =
+    message;
+
+
+  status.classList.remove(
+    "is-working",
+    "is-success",
+    "is-error"
+  );
+
+
+  if (
+    state
+  ) {
+
+    status.classList.add(
+      `is-${state}`
+    );
+  }
 }
 
 
