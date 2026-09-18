@@ -415,13 +415,13 @@ export function uploadFileToBackblaze({
        * Blob objects such as generated thumbnails may not have a
        * lastModified value; this preserves the existing behaviour.
        */
-      xhr.setRequestHeader(
-        "X-Bz-Info-src_last_modified_millis",
-        String(
-          file.lastModified
-        )
-      );
-
+      
+      if (Number.isFinite(file.lastModified)) {
+        xhr.setRequestHeader(
+          "X-Bz-Info-src_last_modified_millis",
+          String(file.lastModified)
+        );
+      }
 
       /* -------------------------------------------------------------
          UPLOAD PROGRESS
