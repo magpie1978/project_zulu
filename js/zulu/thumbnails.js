@@ -12,8 +12,7 @@ import {
 import {
   FaceDetector,
   FilesetResolver
-} from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/vision_bundle.mjs";
-
+} from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.1/vision_bundle.mjs";
 
 /* =====================================================================
    THUMBNAILS.JS
@@ -698,6 +697,31 @@ export async function generateThumbnailCandidates(
  *
  * @returns {Promise<FaceDetector>}
  */
+
+/* =====================================================================
+   MEDIAPIPE VERSION
+   =====================================================================
+
+   MediaPipe is deliberately pinned to a specific stable version rather
+   than using @latest.
+
+   This ensures that a future MediaPipe release cannot unexpectedly
+   change the JavaScript API or WASM implementation used by thumbnail
+   generation without us explicitly upgrading and testing it first.
+
+   IMPORTANT:
+
+   The JavaScript module and WASM directory must use the SAME version.
+
+   Current pinned version:
+
+       @mediapipe/tasks-vision 1.0.1
+
+   When upgrading MediaPipe in future, update BOTH URLs together and
+   test thumbnail generation before deploying.
+===================================================================== */
+
+
 async function loadFaceDetector() {
 
   /*
@@ -721,11 +745,9 @@ async function loadFaceDetector() {
    * Load the MediaPipe WebAssembly runtime.
    */
   const vision =
-    await FilesetResolver
-      .forVisionTasks(
-        "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm"
-      );
-
+    await FilesetResolver.forVisionTasks(
+      "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.1/wasm"
+    );
 
   /*
    * Create the actual face detector.
@@ -737,7 +759,7 @@ async function loadFaceDetector() {
         {
           baseOptions: {
             modelAssetPath:
-              "https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/latest/blaze_face_short_range.tflite"
+              "https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/1/blaze_face_short_range.tflite"
           },
 
           runningMode:
@@ -751,6 +773,7 @@ async function loadFaceDetector() {
 
   return faceDetector;
 }
+
 
 
 /* =====================================================================
