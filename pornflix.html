@@ -228,6 +228,114 @@
         
             <div id="add-video-status" class="add-video-status"></div>
 
+
+
+            <!-- =====================================================
+                 CURRENT INGESTION
+            ====================================================== -->
+            
+            <div
+              id="add-video-ingestion"
+              class="add-video-ingestion"
+              hidden
+            >
+            
+              <div class="add-video-ingestion-header">
+            
+                <div>
+                  <div class="add-video-ingestion-label">
+                    CURRENT INGESTION
+                  </div>
+            
+                  <div
+                    id="add-video-ingestion-name"
+                    class="add-video-ingestion-name"
+                  ></div>
+            
+                  <div
+                    id="add-video-ingestion-size"
+                    class="add-video-ingestion-size"
+                  ></div>
+                </div>
+            
+                <div
+                  id="add-video-ingestion-percent"
+                  class="add-video-ingestion-percent"
+                >
+                  0%
+                </div>
+            
+              </div>
+            
+            
+              <div class="add-video-ingestion-stages">
+            
+                <div
+                  class="add-video-ingestion-stage"
+                  data-stage="analysis"
+                >
+                  <span class="add-video-stage-icon">○</span>
+                  <span>Video analysed</span>
+                </div>
+            
+                <div
+                  class="add-video-ingestion-stage"
+                  data-stage="duplicate"
+                >
+                  <span class="add-video-stage-icon">○</span>
+                  <span>Duplicate check</span>
+                </div>
+            
+                <div
+                  class="add-video-ingestion-stage"
+                  data-stage="thumbnail-generation"
+                >
+                  <span class="add-video-stage-icon">○</span>
+                  <span>Thumbnail generated</span>
+                </div>
+            
+                <div
+                  class="add-video-ingestion-stage"
+                  data-stage="video-upload"
+                >
+                  <span class="add-video-stage-icon">○</span>
+                  <span>Video uploaded</span>
+                </div>
+            
+                <div
+                  class="add-video-ingestion-stage"
+                  data-stage="catalogue"
+                >
+                  <span class="add-video-stage-icon">○</span>
+                  <span>Catalogue entry created</span>
+                </div>
+            
+                <div
+                  class="add-video-ingestion-stage"
+                  data-stage="thumbnail-upload"
+                >
+                  <span class="add-video-stage-icon">○</span>
+                  <span>Thumbnail published</span>
+                </div>
+            
+                <div
+                  class="add-video-ingestion-stage"
+                  data-stage="complete"
+                >
+                  <span class="add-video-stage-icon">○</span>
+                  <span>Complete</span>
+                </div>
+            
+              </div>
+            
+            
+              <div
+                id="add-video-ingestion-result"
+                class="add-video-ingestion-result"
+                hidden
+              ></div>
+            
+            </div>
               
             <div id="add-video-upload-progress-wrap" style="display:none;">
               <progress
