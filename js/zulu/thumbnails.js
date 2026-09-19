@@ -14,6 +14,7 @@ import {
   FilesetResolver
 } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.1/vision_bundle.mjs";
 
+
 /* =====================================================================
    THUMBNAILS.JS
    =====================================================================
@@ -43,10 +44,33 @@ import {
           - whether a single face occupies a substantial part
             of the frame.
 
-      The frames are then ranked from strongest to weakest candidate.
+      Frames are then ranked from strongest to weakest candidate.
 
 
-   2. THUMBNAIL PREVIEW / SELECTION
+   2. FACE-AWARE 16:9 CROPPING
+
+      Zulu video cards display thumbnails at 16:9.
+
+      Landscape frames that already match the required composition can
+      therefore be used naturally.
+
+      Portrait / vertical frames are automatically cropped to 16:9.
+
+      The crop position is selected using the detected faces.
+
+      Crop selection prioritises:
+
+          1. greatest number of faces retained;
+          2. greatest visible face area;
+          3. faces positioned nearest the centre of the crop.
+
+      A face must have at least 70% of its area inside the crop to count
+      as being retained.
+
+      If no useful faces are available, the frame is centre-cropped.
+
+
+   3. THUMBNAIL PREVIEW / SELECTION
 
       The highest-scoring frame is selected automatically.
 
@@ -57,72 +81,18 @@ import {
       eventually be uploaded.
 
 
-   3. THUMBNAIL PUBLISHING
+   4. THUMBNAIL PUBLISHING
 
       After the video catalogue entry has been created, the selected
       thumbnail is uploaded to Backblaze B2 as:
 
           images/{uid}.png
 
-      For example:
-
-          images/1525.png
-
-
-   RELATED MODULES
-   ---------------
-
-   add-video.js
-
-       Calls:
-
-           generateThumbnailCandidates(file)
-
-       while analysing a newly selected MP4.
-
-       Later calls:
-
-           getSelectedThumbnailBlob()
-
-       and:
-
-           uploadThumbnailToBackblaze(uid, blob)
-
-       after the video itself has been uploaded and its catalogue UID
-       has been created.
-
-
-   upload.js
-
-       Provides:
-
-           calculateFileSha1()
-           uploadFileToBackblaze()
-
-
-   utils.js
-
-       Provides:
-
-           formatBytes()
-
-
-   EXTERNAL DEPENDENCY
-   -------------------
-
-   MediaPipe Tasks Vision is used for browser-side face detection.
-
-   The BlazeFace short-range model is loaded lazily the first time
-   thumbnail generation is requested.
-
    ===================================================================== */
 
 
 /* =====================================================================
    01. DOM REFERENCES
-   =====================================================================
-
-   Cache the thumbnail controls belonging to the Add Video interface.
 ===================================================================== */
 
 const addVideoThumbnailPreview =
@@ -153,46 +123,6 @@ const addVideoThumbnailNext =
 
 /* =====================================================================
    02. MODULE STATE
-   =====================================================================
-
-   faceDetector
-       Cached MediaPipe FaceDetector instance.
-
-       The model is relatively expensive to initialise, so it is loaded
-       once and reused for subsequent videos.
-
-
-   thumbnailCandidates
-       Array containing every sampled video frame.
-
-       Each candidate has the structure:
-
-           {
-             time,
-             blob,
-             score,
-             faceCount,
-             combinedFaceRatio
-           }
-
-
-   selectedThumbnailIndex
-       Array index of the candidate currently displayed in the preview.
-
-
-   selectedThumbnailBlob
-       PNG Blob belonging to the currently selected candidate.
-
-       add-video.js retrieves this when the thumbnail is ready to be
-       uploaded.
-
-
-   currentThumbnailPreviewUrl
-       Temporary browser object URL used to display the currently
-       selected PNG Blob.
-
-       The previous object URL is revoked whenever the preview changes
-       to avoid accumulating unused browser memory.
 ===================================================================== */
 
 let faceDetector = null;
@@ -208,17 +138,6 @@ let currentThumbnailPreviewUrl = null;
 
 /* =====================================================================
    03. THUMBNAIL NAVIGATION EVENTS
-   =====================================================================
-
-   These buttons cycle through the generated candidates.
-
-   showThumbnailCandidate() wraps the supplied index automatically, so:
-
-       Previous from candidate 0
-           → displays the final candidate.
-
-       Next from the final candidate
-           → returns to candidate 0.
 ===================================================================== */
 
 addVideoThumbnailPrev
@@ -246,73 +165,735 @@ addVideoThumbnailNext
 
 
 /* =====================================================================
-   04. GENERATE THUMBNAIL CANDIDATES
-   =====================================================================
+   04. FACE-AWARE 16:9 CROPPING
+===================================================================== */
 
-   This is the main public thumbnail-analysis function.
+const THUMBNAIL_ASPECT_RATIO =
+  16 / 9;
 
-   Workflow:
+const MIN_FACE_VISIBLE_RATIO =
+  0.70;
 
-       Reset previous candidates
-             ↓
-       Load MediaPipe face detector
-             ↓
-       Create temporary local video
-             ↓
-       Read video metadata
-             ↓
-       Create thumbnail canvas
-             ↓
-       Seek to predefined points throughout video
-             ↓
-       Draw each frame to canvas
-             ↓
-       Detect faces
-             ↓
-       Score frame
-             ↓
-       Convert frame to PNG
-             ↓
-       Store candidate
-             ↓
-       Rank candidates by score
-             ↓
-       Display best candidate
+
+/**
+ * Returns useful MediaPipe face bounding boxes.
+ *
+ * Faces occupying less than 2.5% of the complete frame are ignored,
+ * matching the existing thumbnail-scoring behaviour.
+ */
+function getUsefulFaceBoxes(
+  detections,
+  width,
+  height
+) {
+
+  const frameArea =
+    width *
+    height;
+
+
+  return (
+    detections || []
+  )
+    .map(
+      detection =>
+        detection.boundingBox
+    )
+    .filter(
+      box => {
+
+        if (!box) {
+          return false;
+        }
+
+
+        const faceArea =
+          box.width *
+          box.height;
+
+
+        if (!faceArea) {
+          return false;
+        }
+
+
+        return (
+          faceArea /
+          frameArea
+        ) >= 0.025;
+      }
+    );
+}
+
+
+/**
+ * Calculates the intersection between a face rectangle and a proposed
+ * crop rectangle.
+ */
+function getRectangleIntersectionArea(
+  a,
+  b
+) {
+
+  const left =
+    Math.max(
+      a.x,
+      b.x
+    );
+
+  const top =
+    Math.max(
+      a.y,
+      b.y
+    );
+
+  const right =
+    Math.min(
+      a.x + a.width,
+      b.x + b.width
+    );
+
+  const bottom =
+    Math.min(
+      a.y + a.height,
+      b.y + b.height
+    );
+
+
+  const width =
+    Math.max(
+      0,
+      right - left
+    );
+
+  const height =
+    Math.max(
+      0,
+      bottom - top
+    );
+
+
+  return (
+    width *
+    height
+  );
+}
+
+
+/**
+ * Scores one proposed crop according to how successfully it retains
+ * the detected faces.
+ *
+ * Priority:
+ *
+ *     retained face count
+ *         ↓
+ *     visible face area
+ *         ↓
+ *     central positioning
+ */
+function scoreCropPosition(
+  crop,
+  faceBoxes
+) {
+
+  let retainedFaceCount =
+    0;
+
+  let visibleFaceArea =
+    0;
+
+  let centreScore =
+    0;
+
+
+  const cropCentreX =
+    crop.x +
+    crop.width / 2;
+
+  const cropCentreY =
+    crop.y +
+    crop.height / 2;
+
+
+  for (
+    const box of faceBoxes
+  ) {
+
+    const faceRect = {
+      x:
+        box.originX,
+
+      y:
+        box.originY,
+
+      width:
+        box.width,
+
+      height:
+        box.height
+    };
+
+
+    const faceArea =
+      faceRect.width *
+      faceRect.height;
+
+
+    if (!faceArea) {
+      continue;
+    }
+
+
+    const intersectionArea =
+      getRectangleIntersectionArea(
+        crop,
+        faceRect
+      );
+
+
+    const visibleRatio =
+      intersectionArea /
+      faceArea;
+
+
+    /*
+     * A face only counts as retained when at least 70% remains visible.
+     */
+    if (
+      visibleRatio <
+      MIN_FACE_VISIBLE_RATIO
+    ) {
+
+      continue;
+    }
+
+
+    retainedFaceCount +=
+      1;
+
+
+    visibleFaceArea +=
+      intersectionArea;
+
+
+    const faceCentreX =
+      faceRect.x +
+      faceRect.width / 2;
+
+    const faceCentreY =
+      faceRect.y +
+      faceRect.height / 2;
+
+
+    const dx =
+      Math.abs(
+        faceCentreX -
+        cropCentreX
+      ) /
+      (
+        crop.width /
+        2
+      );
+
+
+    const dy =
+      Math.abs(
+        faceCentreY -
+        cropCentreY
+      ) /
+      (
+        crop.height /
+        2
+      );
+
+
+    const centrality =
+      1 -
+      Math.min(
+        1,
+        (
+          dx +
+          dy
+        ) /
+        2
+      );
+
+
+    centreScore +=
+      centrality;
+  }
+
+
+  return {
+    retainedFaceCount,
+    visibleFaceArea,
+    centreScore
+  };
+}
+
+
+/**
+ * Compares two crop scores.
+ *
+ * Returns true when candidateScore is preferable to bestScore.
+ */
+function cropScoreIsBetter(
+  candidateScore,
+  bestScore
+) {
+
+  if (!bestScore) {
+    return true;
+  }
+
+
+  if (
+    candidateScore.retainedFaceCount !==
+    bestScore.retainedFaceCount
+  ) {
+
+    return (
+      candidateScore.retainedFaceCount >
+      bestScore.retainedFaceCount
+    );
+  }
+
+
+  if (
+    candidateScore.visibleFaceArea !==
+    bestScore.visibleFaceArea
+  ) {
+
+    return (
+      candidateScore.visibleFaceArea >
+      bestScore.visibleFaceArea
+    );
+  }
+
+
+  return (
+    candidateScore.centreScore >
+    bestScore.centreScore
+  );
+}
+
+
+/**
+ * Finds the best 16:9 crop rectangle for a frame.
+ *
+ * Portrait videos mainly require vertical movement of the crop.
+ * Extremely wide frames may instead require horizontal movement.
+ */
+function findBestThumbnailCrop(
+  frameWidth,
+  frameHeight,
+  detections
+) {
+
+  const frameAspect =
+    frameWidth /
+    frameHeight;
+
+
+  let cropWidth;
+  let cropHeight;
+
+
+  /*
+   * Frame is narrower/taller than 16:9.
+   *
+   * Keep the complete width and crop vertically.
+   */
+  if (
+    frameAspect <
+    THUMBNAIL_ASPECT_RATIO
+  ) {
+
+    cropWidth =
+      frameWidth;
+
+    cropHeight =
+      frameWidth /
+      THUMBNAIL_ASPECT_RATIO;
+
+  } else {
+
+    /*
+     * Frame is wider than 16:9.
+     *
+     * Keep the complete height and crop horizontally.
+     */
+    cropHeight =
+      frameHeight;
+
+    cropWidth =
+      frameHeight *
+      THUMBNAIL_ASPECT_RATIO;
+  }
+
+
+  cropWidth =
+    Math.min(
+      frameWidth,
+      cropWidth
+    );
+
+  cropHeight =
+    Math.min(
+      frameHeight,
+      cropHeight
+    );
+
+
+  const maxX =
+    Math.max(
+      0,
+      frameWidth -
+      cropWidth
+    );
+
+  const maxY =
+    Math.max(
+      0,
+      frameHeight -
+      cropHeight
+    );
+
+
+  const usefulFaces =
+    getUsefulFaceBoxes(
+      detections,
+      frameWidth,
+      frameHeight
+    );
+
+
+  /*
+   * With no useful faces, simply centre the crop.
+   */
+  if (
+    !usefulFaces.length
+  ) {
+
+    return {
+      x:
+        maxX / 2,
+
+      y:
+        maxY / 2,
+
+      width:
+        cropWidth,
+
+      height:
+        cropHeight,
+
+      retainedFaceCount:
+        0
+    };
+  }
+
+
+  /*
+   * Build candidate crop positions.
+   *
+   * We test:
+   *
+   *   - the centred position;
+   *   - positions centred around each detected face;
+   *   - positions aligned with the top/bottom or left/right of faces;
+   *   - a fine sweep through the movable crop range.
+   */
+  const positions =
+    new Set();
+
+
+  const movementIsVertical =
+    maxY >
+    0;
+
+
+  const maximumMovement =
+    movementIsVertical
+      ? maxY
+      : maxX;
+
+
+  positions.add(
+    maximumMovement /
+    2
+  );
+
+
+  positions.add(
+    0
+  );
+
+
+  positions.add(
+    maximumMovement
+  );
+
+
+  for (
+    const box of usefulFaces
+  ) {
+
+    if (
+      movementIsVertical
+    ) {
+
+      const faceCentre =
+        box.originY +
+        box.height / 2;
+
+
+      positions.add(
+        faceCentre -
+        cropHeight / 2
+      );
+
+
+      positions.add(
+        box.originY
+      );
+
+
+      positions.add(
+        box.originY +
+        box.height -
+        cropHeight
+      );
+
+    } else {
+
+      const faceCentre =
+        box.originX +
+        box.width / 2;
+
+
+      positions.add(
+        faceCentre -
+        cropWidth / 2
+      );
+
+
+      positions.add(
+        box.originX
+      );
+
+
+      positions.add(
+        box.originX +
+        box.width -
+        cropWidth
+      );
+    }
+  }
+
+
+  /*
+   * Add a fine sweep across the complete available movement range.
+   *
+   * 100 intervals gives sufficiently accurate positioning without
+   * making thumbnail generation expensive.
+   */
+  const SWEEP_STEPS =
+    100;
+
+
+  for (
+    let i = 0;
+    i <= SWEEP_STEPS;
+    i++
+  ) {
+
+    positions.add(
+      maximumMovement *
+      (
+        i /
+        SWEEP_STEPS
+      )
+    );
+  }
+
+
+  let bestCrop =
+    null;
+
+  let bestScore =
+    null;
+
+
+  for (
+    const rawPosition of positions
+  ) {
+
+    const position =
+      Math.max(
+        0,
+        Math.min(
+          maximumMovement,
+          rawPosition
+        )
+      );
+
+
+    const crop = {
+      x:
+        movementIsVertical
+          ? 0
+          : position,
+
+      y:
+        movementIsVertical
+          ? position
+          : 0,
+
+      width:
+        cropWidth,
+
+      height:
+        cropHeight
+    };
+
+
+    const score =
+      scoreCropPosition(
+        crop,
+        usefulFaces
+      );
+
+
+    if (
+      cropScoreIsBetter(
+        score,
+        bestScore
+      )
+    ) {
+
+      bestCrop =
+        crop;
+
+      bestScore =
+        score;
+    }
+  }
+
+
+  return {
+    ...bestCrop,
+
+    retainedFaceCount:
+      bestScore
+        ?.retainedFaceCount ||
+      0
+  };
+}
+
+
+/**
+ * Produces the final 16:9 thumbnail PNG from a complete sampled frame.
+ */
+async function createCroppedThumbnailBlob(
+  sourceCanvas,
+  detections
+) {
+
+  const crop =
+    findBestThumbnailCrop(
+      sourceCanvas.width,
+      sourceCanvas.height,
+      detections
+    );
+
+
+  /*
+   * Keep output reasonably detailed without generating unnecessarily
+   * large PNG files.
+   */
+  const outputWidth =
+    Math.min(
+      960,
+      Math.round(
+        crop.width
+      )
+    );
+
+
+  const outputHeight =
+    Math.round(
+      outputWidth /
+      THUMBNAIL_ASPECT_RATIO
+    );
+
+
+  const outputCanvas =
+    document.createElement(
+      "canvas"
+    );
+
+
+  outputCanvas.width =
+    outputWidth;
+
+  outputCanvas.height =
+    outputHeight;
+
+
+  const outputContext =
+    outputCanvas.getContext(
+      "2d"
+    );
+
+
+  if (!outputContext) {
+
+    throw new Error(
+      "Could not create thumbnail crop canvas."
+    );
+  }
+
+
+  outputContext.drawImage(
+    sourceCanvas,
+
+    crop.x,
+    crop.y,
+    crop.width,
+    crop.height,
+
+    0,
+    0,
+    outputCanvas.width,
+    outputCanvas.height
+  );
+
+
+  const blob =
+    await canvasToPngBlob(
+      outputCanvas
+    );
+
+
+  return {
+    blob,
+    crop
+  };
+}
+
+
+/* =====================================================================
+   05. GENERATE THUMBNAIL CANDIDATES
 ===================================================================== */
 
 /**
  * Generates and ranks thumbnail candidates from a local video file.
- *
- * Fifteen frames are sampled at predefined percentages throughout the
- * video:
- *
- *      5%, 10%, 15%, 20%, 25%, 30%, 35%, 40%,
- *      50%, 60%, 70%, 80%, 85%, 90%, 95%
- *
- * Each frame is:
- *
- *   1. drawn onto a canvas;
- *   2. analysed by MediaPipe for faces;
- *   3. scored according to face composition;
- *   4. converted into a PNG Blob;
- *   5. stored as a thumbnail candidate.
- *
- * Candidates are sorted by score descending, meaning candidate 0 is
- * the automatically preferred thumbnail.
- *
- * The temporary video object URL is always released in the finally
- * block.
- *
- * @param {File} file
- *        Local MP4 selected in the Add Video interface.
  */
 export async function generateThumbnailCandidates(
   file
 ) {
-
-  /* -----------------------------------------------------------------
-     RESET PREVIOUS THUMBNAIL SESSION
-  ----------------------------------------------------------------- */
 
   thumbnailCandidates = [];
 
@@ -321,38 +902,36 @@ export async function generateThumbnailCandidates(
   selectedThumbnailBlob = null;
 
 
-  if (addVideoThumbnailPreview) {
+  if (
+    addVideoThumbnailPreview
+  ) {
 
     addVideoThumbnailPreview.style.display =
       "none";
   }
 
 
-  if (addVideoThumbnailActions) {
+  if (
+    addVideoThumbnailActions
+  ) {
 
     addVideoThumbnailActions.style.display =
       "none";
   }
 
 
-  if (addVideoThumbnailStatus) {
+  if (
+    addVideoThumbnailStatus
+  ) {
 
     addVideoThumbnailStatus.textContent =
       "Analysing video for faces…";
   }
 
 
-  /* -----------------------------------------------------------------
-     LOAD FACE DETECTOR
-  ----------------------------------------------------------------- */
-
   const detector =
     await loadFaceDetector();
 
-
-  /* -----------------------------------------------------------------
-     CREATE TEMPORARY VIDEO
-  ----------------------------------------------------------------- */
 
   const objectUrl =
     URL.createObjectURL(
@@ -381,12 +960,11 @@ export async function generateThumbnailCandidates(
 
   try {
 
-    /* ---------------------------------------------------------------
-       READ VIDEO METADATA
-    --------------------------------------------------------------- */
-
     await new Promise(
-      (resolve, reject) => {
+      (
+        resolve,
+        reject
+      ) => {
 
         video.addEventListener(
           "loadedmetadata",
@@ -432,17 +1010,6 @@ export async function generateThumbnailCandidates(
     }
 
 
-    /* ---------------------------------------------------------------
-       DEFINE FRAME SAMPLE POINTS
-    ---------------------------------------------------------------
-
-       Frames are deliberately sampled throughout most of the video
-       rather than just near the beginning.
-
-       The exact beginning/end are avoided because they are more likely
-       to contain fades, titles or transitional frames.
-    --------------------------------------------------------------- */
-
     const percentages = [
       0.05,
       0.10,
@@ -462,10 +1029,6 @@ export async function generateThumbnailCandidates(
     ];
 
 
-    /* ---------------------------------------------------------------
-       PREPARE FRAME CANVAS
-    --------------------------------------------------------------- */
-
     const canvas =
       document.createElement(
         "canvas"
@@ -482,15 +1045,14 @@ export async function generateThumbnailCandidates(
       );
 
 
-    /*
-     * Thumbnail analysis does not need the video's full native
-     * resolution.
-     *
-     * Limit analysis width to 960px while preserving the original
-     * aspect ratio. Smaller source videos retain their native width.
-     *
-     * This reduces the amount of image data MediaPipe must analyse.
-     */
+    if (!ctx) {
+
+      throw new Error(
+        "Could not create thumbnail canvas."
+      );
+    }
+
+
     const targetWidth =
       Math.min(
         video.videoWidth,
@@ -514,22 +1076,12 @@ export async function generateThumbnailCandidates(
       );
 
 
-    /* ---------------------------------------------------------------
-       SAMPLE EACH FRAME
-    --------------------------------------------------------------- */
-
     for (
       let i = 0;
       i < percentages.length;
       i++
     ) {
 
-      /*
-       * Calculate the requested point in the video.
-       *
-       * duration - 0.25 prevents seeking directly onto the absolute
-       * final frame, which can be unreliable in some media files.
-       */
       const time =
         Math.min(
           duration - 0.25,
@@ -547,19 +1099,11 @@ export async function generateThumbnailCandidates(
       }
 
 
-      /* -------------------------------------------------------------
-         SEEK VIDEO
-      ------------------------------------------------------------- */
-
       await seekVideo(
         video,
         time
       );
 
-
-      /* -------------------------------------------------------------
-         COPY FRAME TO CANVAS
-      ------------------------------------------------------------- */
 
       ctx.drawImage(
         video,
@@ -569,10 +1113,6 @@ export async function generateThumbnailCandidates(
         canvas.height
       );
 
-
-      /* -------------------------------------------------------------
-         DETECT FACES
-      ------------------------------------------------------------- */
 
       const result =
         detector.detect(
@@ -585,10 +1125,11 @@ export async function generateThumbnailCandidates(
         [];
 
 
-      /* -------------------------------------------------------------
-         SCORE FRAME
-      ------------------------------------------------------------- */
-
+      /*
+       * Score the COMPLETE frame first.
+       *
+       * This preserves the existing candidate-ranking behaviour.
+       */
       const scoring =
         scoreThumbnailFrame(
           detections,
@@ -597,23 +1138,22 @@ export async function generateThumbnailCandidates(
         );
 
 
-      /* -------------------------------------------------------------
-         CONVERT FRAME TO PNG
-      ------------------------------------------------------------- */
-
-      const blob =
-        await canvasToPngBlob(
-          canvas
+      /*
+       * The actual PNG stored as the candidate is now a face-aware
+       * 16:9 crop.
+       */
+      const cropped =
+        await createCroppedThumbnailBlob(
+          canvas,
+          detections
         );
 
 
-      /* -------------------------------------------------------------
-         STORE CANDIDATE
-      ------------------------------------------------------------- */
-
       thumbnailCandidates.push({
         time,
-        blob,
+
+        blob:
+          cropped.blob,
 
         score:
           scoring.score,
@@ -622,38 +1162,29 @@ export async function generateThumbnailCandidates(
           scoring.faceCount,
 
         combinedFaceRatio:
-          scoring.combinedFaceRatio
+          scoring.combinedFaceRatio,
+
+        crop:
+          cropped.crop
       });
     }
 
 
-    /* ---------------------------------------------------------------
-       RANK CANDIDATES
-    ---------------------------------------------------------------
-
-       Highest-scoring candidate becomes index 0.
-    --------------------------------------------------------------- */
-
     thumbnailCandidates.sort(
-      (a, b) =>
+      (
+        a,
+        b
+      ) =>
         b.score -
         a.score
     );
 
-
-    /* ---------------------------------------------------------------
-       DISPLAY BEST CANDIDATE
-    --------------------------------------------------------------- */
 
     showThumbnailCandidate(
       0
     );
 
   } finally {
-
-    /* ---------------------------------------------------------------
-       CLEAN UP TEMPORARY VIDEO
-    --------------------------------------------------------------- */
 
     video.pause();
 
@@ -672,62 +1203,15 @@ export async function generateThumbnailCandidates(
 
 
 /* =====================================================================
-   05. MEDIAPIPE FACE DETECTOR
+   06. MEDIAPIPE FACE DETECTOR
 ===================================================================== */
-
-/**
- * Loads and caches the MediaPipe face detector.
- *
- * The detector is loaded lazily rather than during initial page load.
- * This means MediaPipe resources are only initialised when the user
- * actually selects a video for thumbnail generation.
- *
- * Subsequent calls return the existing detector instance immediately.
- *
- * Configuration:
- *
- *     Model:
- *         BlazeFace short-range float16
- *
- *     Mode:
- *         IMAGE
- *
- *     Minimum confidence:
- *         0.55
- *
- * @returns {Promise<FaceDetector>}
- */
-
-/* =====================================================================
-   MEDIAPIPE VERSION
-   =====================================================================
-
-   MediaPipe is deliberately pinned to a specific stable version rather
-   than using @latest.
-
-   This ensures that a future MediaPipe release cannot unexpectedly
-   change the JavaScript API or WASM implementation used by thumbnail
-   generation without us explicitly upgrading and testing it first.
-
-   IMPORTANT:
-
-   The JavaScript module and WASM directory must use the SAME version.
-
-   Current pinned version:
-
-       @mediapipe/tasks-vision 1.0.1
-
-   When upgrading MediaPipe in future, update BOTH URLs together and
-   test thumbnail generation before deploying.
-===================================================================== */
-
 
 async function loadFaceDetector() {
 
-  /*
-   * Reuse the already-loaded detector.
-   */
-  if (faceDetector) {
+  if (
+    faceDetector
+  ) {
+
     return faceDetector;
   }
 
@@ -741,70 +1225,49 @@ async function loadFaceDetector() {
   }
 
 
-  /*
-   * Load the MediaPipe WebAssembly runtime.
-   */
   const vision =
     await FilesetResolver.forVisionTasks(
       "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.1/wasm"
     );
 
-  /*
-   * Create the actual face detector.
-   */
+
   faceDetector =
-    await FaceDetector
-      .createFromOptions(
-        vision,
-        {
-          baseOptions: {
-            modelAssetPath:
-              "https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/1/blaze_face_short_range.tflite"
-          },
+    await FaceDetector.createFromOptions(
+      vision,
+      {
+        baseOptions: {
+          modelAssetPath:
+            "https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/1/blaze_face_short_range.tflite"
+        },
 
-          runningMode:
-            "IMAGE",
+        runningMode:
+          "IMAGE",
 
-          minDetectionConfidence:
-            0.55
-        }
-      );
+        minDetectionConfidence:
+          0.55
+      }
+    );
 
 
   return faceDetector;
 }
 
 
-
 /* =====================================================================
-   06. VIDEO FRAME SEEKING
+   07. VIDEO FRAME SEEKING
 ===================================================================== */
 
-/**
- * Moves the temporary video element to a specific timestamp and waits
- * until the browser confirms that seeking has completed.
- *
- * The returned Promise resolves on the video's "seeked" event.
- *
- * It rejects if the video raises an error while seeking.
- *
- * Temporary event listeners are removed after either outcome.
- *
- * @param {HTMLVideoElement} video
- * @param {number} time
- * @returns {Promise<void>}
- */
 function seekVideo(
   video,
   time
 ) {
 
   return new Promise(
-    (resolve, reject) => {
+    (
+      resolve,
+      reject
+    ) => {
 
-      /**
-       * Called when the requested video position has been reached.
-       */
       const onSeeked =
         () => {
 
@@ -814,9 +1277,6 @@ function seekVideo(
         };
 
 
-      /**
-       * Called if seeking fails.
-       */
       const onError =
         () => {
 
@@ -831,9 +1291,6 @@ function seekVideo(
         };
 
 
-      /**
-       * Removes temporary seek listeners.
-       */
       const cleanup =
         () => {
 
@@ -842,6 +1299,7 @@ function seekVideo(
             onSeeked
           );
 
+
           video.removeEventListener(
             "error",
             onError
@@ -849,10 +1307,6 @@ function seekVideo(
         };
 
 
-      /*
-       * Install listeners before changing currentTime so a very fast
-       * seek cannot complete before the listener exists.
-       */
       video.addEventListener(
         "seeked",
         onSeeked,
@@ -871,9 +1325,6 @@ function seekVideo(
       );
 
 
-      /*
-       * Initiate the seek.
-       */
       video.currentTime =
         time;
     }
@@ -882,63 +1333,9 @@ function seekVideo(
 
 
 /* =====================================================================
-   07. FRAME SCORING
-   =====================================================================
-
-   The scoring system attempts to favour frames that make useful
-   catalogue thumbnails.
-
-   The broad priorities are:
-
-       Multiple visible faces
-            ↓
-       Larger combined face area
-            ↓
-       Faces nearer the centre
-            ↓
-       Strong single-face portrait
-
-   Very small face detections are ignored.
+   08. FRAME SCORING
 ===================================================================== */
 
-/**
- * Scores a frame according to the faces detected by MediaPipe.
- *
- * Faces occupying less than 2.5% of the complete frame are discarded.
- * This helps prevent tiny/background faces from dominating the ranking.
- *
- * Scoring:
- *
- *     2+ useful faces
- *         +100
- *
- *     each face beyond the first two
- *         +20
- *
- *     combined face area
- *         combinedFaceRatio × 180
- *
- *     central positioning
- *         up to +10 per useful face
- *
- *     one large face occupying >= 15% of frame
- *         +40
- *
- * @param {Array} detections
- *        MediaPipe face detections.
- *
- * @param {number} width
- *        Canvas/frame width.
- *
- * @param {number} height
- *        Canvas/frame height.
- *
- * @returns {{
- *   score: number,
- *   faceCount: number,
- *   combinedFaceRatio: number
- * }}
- */
 function scoreThumbnailFrame(
   detections,
   width,
@@ -949,10 +1346,6 @@ function scoreThumbnailFrame(
     width *
     height;
 
-
-  /* -----------------------------------------------------------------
-     REMOVE INSIGNIFICANT FACE DETECTIONS
-  ----------------------------------------------------------------- */
 
   const usefulFaces =
     detections
@@ -978,9 +1371,6 @@ function scoreThumbnailFrame(
             frameArea;
 
 
-          /*
-           * Ignore faces occupying less than 2.5% of the frame.
-           */
           return (
             areaRatio >=
             0.025
@@ -993,9 +1383,6 @@ function scoreThumbnailFrame(
     usefulFaces.length;
 
 
-  /*
-   * A frame without useful faces receives no score.
-   */
   if (!faceCount) {
 
     return {
@@ -1013,10 +1400,6 @@ function scoreThumbnailFrame(
     0;
 
 
-  /* -----------------------------------------------------------------
-     CALCULATE FACE AREA + CENTRALITY
-  ----------------------------------------------------------------- */
-
   for (
     const box of usefulFaces
   ) {
@@ -1026,9 +1409,6 @@ function scoreThumbnailFrame(
       box.height;
 
 
-    /*
-     * Find the centre point of the detected face.
-     */
     const centreX =
       box.originX +
       box.width / 2;
@@ -1039,21 +1419,15 @@ function scoreThumbnailFrame(
       box.height / 2;
 
 
-    /*
-     * Calculate horizontal and vertical distance from the centre of
-     * the complete frame.
-     *
-     * Values are normalised so:
-     *
-     *     0 = centre
-     *     1 = edge
-     */
     const dx =
       Math.abs(
         centreX -
         width / 2
       ) /
-      (width / 2);
+      (
+        width /
+        2
+      );
 
 
     const dy =
@@ -1061,51 +1435,39 @@ function scoreThumbnailFrame(
         centreY -
         height / 2
       ) /
-      (height / 2);
+      (
+        height /
+        2
+      );
 
 
-    /*
-     * Convert distance into a centrality score:
-     *
-     *     1 = highly central
-     *     0 = highly peripheral
-     */
     const centrality =
       1 -
       Math.min(
         1,
-        (dx + dy) / 2
+        (
+          dx +
+          dy
+        ) /
+        2
       );
 
 
-    /*
-     * Each face can contribute up to 10 centrality points.
-     */
     centreBonus +=
       centrality *
       10;
   }
 
 
-  /* -----------------------------------------------------------------
-     COMBINED FACE COVERAGE
-  ----------------------------------------------------------------- */
-
   const combinedFaceRatio =
     combinedFaceArea /
     frameArea;
 
 
-  /* -----------------------------------------------------------------
-     BUILD FINAL SCORE
-  ----------------------------------------------------------------- */
-
-  let score = 0;
+  let score =
+    0;
 
 
-  /*
-   * Strong preference for frames containing at least two useful faces.
-   */
   if (
     faceCount >= 2
   ) {
@@ -1115,42 +1477,32 @@ function scoreThumbnailFrame(
   }
 
 
-  /*
-   * Additional reward for frames containing more than two useful faces.
-   */
   if (
     faceCount > 2
   ) {
 
     score +=
-      (faceCount - 2) *
+      (
+        faceCount -
+        2
+      ) *
       20;
   }
 
 
-  /*
-   * Prefer frames where faces occupy more of the image.
-   */
   score +=
     combinedFaceRatio *
     180;
 
 
-  /*
-   * Prefer faces positioned closer to the centre.
-   */
   score +=
     centreBonus;
 
 
-  /*
-   * A strong single-person portrait is still considered a desirable
-   * thumbnail even though it does not receive the multiple-face bonus.
-   */
   if (
     faceCount === 1 &&
     combinedFaceRatio >=
-      0.15
+    0.15
   ) {
 
     score +=
@@ -1167,30 +1519,25 @@ function scoreThumbnailFrame(
 
 
 /* =====================================================================
-   08. CANVAS → PNG
+   09. CANVAS → PNG
 ===================================================================== */
 
-/**
- * Converts the current canvas contents into a PNG Blob.
- *
- * canvas.toBlob() uses a callback rather than returning a Promise, so
- * this helper wraps it in a Promise to make thumbnail generation easier
- * to use with async/await.
- *
- * @param {HTMLCanvasElement} canvas
- * @returns {Promise<Blob>}
- */
 function canvasToPngBlob(
   canvas
 ) {
 
   return new Promise(
-    (resolve, reject) => {
+    (
+      resolve,
+      reject
+    ) => {
 
       canvas.toBlob(
         blob => {
 
-          if (blob) {
+          if (
+            blob
+          ) {
 
             resolve(
               blob
@@ -1211,11 +1558,9 @@ function canvasToPngBlob(
     }
   );
 }
-
-
-/* =================================================================================================================
-   REMOTE VIDEO THUMBNAIL GENERATION
-   =================================================================================================================
+/* =====================================================================
+   10. REMOTE VIDEO THUMBNAIL GENERATION
+   =====================================================================
 
    Used by the Admin Library Health repair workflow.
 
@@ -1231,7 +1576,13 @@ function canvasToPngBlob(
 
    The same face detector, scoring system and selected-thumbnail state
    used by Add Video are reused here.
-=================================================================================================================== */
+
+   IMPORTANT:
+
+   The final candidate PNG is passed through the same face-aware 16:9
+   cropping system as normal Add Video ingestion.
+
+===================================================================== */
 
 export async function generateThumbnailCandidatesFromUrl(
   videoUrl,
@@ -1251,7 +1602,9 @@ export async function generateThumbnailCandidatesFromUrl(
 
 
   thumbnailCandidates = [];
+
   selectedThumbnailIndex = 0;
+
   selectedThumbnailBlob = null;
 
 
@@ -1280,11 +1633,14 @@ export async function generateThumbnailCandidatesFromUrl(
   video.crossOrigin =
     "anonymous";
 
+
   video.preload =
     "metadata";
 
+
   video.muted =
     true;
+
 
   video.playsInline =
     true;
@@ -1310,7 +1666,7 @@ export async function generateThumbnailCandidatesFromUrl(
         resolve,
         reject
       ) => {
-    
+
         /*
          * Some large/older MP4 files can take considerably longer than
          * 30 seconds before the browser has fetched enough of the file to
@@ -1320,83 +1676,88 @@ export async function generateThumbnailCandidatesFromUrl(
          */
         const METADATA_TIMEOUT_MS =
           90000;
-    
-    
+
+
         let settled =
           false;
-    
-    
+
+
         const cleanup =
           () => {
-    
+
             window.clearTimeout(
               timeout
             );
-    
+
+
             video.removeEventListener(
               "loadedmetadata",
               onLoaded
             );
-    
+
+
             video.removeEventListener(
               "durationchange",
               onDurationChange
             );
-    
+
+
             video.removeEventListener(
               "error",
               onError
             );
           };
-    
-    
+
+
         const finish =
           () => {
-    
+
             if (
               settled
             ) {
-    
+
               return;
             }
-    
-    
+
+
             settled =
               true;
-    
+
+
             cleanup();
-    
+
+
             resolve();
           };
-    
-    
+
+
         const fail =
-          (
-            error
-          ) => {
-    
+          error => {
+
             if (
               settled
             ) {
-    
+
               return;
             }
-    
-    
+
+
             settled =
               true;
-    
+
+
             cleanup();
-    
+
+
             reject(
               error
             );
           };
-    
-    
+
+
         const metadataIsUsable =
           () => {
-    
+
             return (
               video.readyState >=
                 HTMLMediaElement.HAVE_METADATA &&
@@ -1407,11 +1768,11 @@ export async function generateThumbnailCandidatesFromUrl(
                 0
             );
           };
-    
-    
+
+
         const onLoaded =
           () => {
-    
+
             /*
              * loadedmetadata normally gives us everything required.
              * Check the duration as well before continuing.
@@ -1419,15 +1780,15 @@ export async function generateThumbnailCandidatesFromUrl(
             if (
               metadataIsUsable()
             ) {
-    
+
               finish();
             }
           };
-    
-    
+
+
         const onDurationChange =
           () => {
-    
+
             /*
              * Some MP4s expose the duration slightly after loadedmetadata.
              * durationchange therefore gives those files another route to
@@ -1436,27 +1797,29 @@ export async function generateThumbnailCandidatesFromUrl(
             if (
               metadataIsUsable()
             ) {
-    
+
               finish();
             }
           };
-    
-    
+
+
         const onError =
           () => {
-    
+
             const mediaError =
               video.error;
-    
+
+
             const errorCode =
               mediaError?.code ??
               "unknown";
-    
+
+
             const errorMessage =
               mediaError?.message ??
               "No browser media error was supplied.";
-    
-    
+
+
             fail(
               new Error(
                 `Could not read the remote video for thumbnail repair. ` +
@@ -1464,12 +1827,12 @@ export async function generateThumbnailCandidatesFromUrl(
               )
             );
           };
-    
-    
+
+
         const timeout =
           window.setTimeout(
             () => {
-    
+
               /*
                * Check one final time before failing. It is possible for
                * metadata to have become available immediately around the
@@ -1478,13 +1841,13 @@ export async function generateThumbnailCandidatesFromUrl(
               if (
                 metadataIsUsable()
               ) {
-    
+
                 finish();
-    
+
                 return;
               }
-    
-    
+
+
               fail(
                 new Error(
                   `Timed out after ${
@@ -1497,48 +1860,50 @@ export async function generateThumbnailCandidatesFromUrl(
                 )
               );
             },
+
             METADATA_TIMEOUT_MS
           );
-    
-    
+
+
         video.addEventListener(
           "loadedmetadata",
           onLoaded
         );
-    
-    
+
+
         video.addEventListener(
           "durationchange",
           onDurationChange
         );
-    
-    
+
+
         video.addEventListener(
           "error",
           onError
         );
-    
-    
+
+
         /*
-         * The video may conceivably already have usable metadata by the
-         * time this Promise is established.
+         * The video may already have usable metadata by the time this
+         * Promise is established.
          */
         if (
           metadataIsUsable()
         ) {
-    
+
           finish();
-    
+
           return;
         }
-    
-    
+
+
         /*
          * Explicitly begin loading the signed remote MP4.
          */
         video.load();
       }
     );
+
 
     const duration =
       video.duration;
@@ -1590,7 +1955,8 @@ export async function generateThumbnailCandidatesFromUrl(
       canvas.getContext(
         "2d",
         {
-          willReadFrequently: true
+          willReadFrequently:
+            true
         }
       );
 
@@ -1656,8 +2022,9 @@ export async function generateThumbnailCandidatesFromUrl(
           0,
           Math.min(
             duration - 0.25,
+
             duration *
-              percentages[i]
+            percentages[i]
           )
         );
 
@@ -1673,10 +2040,18 @@ export async function generateThumbnailCandidatesFromUrl(
       );
 
 
+      /*
+       * Draw the COMPLETE source frame first.
+       *
+       * Face detection is deliberately performed before cropping so that
+       * MediaPipe can see every face in the portrait frame.
+       */
       ctx.drawImage(
         video,
+
         0,
         0,
+
         canvas.width,
         canvas.height
       );
@@ -1684,9 +2059,10 @@ export async function generateThumbnailCandidatesFromUrl(
 
       /*
        * If the media response does not permit cross-origin canvas use,
-       * accessing the canvas here will throw a SecurityError. That error
-       * is intentionally allowed to propagate to Admin so the repair
-       * cannot accidentally upload an invalid image.
+       * accessing the canvas here will throw a SecurityError.
+       *
+       * That error is intentionally allowed to propagate to Admin so the
+       * repair cannot accidentally upload an invalid image.
        */
       const result =
         detector.detect(
@@ -1699,36 +2075,58 @@ export async function generateThumbnailCandidatesFromUrl(
         [];
 
 
+      /*
+       * Score the complete frame using the original Zulu scoring system.
+       */
       const scoring =
         scoreThumbnailFrame(
           detections,
+
           canvas.width,
           canvas.height
         );
 
 
-      const blob =
-        await canvasToPngBlob(
-          canvas
+      /*
+       * NEW:
+       *
+       * Convert the complete sampled frame into a face-aware 16:9 card
+       * thumbnail.
+       *
+       * For portrait video this chooses the vertical slice containing the
+       * greatest number of detected faces.
+       *
+       * Where several positions contain the same number of faces, visible
+       * face area and central positioning decide the winner.
+       */
+      const cropped =
+        await createCroppedThumbnailBlob(
+          canvas,
+          detections
         );
 
 
-      thumbnailCandidates.push(
-        {
-          time,
+      const blob =
+        cropped.blob;
 
-          blob,
 
-          score:
-            scoring.score,
+      thumbnailCandidates.push({
+        time,
 
-          faceCount:
-            scoring.faceCount,
+        blob,
 
-          combinedFaceRatio:
-            scoring.combinedFaceRatio
-        }
-      );
+        score:
+          scoring.score,
+
+        faceCount:
+          scoring.faceCount,
+
+        combinedFaceRatio:
+          scoring.combinedFaceRatio,
+
+        crop:
+          cropped.crop
+      });
     }
 
 
@@ -1742,6 +2140,11 @@ export async function generateThumbnailCandidatesFromUrl(
     }
 
 
+    /*
+     * Candidate ranking remains exactly as before.
+     *
+     * The frame with the strongest face score becomes candidate 0.
+     */
     thumbnailCandidates.sort(
       (
         a,
@@ -1767,9 +2170,13 @@ export async function generateThumbnailCandidatesFromUrl(
 
     onStatus?.(
       selected.faceCount >= 2
+
         ? `Best frame found — ${selected.faceCount} faces detected.`
+
         : selected.faceCount === 1
+
           ? "Best frame found — 1 face detected."
+
           : "Best available frame found."
     );
 
@@ -1793,17 +2200,18 @@ export async function generateThumbnailCandidatesFromUrl(
 
     video.pause();
 
+
     video.removeAttribute(
       "src"
     );
+
 
     video.load();
   }
 }
 
-
 /* =====================================================================
-   09. THUMBNAIL PREVIEW / SELECTION
+   11. THUMBNAIL PREVIEW / SELECTION
 ===================================================================== */
 
 /**
@@ -1820,8 +2228,7 @@ export async function generateThumbnailCandidatesFromUrl(
  * The displayed candidate's Blob becomes selectedThumbnailBlob, meaning
  * it will be returned by getSelectedThumbnailBlob() for upload.
  *
- * The previous preview object URL is revoked before creating the new
- * one.
+ * The previous preview object URL is revoked before creating the new one.
  *
  * @param {number} index
  */
@@ -1832,6 +2239,7 @@ function showThumbnailCandidate(
   if (
     !thumbnailCandidates.length
   ) {
+
     return;
   }
 
@@ -1892,6 +2300,7 @@ function showThumbnailCandidate(
     addVideoThumbnailPreview.src =
       currentThumbnailPreviewUrl;
 
+
     addVideoThumbnailPreview.style.display =
       "block";
   }
@@ -1919,19 +2328,43 @@ function showThumbnailCandidate(
   if (
     !addVideoThumbnailStatus
   ) {
+
     return;
   }
 
 
   /*
    * The status message indicates why the frame ranked as it did.
+   *
+   * If this candidate required a meaningful crop, mention how many faces
+   * survived the final 16:9 crop.
    */
+  const retainedFaceCount =
+    candidate.crop
+      ?.retainedFaceCount;
+
+
   if (
     candidate.faceCount >= 2
   ) {
 
-    addVideoThumbnailStatus.textContent =
-      `Suggested frame — ${candidate.faceCount} faces detected at ${time}s`;
+    if (
+      Number.isFinite(
+        retainedFaceCount
+      ) &&
+      retainedFaceCount <
+        candidate.faceCount
+    ) {
+
+      addVideoThumbnailStatus.textContent =
+        `Suggested frame — ${candidate.faceCount} faces detected, ` +
+        `${retainedFaceCount} inside crop at ${time}s`;
+
+    } else {
+
+      addVideoThumbnailStatus.textContent =
+        `Suggested frame — ${candidate.faceCount} faces detected at ${time}s`;
+    }
 
   } else if (
     candidate.faceCount === 1
@@ -1949,7 +2382,7 @@ function showThumbnailCandidate(
 
 
 /* =====================================================================
-   10. GET SELECTED THUMBNAIL
+   12. GET SELECTED THUMBNAIL
 ===================================================================== */
 
 /**
@@ -1957,6 +2390,9 @@ function showThumbnailCandidate(
  *
  * add-video.js calls this after the video catalogue entry has been
  * created.
+ *
+ * Because portrait frames are cropped before they are stored as
+ * candidates, this Blob is already the final 16:9 thumbnail.
  *
  * @returns {Blob|null}
  */
@@ -1966,9 +2402,9 @@ export function getSelectedThumbnailBlob() {
 }
 
 
-/* =================================================================================================================
-   ADMIN THUMBNAIL CANDIDATE API
-=================================================================================================================== */
+/* =====================================================================
+   13. ADMIN THUMBNAIL CANDIDATE API
+===================================================================== */
 
 /**
  * Returns information about the thumbnail candidate currently selected.
@@ -1980,6 +2416,7 @@ export function getSelectedThumbnailCandidate() {
   if (
     !thumbnailCandidates.length
   ) {
+
     return null;
   }
 
@@ -2011,6 +2448,9 @@ export function getSelectedThumbnailCandidate() {
 
     combinedFaceRatio:
       candidate.combinedFaceRatio,
+
+    crop:
+      candidate.crop,
 
     blob:
       candidate.blob
@@ -2060,7 +2500,7 @@ export function selectNextThumbnailCandidate() {
 
 
 /* =====================================================================
-   11. RESET THUMBNAIL STATE
+   14. RESET THUMBNAIL STATE
 ===================================================================== */
 
 /**
@@ -2154,7 +2594,7 @@ export function resetThumbnailState() {
 
 
 /* =====================================================================
-   12. THUMBNAIL UPLOAD
+   15. THUMBNAIL UPLOAD
    =====================================================================
 
    Thumbnail files are uploaded separately from the MP4.
@@ -2162,22 +2602,23 @@ export function resetThumbnailState() {
    The video UID determines the thumbnail filename:
 
        UID 1525
-           ↓
+          ↓
        images/1525.png
 
    Workflow:
 
        Validate thumbnail
-            ↓
+           ↓
        Build filename
-            ↓
+           ↓
        Calculate SHA-1
-            ↓
+           ↓
        Request Backblaze upload authorisation
-            ↓
+           ↓
        Upload PNG
-            ↓
+           ↓
        Return Backblaze result
+
 ===================================================================== */
 
 /**
@@ -2214,7 +2655,9 @@ export async function uploadThumbnailToBackblaze(
      VALIDATE THUMBNAIL
   ----------------------------------------------------------------- */
 
-  if (!thumbnailBlob) {
+  if (
+    !thumbnailBlob
+  ) {
 
     throw new Error(
       "No thumbnail has been selected."
@@ -2268,8 +2711,11 @@ export async function uploadThumbnailToBackblaze(
   ----------------------------------------------------------------- */
 
   const {
-    data: uploadAuth,
-    error: authError
+    data:
+      uploadAuth,
+
+    error:
+      authError
   } =
     await supabase
       .functions
@@ -2284,12 +2730,15 @@ export async function uploadThumbnailToBackblaze(
       );
 
 
-  if (authError) {
+  if (
+    authError
+  ) {
 
     console.error(
       "THUMBNAIL AUTH ERROR:",
       authError
     );
+
 
     throw authError;
   }
