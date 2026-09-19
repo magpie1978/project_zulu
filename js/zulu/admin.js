@@ -7040,9 +7040,6 @@ function normaliseDuplicateNumber(
       value
     );
 
-      value
-    );
-
 
   return Number.isFinite(
     number
