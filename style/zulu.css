@@ -768,11 +768,12 @@ body.modal-open {
 /* Thumbnail can now use the full width of the left column */
 
 #add-video-thumbnail-preview {
-  display: block;
-  width: 100%;
-  max-width: 100%;
-  height: auto;
-  object-fit: contain;
+    width: 100%;
+    max-width: 100%;
+    max-height: 190px;
+    object-fit: contain;
+    display: block;
+    margin: 0 auto;
 }
 
 
@@ -806,6 +807,17 @@ body.modal-open {
   margin-top: 24px;
 }
 
+#add-video-thumbnail-panel {
+    padding: 12px;
+}
+
+#add-video-thumbnail-status {
+    margin-top: 8px;
+}
+
+#add-video-thumbnail-actions {
+    margin-top: 8px;
+}
 
 /* =========================================================
    RESPONSIVE FALLBACK
