@@ -28,6 +28,10 @@ import {
   renderIngestionsError
 } from "../admin/admin-ingestions.js";
 
+import {
+  loadAdminDashboard
+} from "../admin/admin-api.js";
+
 
 /* =====================================================================
    ADMIN.JS
@@ -533,76 +537,6 @@ async function refreshAdmin() {
 }
 
 
-/* =====================================================================
-   05. ADMIN DASHBOARD REQUEST
-===================================================================== */
-
-/**
- * Retrieves the primary Admin dashboard snapshot from the protected
- * zulu-admin-dashboard Edge Function.
- */
-async function loadAdminDashboard() {
-
-  const {
-    data,
-    error
-  } =
-    await supabase.functions.invoke(
-      "zulu-admin-dashboard",
-      {
-        body: {}
-      }
-    );
-
-
-  if (
-    error
-  ) {
-
-    throw new Error(
-      `Could not load Admin dashboard: ${
-        error.message ||
-        "Edge Function request failed"
-      }`
-    );
-  }
-
-
-  if (
-    !data
-  ) {
-
-    throw new Error(
-      "The Admin dashboard returned no data."
-    );
-  }
-
-
-  if (
-    data.success !== true
-  ) {
-
-    throw new Error(
-      data.error ||
-      "The Admin dashboard request was unsuccessful."
-    );
-  }
-
-
-  if (
-    !data.library ||
-    !data.health ||
-    !data.integrity
-  ) {
-
-    throw new Error(
-      "The Admin dashboard returned an invalid response."
-    );
-  }
-
-
-  return data;
-}
 
 
 /* =====================================================================
