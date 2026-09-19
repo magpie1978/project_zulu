@@ -1,22 +1,22 @@
-import { supabase } from "./supabaseClient.js";
+import { supabase } from "../supabaseClient.js";
 
 import {
   attachPlaybackEvents
-} from "./zulu/playback.js";
+} from "./playback.js";
 
 import {
   attachActorEvents,
   loadActorSidebar
-} from "./zulu/actors.js";
+} from "./actors.js";
 
 import {
   attachCatalogueEvents,
   loadZuluVideos
-} from "./zulu/catalogue.js";
+} from "./catalogue.js";
 
 import {
   attachAddVideoEvents
-} from "./zulu/add-video.js";
+} from "./add-video.js";
 
 
 /* =====================================================================
