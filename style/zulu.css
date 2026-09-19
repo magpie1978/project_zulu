@@ -819,6 +819,27 @@ body.modal-open {
     margin-top: 8px;
 }
 
+/* ---------------------------------------------------------
+   MANUAL PORTRAIT THUMBNAIL POSITIONING
+--------------------------------------------------------- */
+
+#add-video-thumbnail-preview.is-croppable {
+    cursor: grab;
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-user-drag: none;
+
+    /*
+     * We handle vertical movement ourselves.
+     * Horizontal touch gestures remain available.
+     */
+    touch-action: pan-x;
+}
+
+#add-video-thumbnail-preview.is-croppable.is-dragging {
+    cursor: grabbing;
+}
+
 /* =========================================================
    RESPONSIVE FALLBACK
 ========================================================= */
