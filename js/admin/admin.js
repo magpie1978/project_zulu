@@ -8,7 +8,7 @@ import {
   renderVideoHealth,
   setVideoHealthLoadingState,
   renderVideoHealthError
-} from "../admin/admin-video-health.js";
+} from "./admin-video-health.js";
 
 import {
   initialiseThumbnailHealth,
@@ -16,25 +16,25 @@ import {
   renderThumbnailHealth,
   setThumbnailLoadingState,
   renderThumbnailHealthError
-} from "../admin/admin-thumbnail-health.js";
+} from "./admin-thumbnail-health.js";
 
 import {
   initialiseIntegrity,
   renderCatalogueIntegrity
-} from "../admin/admin-integrity.js";
+} from "./admin-integrity.js";
 
 import {
   renderRecentIngestions,
   renderIngestionsError
-} from "../admin/admin-ingestions.js";
+} from "./admin-ingestions.js";
 
 import {
   loadAdminDashboard
-} from "../admin/admin-api.js";
+} from "./admin-api.js";
 
 import {
   setNumber
-} from "../admin/admin-utils.js";
+} from "./admin-utils.js";
 
 
 /* =====================================================================
