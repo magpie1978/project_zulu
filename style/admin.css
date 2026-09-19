@@ -3964,3 +3964,150 @@ a {
   }
 
 }
+
+/* =====================================================================
+   DUPLICATE CONSOLIDATION — FINAL INLINE CONFIRMATION
+   ===================================================================== */
+
+.admin-duplicate-consolidation-confirmation {
+  margin: 0 0 18px;
+  padding: 16px;
+
+  background: rgba(229, 9, 20, 0.055);
+
+  border: 1px solid rgba(229, 9, 20, 0.3);
+  border-radius: 9px;
+}
+
+
+.admin-duplicate-consolidation-confirmation-heading {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+
+  margin-bottom: 14px;
+
+  color: #f1b0b3;
+
+  font-size: 13px;
+  font-weight: 800;
+}
+
+
+.admin-duplicate-consolidation-confirmation-heading svg {
+  width: 18px;
+  height: 18px;
+
+  color: #e50914;
+}
+
+
+.admin-duplicate-consolidation-confirmation-grid {
+  display: grid;
+
+  grid-template-columns:
+    repeat(
+      2,
+      minmax(0, 1fr)
+    );
+
+  gap: 10px;
+
+  margin-bottom: 13px;
+}
+
+
+.admin-duplicate-consolidation-confirmation-item {
+  padding: 12px 13px;
+
+  background: #151515;
+
+  border: 1px solid #303030;
+  border-radius: 7px;
+}
+
+
+.admin-duplicate-consolidation-confirmation-item > span {
+  display: block;
+
+  margin-bottom: 4px;
+
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+
+
+.admin-duplicate-consolidation-confirmation-item > strong {
+  display: block;
+
+  margin-bottom: 3px;
+
+  color: #fff;
+
+  font-size: 13px;
+}
+
+
+.admin-duplicate-consolidation-confirmation-item > div {
+  color: #999;
+
+  font-size: 11px;
+  line-height: 1.4;
+
+  overflow-wrap: anywhere;
+}
+
+
+.admin-duplicate-consolidation-confirmation-item.is-keep {
+  border-color: rgba(102, 187, 106, 0.3);
+}
+
+
+.admin-duplicate-consolidation-confirmation-item.is-keep > span {
+  color: #81c784;
+}
+
+
+.admin-duplicate-consolidation-confirmation-item.is-remove {
+  border-color: rgba(239, 83, 80, 0.3);
+}
+
+
+.admin-duplicate-consolidation-confirmation-item.is-remove > span {
+  color: #ef7378;
+}
+
+
+.admin-duplicate-consolidation-confirmation p {
+  margin: 0;
+
+  color: #aaa;
+
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+
+.admin-duplicate-consolidation-confirmation p strong {
+  color: #ddd;
+}
+
+
+.admin-duplicate-consolidation-confirm.is-armed {
+  background: #b60710;
+  border-color: #d40812;
+
+  box-shadow:
+    0 0 0 1px
+    rgba(229, 9, 20, 0.12);
+}
+
+
+@media (max-width: 700px) {
+
+  .admin-duplicate-consolidation-confirmation-grid {
+    grid-template-columns: 1fr;
+  }
+
+}
