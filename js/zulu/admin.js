@@ -5503,20 +5503,34 @@ function renderIntegrityRows(
  * The RPC can return ordinary video rows as well as duplicate groups,
  * so this renderer intentionally supports both structures.
  */
+
 function renderIntegrityRow(
   key,
   row
 ) {
 
   /* -------------------------------------------------------------------
-     DUPLICATE GROUPS
+     DUPLICATE FINGERPRINT GROUPS
   ------------------------------------------------------------------- */
 
   if (
     key ===
-      "duplicate_urls" ||
-    key ===
       "duplicate_fingerprints"
+  ) {
+
+    return renderDuplicateFingerprintGroup(
+      row
+    );
+  }
+
+
+  /* -------------------------------------------------------------------
+     DUPLICATE URL GROUPS
+  ------------------------------------------------------------------- */
+
+  if (
+    key ===
+      "duplicate_urls"
   ) {
 
     const videos =
@@ -5527,20 +5541,10 @@ function renderIntegrityRow(
 
 
     const groupValue =
-      key ===
-        "duplicate_urls"
-        ? (
-            row.url ||
-            row.value ||
-            row.duplicate_value ||
-            ""
-          )
-        : (
-            row.fingerprint ||
-            row.value ||
-            row.duplicate_value ||
-            ""
-          );
+      row.url ||
+      row.value ||
+      row.duplicate_value ||
+      "";
 
 
     return `
@@ -5549,12 +5553,7 @@ function renderIntegrityRow(
         <div class="admin-integrity-result-title">
 
           <span class="admin-integrity-result-film">
-            ${
-              key ===
-                "duplicate_urls"
-                ? "Duplicate URL group"
-                : "Duplicate fingerprint group"
-            }
+            Duplicate URL group
           </span>
 
         </div>
@@ -5568,12 +5567,7 @@ function renderIntegrityRow(
                   <div>
 
                     <strong>
-                      ${
-                        key ===
-                          "duplicate_urls"
-                          ? "URL:"
-                          : "Fingerprint:"
-                      }
+                      URL:
                     </strong>
 
                     <span class="admin-integrity-file">
@@ -5678,6 +5672,1019 @@ function renderIntegrityRow(
     </div>
   `;
 }
+
+
+/**
+ * Renders one duplicate-fingerprint group as a detailed comparison.
+ *
+ * The zulu-admin-dashboard Edge Function enriches each fingerprint
+ * diagnostic with the complete zulu_videos rows belonging to that group.
+ *
+ * Stage 10.4A is deliberately READ ONLY.
+ *
+ * No catalogue row or Backblaze object can be changed from this renderer.
+ * The purpose of this view is to establish whether the records really do
+ * appear to represent the same physical video before repair controls are
+ * introduced.
+ */
+function renderDuplicateFingerprintGroup(
+  row
+) {
+
+  const fingerprint =
+    String(
+      row?.fingerprint ||
+      row?.value ||
+      row?.duplicate_value ||
+      ""
+    );
+
+
+  const videos =
+    Array.isArray(
+      row?.videos
+    )
+      ? row.videos
+      : [];
+
+
+  /* -------------------------------------------------------------------
+     FALLBACK
+
+     If the updated zulu-admin-dashboard has not yet been deployed, or
+     if it could not enrich this group, show the original diagnostic
+     information rather than rendering a blank result.
+  ------------------------------------------------------------------- */
+
+  if (
+    !videos.length
+  ) {
+
+    const uids =
+      Array.isArray(
+        row?.uids
+      )
+        ? row.uids
+        : (
+            row?.uid !==
+              undefined &&
+            row?.uid !==
+              null
+              ? [
+                  row.uid
+                ]
+              : []
+          );
+
+
+    return `
+      <div class="admin-duplicate-group">
+
+        <div class="admin-duplicate-group-header">
+
+          <div>
+
+            <div class="admin-duplicate-label">
+              DUPLICATE FINGERPRINT GROUP
+            </div>
+
+            <div class="admin-duplicate-fingerprint">
+              ${escapeHtml(
+                fingerprint ||
+                "Unknown fingerprint"
+              )}
+            </div>
+
+          </div>
+
+
+          ${
+            uids.length
+              ? `
+                  <div class="admin-duplicate-count">
+                    ${escapeHtml(
+                      uids.length
+                    )}
+                    ${
+                      uids.length === 1
+                        ? "record"
+                        : "records"
+                    }
+                  </div>
+                `
+              : ""
+          }
+
+        </div>
+
+
+        <div class="admin-duplicate-warning">
+
+          Detailed catalogue records are unavailable.
+
+          Refresh Admin after deploying the updated
+          zulu-admin-dashboard Edge Function.
+
+        </div>
+
+
+        ${
+          uids.length
+            ? `
+                <div class="admin-duplicate-fallback-uids">
+
+                  ${
+                    uids
+                      .map(
+                        uid => `
+                          <span>
+                            UID ${escapeHtml(
+                              uid
+                            )}
+                          </span>
+                        `
+                      )
+                      .join(
+                        ""
+                      )
+                  }
+
+                </div>
+              `
+            : ""
+        }
+
+      </div>
+    `;
+  }
+
+
+  /* -------------------------------------------------------------------
+     COMPARE THE CATALOGUE RECORDS
+  ------------------------------------------------------------------- */
+
+  const comparison =
+    compareDuplicateVideos(
+      videos
+    );
+
+
+  /* -------------------------------------------------------------------
+     RENDER
+  ------------------------------------------------------------------- */
+
+  return `
+    <div class="admin-duplicate-group">
+
+      <div class="admin-duplicate-group-header">
+
+        <div>
+
+          <div class="admin-duplicate-label">
+            DUPLICATE FINGERPRINT GROUP
+          </div>
+
+          <div class="admin-duplicate-fingerprint">
+            ${escapeHtml(
+              fingerprint ||
+              "Unknown fingerprint"
+            )}
+          </div>
+
+        </div>
+
+
+        <div class="admin-duplicate-count">
+
+          ${escapeHtml(
+            videos.length
+          )}
+
+          ${
+            videos.length === 1
+              ? "record"
+              : "records"
+          }
+
+        </div>
+
+      </div>
+
+
+      <div class="admin-duplicate-video-grid">
+
+        ${
+          videos
+            .map(
+              video =>
+                renderDuplicateVideoCard(
+                  video
+                )
+            )
+            .join(
+              ""
+            )
+        }
+
+      </div>
+
+
+      <div class="admin-duplicate-comparison">
+
+        ${renderDuplicateComparisonRow(
+          "Fingerprint",
+          comparison.sameFingerprint,
+          comparison.sameFingerprint
+            ? "Identical"
+            : "Different"
+        )}
+
+
+        ${renderDuplicateComparisonRow(
+          "Filesize",
+          comparison.sameFilesize,
+          comparison.sameFilesize
+            ? "Identical"
+            : "Different"
+        )}
+
+
+        ${renderDuplicateComparisonRow(
+          "Duration",
+          comparison.sameDuration,
+          comparison.sameDuration
+            ? "Identical"
+            : "Different"
+        )}
+
+
+        ${renderDuplicateComparisonRow(
+          "Resolution",
+          comparison.sameResolution,
+          comparison.sameResolution
+            ? "Identical"
+            : "Different"
+        )}
+
+
+        ${renderDuplicateComparisonRow(
+          "Film title",
+          comparison.sameFilm,
+          comparison.sameFilm
+            ? "Identical"
+            : "Different"
+        )}
+
+
+        ${renderDuplicateComparisonRow(
+          "Media URL",
+          comparison.sameUrl,
+          comparison.sameUrl
+            ? "Identical"
+            : "Different"
+        )}
+
+      </div>
+
+
+      <div
+        class="
+          admin-duplicate-review-note
+          ${
+            comparison.allTechnicalMetadataMatches
+              ? "is-strong-match"
+              : "is-investigation"
+          }
+        "
+      >
+
+        ${
+          comparison.allTechnicalMetadataMatches
+            ? `
+                <strong>
+                  Strong duplicate match.
+                </strong>
+
+                The fingerprint, filesize, duration and
+                resolution agree. Review the catalogue
+                titles and media URLs before deciding
+                whether these records should be
+                consolidated.
+              `
+            : `
+                <strong>
+                  Manual investigation required.
+                </strong>
+
+                These catalogue records share a
+                fingerprint, but one or more technical
+                properties differ. They should not be
+                automatically consolidated.
+              `
+        }
+
+      </div>
+
+
+      <div class="admin-duplicate-actions">
+
+        <button
+          type="button"
+          class="
+            admin-button
+            admin-button-secondary
+            admin-duplicate-keep-button
+          "
+          disabled
+          title="Persistent Keep Both decisions will be enabled in the next catalogue-repair stage."
+        >
+
+          <i data-lucide="copy-check"></i>
+
+          <span>
+            Keep Both
+          </span>
+
+        </button>
+
+
+        <button
+          type="button"
+          class="
+            admin-button
+            admin-duplicate-consolidate-button
+          "
+          disabled
+          title="Protected server-side consolidation will be enabled in Stage 10.4B."
+        >
+
+          <i data-lucide="combine"></i>
+
+          <span>
+            Consolidate Duplicate
+          </span>
+
+        </button>
+
+      </div>
+
+    </div>
+  `;
+}
+
+
+/**
+ * Renders one zulu_videos record within a duplicate-fingerprint group.
+ */
+function renderDuplicateVideoCard(
+  video
+) {
+
+  const uid =
+    video?.uid ??
+    "—";
+
+
+  const film =
+    String(
+      video?.film ||
+      "Untitled"
+    );
+
+
+  const url =
+    String(
+      video?.url ||
+      ""
+    );
+
+
+  const filename =
+    getDuplicateMediaFilename(
+      url
+    );
+
+
+  const filesize =
+    formatBytes(
+      video?.filesize_bytes
+    );
+
+
+  const duration =
+    formatDuplicateDuration(
+      video?.duration_seconds
+    );
+
+
+  const resolution =
+    formatDuplicateResolution(
+      video?.width,
+      video?.height
+    );
+
+
+  const tags =
+    String(
+      video?.tags ||
+      ""
+    );
+
+
+  const ingested =
+    video?.ingested_at
+      ? formatDateTime(
+          video.ingested_at
+        )
+      : "—";
+
+
+  return `
+    <div class="admin-duplicate-video-card">
+
+      <div class="admin-duplicate-video-heading">
+
+        <span class="admin-duplicate-video-uid">
+          UID ${escapeHtml(
+            uid
+          )}
+        </span>
+
+        <strong>
+          ${escapeHtml(
+            film
+          )}
+        </strong>
+
+      </div>
+
+
+      <dl class="admin-duplicate-video-meta">
+
+        <div>
+
+          <dt>
+            File
+          </dt>
+
+          <dd>
+            ${escapeHtml(
+              filename ||
+              "—"
+            )}
+          </dd>
+
+        </div>
+
+
+        <div>
+
+          <dt>
+            Filesize
+          </dt>
+
+          <dd>
+            ${escapeHtml(
+              filesize
+            )}
+          </dd>
+
+        </div>
+
+
+        <div>
+
+          <dt>
+            Duration
+          </dt>
+
+          <dd>
+            ${escapeHtml(
+              duration
+            )}
+          </dd>
+
+        </div>
+
+
+        <div>
+
+          <dt>
+            Resolution
+          </dt>
+
+          <dd>
+            ${escapeHtml(
+              resolution
+            )}
+          </dd>
+
+        </div>
+
+
+        <div>
+
+          <dt>
+            Tags
+          </dt>
+
+          <dd>
+            ${escapeHtml(
+              tags ||
+              "—"
+            )}
+          </dd>
+
+        </div>
+
+
+        <div>
+
+          <dt>
+            Ingested
+          </dt>
+
+          <dd>
+            ${escapeHtml(
+              ingested
+            )}
+          </dd>
+
+        </div>
+
+      </dl>
+
+
+      ${
+        url
+          ? `
+              <a
+                class="admin-duplicate-video-link"
+                href="${escapeHtml(
+                  url
+                )}"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+
+                <i data-lucide="external-link"></i>
+
+                <span>
+                  Open Media URL
+                </span>
+
+              </a>
+            `
+          : ""
+      }
+
+    </div>
+  `;
+}
+
+
+/**
+ * Compares the fields that help determine whether catalogue records
+ * appear to represent the same physical video.
+ *
+ * Fingerprint equality alone is not treated as sufficient evidence for
+ * deletion. Filesize, duration and resolution are also compared.
+ */
+function compareDuplicateVideos(
+  videos
+) {
+
+  /**
+   * Returns true when the normalised value returned by getter() is the
+   * same for every video in the group.
+   */
+  const allEqual =
+    getter => {
+
+      if (
+        videos.length <
+          2
+      ) {
+
+        return true;
+      }
+
+
+      const firstValue =
+        getter(
+          videos[0]
+        );
+
+
+      return videos
+        .slice(
+          1
+        )
+        .every(
+          video =>
+            getter(
+              video
+            ) ===
+            firstValue
+        );
+    };
+
+
+  const sameFingerprint =
+    allEqual(
+      video =>
+        String(
+          video?.fingerprint ||
+          ""
+        )
+    );
+
+
+  const sameFilesize =
+    allEqual(
+      video =>
+        normaliseDuplicateNumber(
+          video?.filesize_bytes
+        )
+    );
+
+
+  const sameDuration =
+    allEqual(
+      video =>
+        normaliseDuplicateNumber(
+          video?.duration_seconds
+        )
+    );
+
+
+  const sameResolution =
+    allEqual(
+      video => {
+
+        const width =
+          normaliseDuplicateNumber(
+            video?.width
+          );
+
+
+        const height =
+          normaliseDuplicateNumber(
+            video?.height
+          );
+
+
+        return `${width}x${height}`;
+      }
+    );
+
+
+  const sameFilm =
+    allEqual(
+      video =>
+        String(
+          video?.film ||
+          ""
+        )
+          .trim()
+          .toLowerCase()
+    );
+
+
+  const sameUrl =
+    allEqual(
+      video =>
+        String(
+          video?.url ||
+          ""
+        )
+          .trim()
+    );
+
+
+  return {
+    sameFingerprint,
+    sameFilesize,
+    sameDuration,
+    sameResolution,
+    sameFilm,
+    sameUrl,
+
+    allTechnicalMetadataMatches:
+      sameFingerprint &&
+      sameFilesize &&
+      sameDuration &&
+      sameResolution
+  };
+}
+
+
+/**
+ * Normalises numeric catalogue metadata for comparison.
+ *
+ * Supabase may return bigint/numeric columns as strings depending on the
+ * value and client serialisation, so comparing raw values could report a
+ * false difference between e.g. "123" and 123.
+ */
+function normaliseDuplicateNumber(
+  value
+) {
+
+  if (
+    value ===
+      undefined ||
+    value ===
+      null ||
+    value ===
+      ""
+  ) {
+
+    return null;
+  }
+
+
+  const number =
+    Number(
+      value
+    );
+
+
+  return Number.isFinite(
+    number
+  )
+    ? number
+    : null;
+}
+
+
+/**
+ * Renders one technical comparison result.
+ */
+function renderDuplicateComparisonRow(
+  label,
+  matches,
+  value
+) {
+
+  return `
+    <div
+      class="
+        admin-duplicate-comparison-row
+        ${
+          matches
+            ? "is-match"
+            : "is-different"
+        }
+      "
+    >
+
+      <i
+        data-lucide="${
+          matches
+            ? "circle-check"
+            : "triangle-alert"
+        }"
+      ></i>
+
+
+      <span class="admin-duplicate-comparison-label">
+        ${escapeHtml(
+          label
+        )}
+      </span>
+
+
+      <strong>
+        ${escapeHtml(
+          value
+        )}
+      </strong>
+
+    </div>
+  `;
+}
+
+
+/**
+ * Extracts a readable filename from a catalogue media URL.
+ *
+ * Example:
+ *
+ * https://media.../Actor%20One%20with%20Actor%20Two.mp4
+ *
+ * becomes:
+ *
+ * Actor One with Actor Two.mp4
+ */
+function getDuplicateMediaFilename(
+  url
+) {
+
+  if (
+    !url
+  ) {
+
+    return "";
+  }
+
+
+  try {
+
+    const parsed =
+      new URL(
+        url
+      );
+
+
+    const pathname =
+      decodeURIComponent(
+        parsed.pathname
+      );
+
+
+    return pathname
+      .split(
+        "/"
+      )
+      .filter(
+        Boolean
+      )
+      .pop() ||
+      "";
+
+
+  } catch {
+
+    try {
+
+      return decodeURIComponent(
+        String(
+          url
+        )
+          .split(
+            "?"
+          )[0]
+          .split(
+            "/"
+          )
+          .pop() ||
+        ""
+      );
+
+
+    } catch {
+
+      return String(
+        url
+      );
+    }
+  }
+}
+
+
+/**
+ * Formats duration_seconds as:
+ *
+ *     MM:SS
+ *
+ * or:
+ *
+ *     H:MM:SS
+ */
+function formatDuplicateDuration(
+  seconds
+) {
+
+  const value =
+    Number(
+      seconds
+    );
+
+
+  if (
+    !Number.isFinite(
+      value
+    ) ||
+    value < 0
+  ) {
+
+    return "—";
+  }
+
+
+  const rounded =
+    Math.round(
+      value
+    );
+
+
+  const hours =
+    Math.floor(
+      rounded /
+      3600
+    );
+
+
+  const minutes =
+    Math.floor(
+      (
+        rounded %
+        3600
+      ) /
+      60
+    );
+
+
+  const remainingSeconds =
+    rounded %
+    60;
+
+
+  if (
+    hours > 0
+  ) {
+
+    return [
+      hours,
+
+      String(
+        minutes
+      ).padStart(
+        2,
+        "0"
+      ),
+
+      String(
+        remainingSeconds
+      ).padStart(
+        2,
+        "0"
+      )
+    ].join(
+      ":"
+    );
+  }
+
+
+  return [
+    minutes,
+
+    String(
+      remainingSeconds
+    ).padStart(
+      2,
+      "0"
+    )
+  ].join(
+    ":"
+  );
+}
+
+
+/**
+ * Formats width + height as a readable resolution.
+ */
+function formatDuplicateResolution(
+  width,
+  height
+) {
+
+  const parsedWidth =
+    Number(
+      width
+    );
+
+
+  const parsedHeight =
+    Number(
+      height
+    );
+
+
+  if (
+    !Number.isFinite(
+      parsedWidth
+    ) ||
+    !Number.isFinite(
+      parsedHeight
+    ) ||
+    parsedWidth <= 0 ||
+    parsedHeight <= 0
+  ) {
+
+    return "—";
+  }
+
+
+  return `${
+    parsedWidth
+  } × ${
+    parsedHeight
+  }`;
+}
+
+
+
 
 
 /**
