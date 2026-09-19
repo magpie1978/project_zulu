@@ -135,6 +135,14 @@ let selectedThumbnailBlob = null;
 
 let currentThumbnailPreviewUrl = null;
 
+let thumbnailDragActive = false;
+
+let thumbnailDragPointerId = null;
+
+let thumbnailDragStartY = 0;
+
+let thumbnailDragStartCropY = 0;
+
 
 /* =====================================================================
    03. THUMBNAIL NAVIGATION EVENTS
@@ -810,6 +818,182 @@ async function createCroppedThumbnailBlob(
 
 
   /*
+   * Store the maximum available crop movement.
+   *
+   * Portrait/tall images will have maxY > 0.
+   */
+  crop.maxX =
+    Math.max(
+      0,
+      sourceCanvas.width -
+      crop.width
+    );
+
+
+  crop.maxY =
+    Math.max(
+      0,
+      sourceCanvas.height -
+      crop.height
+    );
+
+
+  crop.movable =
+    crop.maxY > 0;
+
+
+  crop.direction =
+    crop.maxY > 0
+      ? "vertical"
+      : crop.maxX > 0
+        ? "horizontal"
+        : null;
+
+
+  crop.automaticX =
+    crop.x;
+
+
+  crop.automaticY =
+    crop.y;
+
+
+  /*
+   * Keep a copy of the COMPLETE source frame.
+   *
+   * This is important because the user can subsequently drag the crop
+   * vertically. We therefore need the image outside the original crop
+   * area to remain available.
+   */
+  const storedSourceCanvas =
+    document.createElement(
+      "canvas"
+    );
+
+
+  storedSourceCanvas.width =
+    sourceCanvas.width;
+
+
+  storedSourceCanvas.height =
+    sourceCanvas.height;
+
+
+  const storedSourceContext =
+    storedSourceCanvas.getContext(
+      "2d"
+    );
+
+
+  if (!storedSourceContext) {
+
+    throw new Error(
+      "Could not store thumbnail source frame."
+    );
+  }
+
+
+  storedSourceContext.drawImage(
+    sourceCanvas,
+    0,
+    0
+  );
+
+
+  const blob =
+    await renderThumbnailCrop(
+      storedSourceCanvas,
+      crop
+    );
+
+
+  return {
+    blob,
+    crop,
+    sourceCanvas:
+      storedSourceCanvas
+  };
+}
+
+
+/**
+ * Renders the supplied crop from a complete source frame.
+ *
+ * This is used both for:
+ *
+ *   - the initial automatic face-aware crop;
+ *   - a manually repositioned crop after dragging.
+ */
+async function renderThumbnailCrop(
+  sourceCanvas,
+  crop
+) {
+
+  const outputWidth =
+    960;
+
+
+  const outputHeight =
+    540;
+
+
+  const outputCanvas =
+    document.createElement(
+      "canvas"
+    );
+
+
+  outputCanvas.width =
+    outputWidth;
+
+
+  outputCanvas.height =
+    outputHeight;
+
+
+  const outputContext =
+    outputCanvas.getContext(
+      "2d"
+    );
+
+
+  if (!outputContext) {
+
+    throw new Error(
+      "Could not create thumbnail crop canvas."
+    );
+  }
+
+
+  outputContext.drawImage(
+    sourceCanvas,
+
+    crop.x,
+    crop.y,
+    crop.width,
+    crop.height,
+
+    0,
+    0,
+    outputCanvas.width,
+    outputCanvas.height
+  );
+
+
+  return canvasToPngBlob(
+    outputCanvas
+  );
+}
+
+  const crop =
+    findBestThumbnailCrop(
+      sourceCanvas.width,
+      sourceCanvas.height,
+      detections
+    );
+
+
+  /*
    * Keep output reasonably detailed without generating unnecessarily
    * large PNG files.
    */
@@ -1142,31 +1326,34 @@ export async function generateThumbnailCandidates(
        * The actual PNG stored as the candidate is now a face-aware
        * 16:9 crop.
        */
-      const cropped =
-        await createCroppedThumbnailBlob(
-          canvas,
-          detections
-        );
+const cropped =
+  await createCroppedThumbnailBlob(
+    canvas,
+    detections
+  );
 
 
-      thumbnailCandidates.push({
-        time,
+thumbnailCandidates.push({
+  time,
 
-        blob:
-          cropped.blob,
+  blob:
+    cropped.blob,
 
-        score:
-          scoring.score,
+  sourceCanvas:
+    cropped.sourceCanvas,
 
-        faceCount:
-          scoring.faceCount,
+  score:
+    scoring.score,
 
-        combinedFaceRatio:
-          scoring.combinedFaceRatio,
+  faceCount:
+    scoring.faceCount,
 
-        crop:
-          cropped.crop
-      });
+  combinedFaceRatio:
+    scoring.combinedFaceRatio,
+
+  crop:
+    cropped.crop
+});
     }
 
 
@@ -2110,23 +2297,26 @@ export async function generateThumbnailCandidatesFromUrl(
         cropped.blob;
 
 
-      thumbnailCandidates.push({
-        time,
+thumbnailCandidates.push({
+  time,
 
-        blob,
+  blob,
 
-        score:
-          scoring.score,
+  sourceCanvas:
+    cropped.sourceCanvas,
 
-        faceCount:
-          scoring.faceCount,
+  score:
+    scoring.score,
 
-        combinedFaceRatio:
-          scoring.combinedFaceRatio,
+  faceCount:
+    scoring.faceCount,
 
-        crop:
-          cropped.crop
-      });
+  combinedFaceRatio:
+    scoring.combinedFaceRatio,
+
+  crop:
+    cropped.crop
+});
     }
 
 
@@ -2211,6 +2401,480 @@ export async function generateThumbnailCandidatesFromUrl(
 }
 
 /* =====================================================================
+   MANUAL PORTRAIT CROP POSITIONING
+===================================================================== */
+
+function getCurrentThumbnailCandidate() {
+
+  if (
+    !thumbnailCandidates.length
+  ) {
+
+    return null;
+  }
+
+
+  return thumbnailCandidates[
+    selectedThumbnailIndex
+  ];
+}
+
+
+/**
+ * Replaces the preview URL after a candidate has been re-rendered.
+ */
+function refreshThumbnailPreview(
+  candidate
+) {
+
+  if (
+    currentThumbnailPreviewUrl
+  ) {
+
+    URL.revokeObjectURL(
+      currentThumbnailPreviewUrl
+    );
+  }
+
+
+  currentThumbnailPreviewUrl =
+    URL.createObjectURL(
+      candidate.blob
+    );
+
+
+  if (
+    addVideoThumbnailPreview
+  ) {
+
+    addVideoThumbnailPreview.src =
+      currentThumbnailPreviewUrl;
+  }
+}
+
+
+/**
+ * Produces a temporary preview during dragging.
+ *
+ * This redraws from the complete stored source frame, so the user can
+ * actually see the portrait image moving behind the 16:9 crop window.
+ */
+function renderThumbnailDragPreview(
+  candidate
+) {
+
+  if (
+    !candidate?.sourceCanvas ||
+    !candidate?.crop ||
+    !addVideoThumbnailPreview
+  ) {
+
+    return;
+  }
+
+
+  const previewCanvas =
+    document.createElement(
+      "canvas"
+    );
+
+
+  previewCanvas.width =
+    640;
+
+
+  previewCanvas.height =
+    360;
+
+
+  const ctx =
+    previewCanvas.getContext(
+      "2d"
+    );
+
+
+  if (!ctx) {
+
+    return;
+  }
+
+
+  ctx.drawImage(
+    candidate.sourceCanvas,
+
+    candidate.crop.x,
+    candidate.crop.y,
+    candidate.crop.width,
+    candidate.crop.height,
+
+    0,
+    0,
+    previewCanvas.width,
+    previewCanvas.height
+  );
+
+
+  /*
+   * toDataURL is appropriate here because this is only a small temporary
+   * 640 × 360 preview. The final PNG still uses canvasToPngBlob().
+   */
+  addVideoThumbnailPreview.src =
+    previewCanvas.toDataURL(
+      "image/jpeg",
+      0.85
+    );
+}
+
+
+/**
+ * Starts dragging a portrait thumbnail.
+ */
+function startThumbnailDrag(
+  event
+) {
+
+  const candidate =
+    getCurrentThumbnailCandidate();
+
+
+  if (
+    !candidate?.sourceCanvas ||
+    !candidate?.crop?.movable ||
+    candidate.crop.direction !==
+      "vertical"
+  ) {
+
+    return;
+  }
+
+
+  event.preventDefault();
+
+
+  thumbnailDragActive =
+    true;
+
+
+  thumbnailDragPointerId =
+    event.pointerId;
+
+
+  thumbnailDragStartY =
+    event.clientY;
+
+
+  thumbnailDragStartCropY =
+    candidate.crop.y;
+
+
+  addVideoThumbnailPreview
+    ?.setPointerCapture(
+      event.pointerId
+    );
+
+
+  addVideoThumbnailPreview
+    ?.classList
+    .add(
+      "is-dragging"
+    );
+
+
+  if (
+    addVideoThumbnailStatus
+  ) {
+
+    addVideoThumbnailStatus.textContent =
+      "Drag up or down to reposition the crop";
+  }
+}
+
+
+/**
+ * Moves the crop while the pointer is being dragged.
+ */
+function moveThumbnailDrag(
+  event
+) {
+
+  if (
+    !thumbnailDragActive ||
+    event.pointerId !==
+      thumbnailDragPointerId
+  ) {
+
+    return;
+  }
+
+
+  const candidate =
+    getCurrentThumbnailCandidate();
+
+
+  if (
+    !candidate?.sourceCanvas ||
+    !candidate?.crop
+  ) {
+
+    return;
+  }
+
+
+  event.preventDefault();
+
+
+  const previewRect =
+    addVideoThumbnailPreview
+      ?.getBoundingClientRect();
+
+
+  if (
+    !previewRect?.height
+  ) {
+
+    return;
+  }
+
+
+  const pointerDelta =
+    event.clientY -
+    thumbnailDragStartY;
+
+
+  /*
+   * Convert movement in browser pixels into movement within the complete
+   * source frame.
+   *
+   * The crop itself is what moves through the portrait source.
+   */
+  const sourcePixelsPerPreviewPixel =
+    candidate.crop.height /
+    previewRect.height;
+
+
+  const cropDelta =
+    pointerDelta *
+    sourcePixelsPerPreviewPixel;
+
+
+  /*
+   * Natural "drag the picture" behaviour:
+   *
+   * drag picture DOWN
+   *      -> crop moves UP through source
+   *
+   * drag picture UP
+   *      -> crop moves DOWN through source
+   */
+  candidate.crop.y =
+    Math.max(
+      0,
+      Math.min(
+        candidate.crop.maxY,
+
+        thumbnailDragStartCropY -
+        cropDelta
+      )
+    );
+
+
+  renderThumbnailDragPreview(
+    candidate
+  );
+
+
+  if (
+    addVideoThumbnailStatus
+  ) {
+
+    const percentage =
+      candidate.crop.maxY
+        ? Math.round(
+            (
+              candidate.crop.y /
+              candidate.crop.maxY
+            ) *
+            100
+          )
+        : 50;
+
+
+    addVideoThumbnailStatus.textContent =
+      `Manual crop position: ${percentage}%`;
+  }
+}
+
+
+/**
+ * Finishes a manual crop movement and regenerates the actual PNG that
+ * will be uploaded.
+ */
+async function finishThumbnailDrag(
+  event
+) {
+
+  if (
+    !thumbnailDragActive ||
+    event.pointerId !==
+      thumbnailDragPointerId
+  ) {
+
+    return;
+  }
+
+
+  thumbnailDragActive =
+    false;
+
+
+  const candidate =
+    getCurrentThumbnailCandidate();
+
+
+  try {
+
+    addVideoThumbnailPreview
+      ?.releasePointerCapture(
+        event.pointerId
+      );
+
+  } catch {
+
+    /*
+     * Pointer capture may already have been released.
+     */
+  }
+
+
+  thumbnailDragPointerId =
+    null;
+
+
+  addVideoThumbnailPreview
+    ?.classList
+    .remove(
+      "is-dragging"
+    );
+
+
+  if (
+    !candidate?.sourceCanvas ||
+    !candidate?.crop
+  ) {
+
+    return;
+  }
+
+
+  if (
+    addVideoThumbnailStatus
+  ) {
+
+    addVideoThumbnailStatus.textContent =
+      "Saving manual crop…";
+  }
+
+
+  try {
+
+    /*
+     * Generate the actual 960 × 540 PNG from the manually selected
+     * position.
+     */
+    candidate.blob =
+      await renderThumbnailCrop(
+        candidate.sourceCanvas,
+        candidate.crop
+      );
+
+
+    /*
+     * Because this candidate is currently selected, this newly rendered
+     * Blob is now the thumbnail that will be uploaded.
+     */
+    selectedThumbnailBlob =
+      candidate.blob;
+
+
+    refreshThumbnailPreview(
+      candidate
+    );
+
+
+    const time =
+      Math.round(
+        candidate.time
+      );
+
+
+    if (
+      addVideoThumbnailStatus
+    ) {
+
+      addVideoThumbnailStatus.textContent =
+        `Manual crop selected — frame at ${time}s`;
+    }
+
+  } catch (error) {
+
+    console.error(
+      "Could not save manual thumbnail crop:",
+      error
+    );
+
+
+    /*
+     * Restore the candidate's existing preview if regeneration fails.
+     */
+    refreshThumbnailPreview(
+      candidate
+    );
+
+
+    if (
+      addVideoThumbnailStatus
+    ) {
+
+      addVideoThumbnailStatus.textContent =
+        "Could not save manual crop.";
+    }
+  }
+}
+
+
+/* ---------------------------------------------------------------------
+   POINTER EVENTS
+--------------------------------------------------------------------- */
+
+addVideoThumbnailPreview
+  ?.addEventListener(
+    "pointerdown",
+    startThumbnailDrag
+  );
+
+
+addVideoThumbnailPreview
+  ?.addEventListener(
+    "pointermove",
+    moveThumbnailDrag
+  );
+
+
+addVideoThumbnailPreview
+  ?.addEventListener(
+    "pointerup",
+    finishThumbnailDrag
+  );
+
+
+addVideoThumbnailPreview
+  ?.addEventListener(
+    "pointercancel",
+    finishThumbnailDrag
+  );
+
+
+/* =====================================================================
    11. THUMBNAIL PREVIEW / SELECTION
 ===================================================================== */
 
@@ -2261,7 +2925,38 @@ function showThumbnailCandidate(
       selectedThumbnailIndex
     ];
 
+/*
+ * Manual repositioning is available only when this candidate has a
+ * vertically movable crop.
+ */
+if (
+  addVideoThumbnailPreview
+) {
 
+  if (
+    candidate.sourceCanvas &&
+    candidate.crop?.movable &&
+    candidate.crop.direction ===
+      "vertical"
+  ) {
+
+    addVideoThumbnailPreview
+      .classList
+      .add(
+        "is-croppable"
+      );
+
+  } else {
+
+    addVideoThumbnailPreview
+      .classList
+      .remove(
+        "is-croppable",
+        "is-dragging"
+      );
+  }
+}
+  
   /*
    * The displayed candidate is also the selected candidate.
    */
@@ -2529,6 +3224,18 @@ export function resetThumbnailState() {
 
   selectedThumbnailBlob = null;
 
+  thumbnailDragActive =
+  false;
+
+thumbnailDragPointerId =
+  null;
+
+thumbnailDragStartY =
+  0;
+
+thumbnailDragStartCropY =
+  0;
+
 
   /* -----------------------------------------------------------------
      RELEASE PREVIEW OBJECT URL
@@ -2555,6 +3262,13 @@ export function resetThumbnailState() {
   if (
     addVideoThumbnailPreview
   ) {
+
+    addVideoThumbnailPreview
+  .classList
+  .remove(
+    "is-croppable",
+    "is-dragging"
+  );
 
     addVideoThumbnailPreview.removeAttribute(
       "src"
