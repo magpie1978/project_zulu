@@ -118,8 +118,10 @@ export function initialiseThumbnailHealth() {
     "click",
     closeThumbnailResults
   );
-}
 
+
+  initialiseThumbnailReevaluation();
+}
 
 /* =====================================================================
    THUMBNAIL HEALTH REQUEST
@@ -3386,6 +3388,1179 @@ function escapeHtml(
     );
 }
 
+
+/* =====================================================================
+   THUMBNAIL RE-EVALUATION
+===================================================================== */
+
+/*
+ * Allows existing thumbnails to be run through the current
+ * face-aware thumbnail generator without automatically replacing them.
+ *
+ * The reviewer explicitly chooses either:
+ *
+ *     Keep Current
+ *     Use New
+ *
+ * Only one video's candidates are held at a time because thumbnails.js
+ * maintains shared candidate state.
+ */
+
+
+const thumbnailReevaluateStart =
+  document.getElementById(
+    "admin-thumbnail-reevaluate-start"
+  );
+
+
+const thumbnailReevaluatePanel =
+  document.getElementById(
+    "admin-thumbnail-reevaluate-panel"
+  );
+
+
+const thumbnailReevaluateFilm =
+  document.getElementById(
+    "admin-thumbnail-reevaluate-film"
+  );
+
+
+const thumbnailReevaluateCurrent =
+  document.getElementById(
+    "admin-thumbnail-reevaluate-current"
+  );
+
+
+const thumbnailReevaluateSuggested =
+  document.getElementById(
+    "admin-thumbnail-reevaluate-suggested"
+  );
+
+
+const thumbnailReevaluateDetail =
+  document.getElementById(
+    "admin-thumbnail-reevaluate-detail"
+  );
+
+
+const thumbnailReevaluatePrevious =
+  document.getElementById(
+    "admin-thumbnail-reevaluate-prev"
+  );
+
+
+const thumbnailReevaluateNext =
+  document.getElementById(
+    "admin-thumbnail-reevaluate-next"
+  );
+
+
+const thumbnailReevaluateKeep =
+  document.getElementById(
+    "admin-thumbnail-reevaluate-keep"
+  );
+
+
+const thumbnailReevaluateUse =
+  document.getElementById(
+    "admin-thumbnail-reevaluate-use"
+  );
+
+
+const thumbnailReevaluateStop =
+  document.getElementById(
+    "admin-thumbnail-reevaluate-stop"
+  );
+
+
+const thumbnailReevaluateStatus =
+  document.getElementById(
+    "admin-thumbnail-reevaluate-status"
+  );
+
+
+let thumbnailReevaluationQueue =
+  [];
+
+
+let thumbnailReevaluationIndex =
+  -1;
+
+
+let thumbnailReevaluationRunning =
+  false;
+
+
+let thumbnailReevaluationBusy =
+  false;
+
+
+let thumbnailReevaluationPreviewUrl =
+  null;
+
+
+/**
+ * Connects the persistent re-evaluation controls.
+ *
+ * Called once by initialiseThumbnailHealth().
+ */
+function initialiseThumbnailReevaluation() {
+
+  thumbnailReevaluateStart?.addEventListener(
+    "click",
+    startThumbnailReevaluation
+  );
+
+
+  thumbnailReevaluatePrevious?.addEventListener(
+    "click",
+    async () => {
+
+      if (
+        !thumbnailReevaluationRunning ||
+        thumbnailReevaluationBusy
+      ) {
+
+        return;
+      }
+
+
+      try {
+
+        selectPreviousThumbnailCandidate();
+
+        refreshThumbnailReevaluationCandidate();
+
+
+      } catch (
+        error
+      ) {
+
+        setThumbnailReevaluationStatus(
+          error?.message ||
+            "Could not select the previous candidate.",
+          "error"
+        );
+      }
+    }
+  );
+
+
+  thumbnailReevaluateNext?.addEventListener(
+    "click",
+    async () => {
+
+      if (
+        !thumbnailReevaluationRunning ||
+        thumbnailReevaluationBusy
+      ) {
+
+        return;
+      }
+
+
+      try {
+
+        selectNextThumbnailCandidate();
+
+        refreshThumbnailReevaluationCandidate();
+
+
+      } catch (
+        error
+      ) {
+
+        setThumbnailReevaluationStatus(
+          error?.message ||
+            "Could not select the next candidate.",
+          "error"
+        );
+      }
+    }
+  );
+
+
+  thumbnailReevaluateKeep?.addEventListener(
+    "click",
+    keepCurrentThumbnail
+  );
+
+
+  thumbnailReevaluateUse?.addEventListener(
+    "click",
+    useReevaluatedThumbnail
+  );
+
+
+  thumbnailReevaluateStop?.addEventListener(
+    "click",
+    stopThumbnailReevaluation
+  );
+}
+
+
+/**
+ * Begins a new review session.
+ */
+async function startThumbnailReevaluation() {
+
+  if (
+    thumbnailReevaluationRunning ||
+    thumbnailReevaluationBusy
+  ) {
+
+    return;
+  }
+
+
+  setThumbnailReevaluationBusy(
+    true
+  );
+
+
+  if (
+    thumbnailReevaluatePanel
+  ) {
+
+    thumbnailReevaluatePanel.hidden =
+      false;
+  }
+
+
+  setThumbnailReevaluationStatus(
+    "Loading catalogue videos…"
+  );
+
+
+  try {
+
+    /*
+     * We deliberately request the catalogue here rather than deriving
+     * the queue from Thumbnail Health.
+     *
+     * Thumbnail Health is primarily a reconciliation report and its
+     * Missing collection does not represent videos which already have
+     * thumbnails.
+     */
+
+    const {
+      data,
+      error
+    } =
+      await supabase
+        .from(
+          "zulu_videos"
+        )
+        .select(
+          "uid, film, url"
+        )
+        .not(
+          "url",
+          "is",
+          null
+        )
+        .order(
+          "uid",
+          {
+            ascending: true
+          }
+        );
+
+
+    if (
+      error
+    ) {
+
+      throw new Error(
+        `Could not load the video catalogue: ${
+          error.message ||
+          "Supabase request failed"
+        }`
+      );
+    }
+
+
+    thumbnailReevaluationQueue =
+      (
+        Array.isArray(
+          data
+        )
+          ? data
+          : []
+      )
+        .filter(
+          item =>
+            item &&
+            item.uid != null &&
+            item.url
+        );
+
+
+    if (
+      !thumbnailReevaluationQueue.length
+    ) {
+
+      throw new Error(
+        "No catalogue videos with video URLs were found."
+      );
+    }
+
+
+    thumbnailReevaluationIndex =
+      0;
+
+
+    thumbnailReevaluationRunning =
+      true;
+
+
+    if (
+      thumbnailReevaluateStart
+    ) {
+
+      thumbnailReevaluateStart.disabled =
+        true;
+    }
+
+
+    if (
+      thumbnailReevaluateStop
+    ) {
+
+      thumbnailReevaluateStop.disabled =
+        false;
+    }
+
+
+    setThumbnailReevaluationBusy(
+      false
+    );
+
+
+    await loadCurrentThumbnailReevaluationVideo();
+
+
+  } catch (
+    error
+  ) {
+
+    thumbnailReevaluationRunning =
+      false;
+
+
+    thumbnailReevaluationQueue =
+      [];
+
+
+    thumbnailReevaluationIndex =
+      -1;
+
+
+    setThumbnailReevaluationBusy(
+      false
+    );
+
+
+    if (
+      thumbnailReevaluateStart
+    ) {
+
+      thumbnailReevaluateStart.disabled =
+        false;
+    }
+
+
+    if (
+      thumbnailReevaluateStop
+    ) {
+
+      thumbnailReevaluateStop.disabled =
+        true;
+    }
+
+
+    setThumbnailReevaluationStatus(
+      error?.message ||
+        "Could not start thumbnail review.",
+      "error"
+    );
+  }
+}
+
+
+/**
+ * Generates candidates for the video at the current queue position.
+ */
+async function loadCurrentThumbnailReevaluationVideo() {
+
+  if (
+    !thumbnailReevaluationRunning
+  ) {
+
+    return;
+  }
+
+
+  const item =
+    thumbnailReevaluationQueue[
+      thumbnailReevaluationIndex
+    ];
+
+
+  if (
+    !item
+  ) {
+
+    finishThumbnailReevaluation();
+
+    return;
+  }
+
+
+  setThumbnailReevaluationBusy(
+    true
+  );
+
+
+  resetThumbnailState();
+
+
+  clearThumbnailReevaluationPreview();
+
+
+  const queueNumber =
+    thumbnailReevaluationIndex +
+    1;
+
+
+  const queueTotal =
+    thumbnailReevaluationQueue.length;
+
+
+  if (
+    thumbnailReevaluateFilm
+  ) {
+
+    thumbnailReevaluateFilm.textContent =
+      `${item.film || `UID ${item.uid}`} · UID ${item.uid}`;
+  }
+
+
+  setThumbnailReevaluationStatus(
+    `Analysing video ${queueNumber} of ${queueTotal}…`
+  );
+
+
+  /*
+   * Existing thumbnail.
+   *
+   * The cache-busting parameter is important because an earlier review
+   * may have replaced images/{uid}.png while the browser or Cloudflare
+   * still has the previous image cached.
+   */
+  if (
+    thumbnailReevaluateCurrent
+  ) {
+
+    thumbnailReevaluateCurrent.src =
+      `https://media.zulu-orchid-falcon.co.uk/images/${
+        encodeURIComponent(
+          item.uid
+        )
+      }.png?review=${
+        Date.now()
+      }`;
+  }
+
+
+  try {
+
+    /*
+     * Reuse the same signing route already used by Missing Thumbnail
+     * repair. This means the browser does not need direct B2 access.
+     */
+
+const signedVideoUrl =
+  await getAdminSignedVideoUrl(
+    item.url
+  );
+
+    await generateThumbnailCandidatesFromUrl(
+      signedVideoUrl,
+      {
+        onStatus:
+          message => {
+
+            if (
+              thumbnailReevaluationRunning
+            ) {
+
+              setThumbnailReevaluationStatus(
+                `${queueNumber} of ${queueTotal} · ${message}`
+              );
+            }
+          }
+      }
+    );
+
+
+    if (
+      !thumbnailReevaluationRunning
+    ) {
+
+      return;
+    }
+
+
+    refreshThumbnailReevaluationCandidate();
+
+
+    setThumbnailReevaluationStatus(
+      `Reviewing ${queueNumber} of ${queueTotal}.`
+    );
+
+
+  } catch (
+    error
+  ) {
+
+    setThumbnailReevaluationStatus(
+      `Could not analyse ${
+        item.film ||
+        `UID ${item.uid}`
+      }: ${
+        error?.message ||
+        "Unknown error"
+      }`,
+      "error"
+    );
+
+
+  } finally {
+
+    setThumbnailReevaluationBusy(
+      false
+    );
+  }
+}
+
+
+/**
+ * Refreshes the Suggested side from thumbnails.js's currently selected
+ * candidate.
+ */
+function refreshThumbnailReevaluationCandidate() {
+
+  const candidate =
+    getSelectedThumbnailCandidate();
+
+
+  const blob =
+    getSelectedThumbnailBlob();
+
+
+  if (
+    !candidate ||
+    !blob
+  ) {
+
+    throw new Error(
+      "No thumbnail candidate is currently selected."
+    );
+  }
+
+
+  if (
+    thumbnailReevaluationPreviewUrl
+  ) {
+
+    URL.revokeObjectURL(
+      thumbnailReevaluationPreviewUrl
+    );
+  }
+
+
+  thumbnailReevaluationPreviewUrl =
+    URL.createObjectURL(
+      blob
+    );
+
+
+  if (
+    thumbnailReevaluateSuggested
+  ) {
+
+    thumbnailReevaluateSuggested.src =
+      thumbnailReevaluationPreviewUrl;
+  }
+
+
+const candidateNumber =
+  Number(
+    candidate.number ??
+    1
+  );
+
+
+const candidateCount =
+  Number(
+    candidate.count ??
+    15
+  );
+
+  const faceCount =
+    Number(
+      candidate.faceCount ??
+      0
+    );
+
+
+  const time =
+    Number(
+      candidate.time ??
+      0
+    );
+
+
+  if (
+    thumbnailReevaluateDetail
+  ) {
+
+    thumbnailReevaluateDetail.textContent =
+      `Candidate ${
+        candidateNumber
+      } of ${
+        candidateCount
+      } · ${
+        faceCount
+      } ${
+        faceCount === 1
+          ? "face"
+          : "faces"
+      } · ${
+        Math.round(
+          time
+        )
+      }s`;
+  }
+}
+/**
+ * Keeps the existing thumbnail and advances to the next video.
+ *
+ * No upload or database change is made.
+ */
+async function keepCurrentThumbnail() {
+
+  if (
+    !thumbnailReevaluationRunning ||
+    thumbnailReevaluationBusy
+  ) {
+
+    return;
+  }
+
+
+  await advanceThumbnailReevaluation();
+}
+
+
+/**
+ * Replaces images/{uid}.png with the currently selected candidate,
+ * then advances to the next video.
+ */
+async function useReevaluatedThumbnail() {
+
+  if (
+    !thumbnailReevaluationRunning ||
+    thumbnailReevaluationBusy
+  ) {
+
+    return;
+  }
+
+
+  const item =
+    thumbnailReevaluationQueue[
+      thumbnailReevaluationIndex
+    ];
+
+
+  if (
+    !item
+  ) {
+
+    return;
+  }
+
+
+  const blob =
+    getSelectedThumbnailBlob();
+
+
+  if (
+    !blob
+  ) {
+
+    setThumbnailReevaluationStatus(
+      "No thumbnail candidate is selected.",
+      "error"
+    );
+
+    return;
+  }
+
+
+  setThumbnailReevaluationBusy(
+    true
+  );
+
+
+  setThumbnailReevaluationStatus(
+    `Uploading replacement thumbnail for ${
+      item.film ||
+      `UID ${item.uid}`
+    }…`
+  );
+
+
+  try {
+
+    /*
+     * Reuse the same upload path used by Missing Thumbnail repair.
+     *
+     * This replaces:
+     *
+     *     images/{uid}.png
+     *
+     * It does not modify the video or catalogue row.
+     */
+await uploadThumbnailToBackblaze(
+  item.uid,
+  blob,
+  {
+    onStatus:
+      message => {
+
+        setThumbnailReevaluationStatus(
+          message
+        );
+      }
+  }
+);
+
+
+    /*
+     * Briefly refresh the Current image so the reviewer can see that
+     * the replacement succeeded before we move on.
+     */
+    if (
+      thumbnailReevaluateCurrent
+    ) {
+
+      thumbnailReevaluateCurrent.src =
+        `https://media.zulu-orchid-falcon.co.uk/images/${
+          encodeURIComponent(
+            item.uid
+          )
+        }.png?review=${
+          Date.now()
+        }`;
+    }
+
+
+    setThumbnailReevaluationBusy(
+      false
+    );
+
+
+    await advanceThumbnailReevaluation();
+
+
+  } catch (
+    error
+  ) {
+
+    setThumbnailReevaluationBusy(
+      false
+    );
+
+
+    setThumbnailReevaluationStatus(
+      `Could not replace thumbnail: ${
+        error?.message ||
+        "Unknown error"
+      }`,
+      "error"
+    );
+  }
+}
+
+
+/**
+ * Moves to the next video in the review queue.
+ */
+async function advanceThumbnailReevaluation() {
+
+  if (
+    !thumbnailReevaluationRunning
+  ) {
+
+    return;
+  }
+
+
+  clearThumbnailReevaluationPreview();
+
+
+  resetThumbnailState();
+
+
+  thumbnailReevaluationIndex +=
+    1;
+
+
+  if (
+    thumbnailReevaluationIndex >=
+    thumbnailReevaluationQueue.length
+  ) {
+
+    finishThumbnailReevaluation();
+
+    return;
+  }
+
+
+  await loadCurrentThumbnailReevaluationVideo();
+}
+
+
+/**
+ * Stops the current review session without changing the currently
+ * displayed thumbnail.
+ */
+function stopThumbnailReevaluation() {
+
+  if (
+    !thumbnailReevaluationRunning
+  ) {
+
+    return;
+  }
+
+
+  thumbnailReevaluationRunning =
+    false;
+
+
+  thumbnailReevaluationBusy =
+    false;
+
+
+  resetThumbnailState();
+
+
+  clearThumbnailReevaluationPreview();
+
+
+  setThumbnailReevaluationControlsDisabled(
+    true
+  );
+
+
+  if (
+    thumbnailReevaluateStart
+  ) {
+
+    thumbnailReevaluateStart.disabled =
+      false;
+  }
+
+
+  if (
+    thumbnailReevaluateStop
+  ) {
+
+    thumbnailReevaluateStop.disabled =
+      true;
+  }
+
+
+  setThumbnailReevaluationStatus(
+    "Thumbnail review stopped."
+  );
+}
+
+
+/**
+ * Finishes naturally after the final catalogue video.
+ */
+function finishThumbnailReevaluation() {
+
+  const reviewedCount =
+    thumbnailReevaluationQueue.length;
+
+
+  thumbnailReevaluationRunning =
+    false;
+
+
+  thumbnailReevaluationBusy =
+    false;
+
+
+  resetThumbnailState();
+
+
+  clearThumbnailReevaluationPreview();
+
+
+  setThumbnailReevaluationControlsDisabled(
+    true
+  );
+
+
+  if (
+    thumbnailReevaluateStart
+  ) {
+
+    thumbnailReevaluateStart.disabled =
+      false;
+  }
+
+
+  if (
+    thumbnailReevaluateStop
+  ) {
+
+    thumbnailReevaluateStop.disabled =
+      true;
+  }
+
+
+  if (
+    thumbnailReevaluateFilm
+  ) {
+
+    thumbnailReevaluateFilm.textContent =
+      "Review complete";
+  }
+
+
+  if (
+    thumbnailReevaluateDetail
+  ) {
+
+    thumbnailReevaluateDetail.textContent =
+      "";
+  }
+
+
+  setThumbnailReevaluationStatus(
+    `Finished reviewing ${reviewedCount} ${
+      reviewedCount === 1
+        ? "video"
+        : "videos"
+    }.`
+  );
+}
+
+
+/**
+ * Updates the controls while a video is being analysed or uploaded.
+ */
+function setThumbnailReevaluationBusy(
+  busy
+) {
+
+  thumbnailReevaluationBusy =
+    Boolean(
+      busy
+    );
+
+
+  const disableReviewControls =
+    thumbnailReevaluationBusy ||
+    !thumbnailReevaluationRunning;
+
+
+  if (
+    thumbnailReevaluatePrevious
+  ) {
+
+    thumbnailReevaluatePrevious.disabled =
+      disableReviewControls;
+  }
+
+
+  if (
+    thumbnailReevaluateNext
+  ) {
+
+    thumbnailReevaluateNext.disabled =
+      disableReviewControls;
+  }
+
+
+  if (
+    thumbnailReevaluateKeep
+  ) {
+
+    thumbnailReevaluateKeep.disabled =
+      disableReviewControls;
+  }
+
+
+  if (
+    thumbnailReevaluateUse
+  ) {
+
+    thumbnailReevaluateUse.disabled =
+      disableReviewControls;
+  }
+
+
+  if (
+    thumbnailReevaluateStop
+  ) {
+
+    /*
+     * Stop remains available while candidate generation is running.
+     */
+    thumbnailReevaluateStop.disabled =
+      !thumbnailReevaluationRunning;
+  }
+
+
+  if (
+    thumbnailReevaluateStart
+  ) {
+
+    thumbnailReevaluateStart.disabled =
+      thumbnailReevaluationRunning ||
+      thumbnailReevaluationBusy;
+  }
+}
+
+
+/**
+ * Explicitly enables/disables the candidate decision controls.
+ */
+function setThumbnailReevaluationControlsDisabled(
+  disabled
+) {
+
+  if (
+    thumbnailReevaluatePrevious
+  ) {
+
+    thumbnailReevaluatePrevious.disabled =
+      disabled;
+  }
+
+
+  if (
+    thumbnailReevaluateNext
+  ) {
+
+    thumbnailReevaluateNext.disabled =
+      disabled;
+  }
+
+
+  if (
+    thumbnailReevaluateKeep
+  ) {
+
+    thumbnailReevaluateKeep.disabled =
+      disabled;
+  }
+
+
+  if (
+    thumbnailReevaluateUse
+  ) {
+
+    thumbnailReevaluateUse.disabled =
+      disabled;
+  }
+}
+
+
+/**
+ * Displays a review status message.
+ */
+function setThumbnailReevaluationStatus(
+  message,
+  state =
+    "normal"
+) {
+
+  if (
+    !thumbnailReevaluateStatus
+  ) {
+
+    return;
+  }
+
+
+  thumbnailReevaluateStatus.textContent =
+    message || "";
+
+
+  thumbnailReevaluateStatus.classList.toggle(
+    "is-error",
+    state === "error"
+  );
+}
+
+
+/**
+ * Releases the temporary object URL used for the Suggested image.
+ */
+function clearThumbnailReevaluationPreview() {
+
+  if (
+    thumbnailReevaluationPreviewUrl
+  ) {
+
+    URL.revokeObjectURL(
+      thumbnailReevaluationPreviewUrl
+    );
+
+
+    thumbnailReevaluationPreviewUrl =
+      null;
+  }
+
+
+  if (
+    thumbnailReevaluateSuggested
+  ) {
+
+    thumbnailReevaluateSuggested.removeAttribute(
+      "src"
+    );
+  }
+}
+
+
+/*
+ * Start with the review controls inactive.
+ *
+ * Start Review itself remains available.
+ */
+setThumbnailReevaluationControlsDisabled(
+  true
+);
+
+
+if (
+  thumbnailReevaluateStop
+) {
+
+  thumbnailReevaluateStop.disabled =
+    true;
+}
 
 /* =====================================================================
    END OF ADMIN THUMBNAIL HEALTH
