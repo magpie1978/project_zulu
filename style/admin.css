@@ -4111,3 +4111,213 @@ a {
   }
 
 }
+
+
+/* =====================================================================
+   VIDEO STORAGE HEALTH — ORPHAN DELETE ACTION
+   ===================================================================== */
+
+/*
+ * Action area beneath an orphaned Backblaze video.
+ */
+.admin-video-health-result-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+
+  margin-top: 16px;
+  padding-top: 14px;
+
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+
+/*
+ * Protected destructive action.
+ *
+ * Kept deliberately less prominent than the main red site accent until
+ * hovered, so the diagnostic information remains the focus of the row.
+ */
+.admin-video-orphan-delete-button {
+  appearance: none;
+
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+
+  min-height: 36px;
+
+  padding: 8px 14px;
+
+  background:
+    rgba(229, 9, 20, 0.08);
+
+  border:
+    1px solid rgba(229, 9, 20, 0.32);
+
+  border-radius: 7px;
+
+  color: #e96d73;
+
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+
+  cursor: pointer;
+
+  transition:
+    background-color 0.16s ease,
+    border-color 0.16s ease,
+    color 0.16s ease,
+    transform 0.16s ease,
+    opacity 0.16s ease;
+}
+
+
+.admin-video-orphan-delete-button:hover:not(:disabled) {
+  background:
+    rgba(229, 9, 20, 0.16);
+
+  border-color:
+    rgba(229, 9, 20, 0.58);
+
+  color: #ff8b90;
+
+  transform:
+    translateY(-1px);
+}
+
+
+.admin-video-orphan-delete-button:active:not(:disabled) {
+  transform:
+    translateY(0);
+}
+
+
+/*
+ * Keyboard accessibility.
+ */
+.admin-video-orphan-delete-button:focus-visible {
+  outline:
+    2px solid rgba(229, 9, 20, 0.55);
+
+  outline-offset:
+    2px;
+}
+
+
+/*
+ * Lucide trash / loader icon.
+ */
+.admin-video-orphan-delete-button svg {
+  flex: 0 0 auto;
+
+  width: 15px;
+  height: 15px;
+
+  stroke-width: 2;
+}
+
+
+/*
+ * While the Edge Function is rechecking the catalogue and deleting the
+ * exact Backblaze version.
+ */
+.admin-video-orphan-delete-button:disabled {
+  opacity: 0.55;
+
+  cursor: wait;
+
+  transform: none;
+}
+
+
+/*
+ * Spin the loader-circle icon while deletion is running.
+ */
+.admin-video-orphan-delete-button:disabled svg {
+  animation:
+    admin-video-orphan-spin 0.8s linear infinite;
+}
+
+
+@keyframes admin-video-orphan-spin {
+
+  to {
+    transform:
+      rotate(360deg);
+  }
+}
+
+
+/* ---------------------------------------------------------------------
+   DELETE STATUS
+   --------------------------------------------------------------------- */
+
+.admin-video-orphan-delete-status {
+  margin-top: 10px;
+
+  padding: 9px 11px;
+
+  border-radius: 6px;
+
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.45;
+}
+
+
+.admin-video-orphan-delete-status.is-working {
+  background:
+    rgba(255, 255, 255, 0.035);
+
+  border:
+    1px solid rgba(255, 255, 255, 0.08);
+
+  color: #aaa;
+}
+
+
+.admin-video-orphan-delete-status.is-success {
+  background:
+    rgba(76, 175, 80, 0.08);
+
+  border:
+    1px solid rgba(102, 187, 106, 0.25);
+
+  color: #81c784;
+}
+
+
+.admin-video-orphan-delete-status.is-error {
+  background:
+    rgba(229, 9, 20, 0.08);
+
+  border:
+    1px solid rgba(229, 9, 20, 0.28);
+
+  color: #ef8a8f;
+}
+
+
+/* ---------------------------------------------------------------------
+   MOBILE
+   --------------------------------------------------------------------- */
+
+@media (max-width: 700px) {
+
+  .admin-video-health-result-actions {
+    margin-top: 14px;
+    padding-top: 12px;
+  }
+
+
+  .admin-video-orphan-delete-button {
+    min-height: 38px;
+
+    padding:
+      9px 13px;
+  }
+}
