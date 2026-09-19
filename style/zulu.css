@@ -712,7 +712,7 @@ body.modal-open {
   position: relative;
   z-index: 1;
 
-  width: min(620px, calc(100vw - 32px));
+  width: min(1180px, calc(100vw - 40px));
   max-height: calc(100vh - 40px);
 
   padding: 28px;
@@ -728,6 +728,112 @@ body.modal-open {
 .add-video-dialog h2 {
   margin: 0 0 24px;
 }
+
+/* =========================================================
+   ADD VIDEO — TWO COLUMN LAYOUT
+========================================================= */
+
+.add-video-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(360px, 0.9fr);
+  gap: 28px;
+  align-items: start;
+}
+
+
+.add-video-left,
+.add-video-right {
+  min-width: 0;
+}
+
+
+/* Right-hand ingestion column */
+
+.add-video-right {
+  position: sticky;
+  top: 0;
+}
+
+
+/*
+ * The ingestion panel used to sit inline beneath the form.
+ * It now fills the right-hand column.
+ */
+
+.add-video-right .add-video-ingestion {
+  margin: 0;
+}
+
+
+/* Thumbnail can now use the full width of the left column */
+
+#add-video-thumbnail-preview {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  height: auto;
+  object-fit: contain;
+}
+
+
+/* Progress bar belongs beneath the ingestion panel */
+
+.add-video-upload-progress-wrap {
+  margin-top: 16px;
+}
+
+#add-video-upload-progress {
+  display: block;
+  width: 100%;
+}
+
+
+/* Keep the percentage / byte count aligned to the right */
+
+#add-video-upload-progress-text {
+  margin-top: 6px;
+
+  color: #888;
+
+  font-size: 12px;
+  text-align: right;
+}
+
+
+/* Actions remain across the bottom of the complete modal */
+
+.add-video-actions {
+  margin-top: 24px;
+}
+
+
+/* =========================================================
+   RESPONSIVE FALLBACK
+========================================================= */
+
+@media (max-width: 900px) {
+
+  .add-video-dialog {
+    width: min(620px, calc(100vw - 24px));
+    max-height: calc(100vh - 24px);
+    padding: 20px;
+  }
+
+  .add-video-layout {
+    grid-template-columns: 1fr;
+    gap: 20px;
+  }
+
+  .add-video-right {
+    position: static;
+  }
+
+  .add-video-right .add-video-ingestion {
+    margin-top: 4px;
+  }
+
+}
+
 
 .add-video-close {
   position: absolute;
