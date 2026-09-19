@@ -2306,11 +2306,9 @@ function attachVideoOrphanDeleteEvents() {
 
 
 /**
- * Deletes one exact orphaned Backblaze MP4.
+ * Starts inline confirmation for deletion of one orphaned Backblaze MP4.
  *
- * The browser request is not trusted by the backend. zulu-video-health
- * independently rechecks catalogue references and the exact B2 file ID
- * before performing deletion.
+ * Nothing is deleted at this stage.
  */
 async function deleteOrphanedVideo(
   button
@@ -2340,41 +2338,220 @@ async function deleteOrphanedVideo(
 
   if (
     !fileName ||
-    !fileId
+    !fileId ||
+    !row
   ) {
 
     return;
   }
 
 
-  const confirmed =
-    window.confirm(
-      [
-        "Delete this orphaned MP4 from Backblaze?",
-        "",
-        fileName,
-        "",
-        "The catalogue will not be changed.",
-        "This permanently deletes the exact B2 file version."
-      ].join(
-        "\n"
-      )
-    );
-
-
+  /*
+   * If this row already has a confirmation panel open,
+   * do not create another one.
+   */
   if (
-    !confirmed
+    row.querySelector(
+      ".admin-video-orphan-confirm"
+    )
   ) {
 
     return;
   }
 
 
-  button.disabled =
+  /*
+   * Hide the original Delete Orphan button while the
+   * confirmation panel is displayed.
+   */
+  button.hidden =
     true;
 
 
-  button.innerHTML = `
+  if (
+    status
+  ) {
+
+    status.hidden =
+      true;
+  }
+
+
+  const confirmation =
+    document.createElement(
+      "div"
+    );
+
+
+  confirmation.className =
+    "admin-video-orphan-confirm";
+
+
+  confirmation.innerHTML = `
+
+    <div class="admin-video-orphan-confirm-heading">
+
+      <i data-lucide="triangle-alert"></i>
+
+      <span>
+        Permanently delete this MP4?
+      </span>
+
+    </div>
+
+
+    <div class="admin-video-orphan-confirm-text">
+
+      This Backblaze object is not referenced by the catalogue.
+
+      The server will check that again immediately before deletion.
+
+    </div>
+
+
+    <div class="admin-video-orphan-confirm-file">
+
+      ${escapeHtml(
+        fileName
+      )}
+
+    </div>
+
+
+    <div class="admin-video-orphan-confirm-warning">
+
+      This permanently deletes the exact B2 file version and cannot be undone.
+
+    </div>
+
+
+    <div class="admin-video-orphan-confirm-actions">
+
+      <button
+        type="button"
+        class="admin-video-orphan-cancel-button"
+      >
+
+        Cancel
+
+      </button>
+
+
+      <button
+        type="button"
+        class="admin-video-orphan-confirm-button"
+      >
+
+        <i data-lucide="trash-2"></i>
+
+        <span>
+          Permanently Delete MP4
+        </span>
+
+      </button>
+
+    </div>
+  `;
+
+
+  const actions =
+    row.querySelector(
+      ".admin-video-health-result-actions"
+    );
+
+
+  actions?.insertAdjacentElement(
+    "afterend",
+    confirmation
+  );
+
+
+  const cancelButton =
+    confirmation.querySelector(
+      ".admin-video-orphan-cancel-button"
+    );
+
+
+  const confirmButton =
+    confirmation.querySelector(
+      ".admin-video-orphan-confirm-button"
+    );
+
+
+  cancelButton?.addEventListener(
+    "click",
+    () => {
+
+      confirmation.remove();
+
+
+      button.hidden =
+        false;
+
+
+      window.lucide?.createIcons();
+    }
+  );
+
+
+  confirmButton?.addEventListener(
+    "click",
+    async () => {
+
+      await performOrphanedVideoDeletion(
+        confirmButton,
+        fileName,
+        fileId,
+        row,
+        status
+      );
+    }
+  );
+
+
+  window.lucide?.createIcons();
+}
+
+
+/**
+ * Performs the actual protected orphan deletion.
+ *
+ * zulu-video-health independently:
+ *
+ *   • rechecks the current catalogue
+ *   • confirms the MP4 is still unreferenced
+ *   • looks up the exact Backblaze object
+ *   • confirms the exact B2 file ID
+ *   • deletes only that exact file version
+ */
+async function performOrphanedVideoDeletion(
+  confirmButton,
+  fileName,
+  fileId,
+  row,
+  status
+) {
+
+  const cancelButton =
+    row.querySelector(
+      ".admin-video-orphan-cancel-button"
+    );
+
+
+  confirmButton.disabled =
+    true;
+
+
+  if (
+    cancelButton
+  ) {
+
+    cancelButton.disabled =
+      true;
+  }
+
+
+  confirmButton.innerHTML = `
     <i data-lucide="loader-circle"></i>
 
     <span>
@@ -2396,7 +2573,7 @@ async function deleteOrphanedVideo(
 
 
     status.textContent =
-      "Rechecking catalogue and Backblaze object…";
+      "Rechecking catalogue and exact Backblaze file version…";
   }
 
 
@@ -2459,14 +2636,12 @@ async function deleteOrphanedVideo(
 
 
       status.textContent =
-        "Orphaned MP4 deleted. Refreshing storage health…";
+        "MP4 deleted. Refreshing Video Storage Health…";
     }
 
 
     /*
-     * Reload only Video Storage Health.
-     *
-     * The catalogue and Thumbnail Health are deliberately untouched.
+     * Obtain a completely fresh reconciliation from the backend.
      */
     const refreshed =
       await loadVideoHealth();
@@ -2478,8 +2653,8 @@ async function deleteOrphanedVideo(
 
 
     /*
-     * renderVideoHealth() closes the old result panel because its snapshot
-     * is now stale. Reopen Orphaned Videos using the fresh snapshot.
+     * renderVideoHealth() deliberately closes stale diagnostic
+     * results. Reopen Orphaned Videos from the new snapshot.
      */
     openVideoHealthResult(
       "orphaned"
@@ -2496,15 +2671,24 @@ async function deleteOrphanedVideo(
     );
 
 
-    button.disabled =
+    confirmButton.disabled =
       false;
 
 
-    button.innerHTML = `
+    if (
+      cancelButton
+    ) {
+
+      cancelButton.disabled =
+        false;
+    }
+
+
+    confirmButton.innerHTML = `
       <i data-lucide="trash-2"></i>
 
       <span>
-        Delete Orphan
+        Try Delete Again
       </span>
     `;
 
@@ -2530,6 +2714,7 @@ async function deleteOrphanedVideo(
     window.lucide?.createIcons();
   }
 }
+
 
 /* =====================================================================
    13. THUMBNAIL HEALTH
