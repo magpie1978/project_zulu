@@ -123,40 +123,57 @@
       <script type="module" src="js/zulu-main.js"></script>
 
 
-        <!-- ======================================================
-             ADD VIDEO MODAL
-        ======================================================= -->
-
-        <div id="add-video-modal" class="add-video-modal" aria-hidden="true">
-          <div class="add-video-backdrop"></div>
-        
-          <div class="add-video-dialog" role="dialog" aria-modal="true">
-            <button
-              id="add-video-close"
-              class="add-video-close"
-              type="button"
-              aria-label="Close"
-            >
-              ×
-            </button>
-        
-            <h2>Add Video</h2>
-        
+<!-- ======================================================
+     ADD VIDEO MODAL
+======================================================= -->
+    
+    <div id="add-video-modal" class="add-video-modal" aria-hidden="true">
+      <div class="add-video-backdrop"></div>
+    
+      <div class="add-video-dialog" role="dialog" aria-modal="true">
+    
+        <button
+          id="add-video-close"
+          class="add-video-close"
+          type="button"
+          aria-label="Close"
+        >
+          ×
+        </button>
+    
+        <h2>Add Video</h2>
+    
+        <!-- =====================================================
+             TWO-COLUMN MODAL BODY
+        ====================================================== -->
+    
+        <div class="add-video-layout">
+    
+          <!-- ===================================================
+               LEFT — VIDEO DETAILS
+          ==================================================== -->
+    
+          <div class="add-video-left">
+    
             <div class="add-video-field">
               <label for="add-video-file">Video file</label>
-        
+    
               <input
                 id="add-video-file"
                 type="file"
                 accept="video/mp4,.mp4"
               >
-        
-              <div id="add-video-file-info" class="add-video-file-info"></div>
+    
+              <div
+                id="add-video-file-info"
+                class="add-video-file-info"
+              ></div>
             </div>
-        
+    
+    
             <div class="add-video-field">
               <label for="add-video-title">Film title</label>
-        
+    
               <input
                 id="add-video-title"
                 type="text"
@@ -164,12 +181,13 @@
                 placeholder="Film title"
               >
             </div>
-        
+    
+    
             <div class="add-video-field">
               <label>Actors</label>
-        
+    
               <div id="add-video-actors"></div>
-        
+    
               <button
                 id="add-video-add-actor"
                 class="add-video-secondary-btn"
@@ -178,26 +196,28 @@
                 + Add actor
               </button>
             </div>
-
+    
+    
             <div class="add-video-field">
               <label>Suggested thumbnail</label>
-            
+    
               <div id="add-video-thumbnail-panel">
+    
                 <img
                   id="add-video-thumbnail-preview"
                   alt="Suggested thumbnail"
                   style="
                     display:none;
                     width:100%;
-                    max-width:420px;
+                    max-width:100%;
                     border-radius:10px;
                   "
                 >
-            
+    
                 <div id="add-video-thumbnail-status">
                   Select a video to generate suggestions.
                 </div>
-            
+    
                 <div
                   id="add-video-thumbnail-actions"
                   style="display:none; margin-top:10px;"
@@ -209,7 +229,7 @@
                   >
                     Previous
                   </button>
-            
+    
                   <button
                     id="add-video-thumbnail-next"
                     type="button"
@@ -218,13 +238,14 @@
                     Next suggestion
                   </button>
                 </div>
+    
               </div>
             </div>
-
-              
+    
+    
             <div class="add-video-field">
               <label for="add-video-tags">Tags</label>
-        
+    
               <input
                 id="add-video-tags"
                 type="text"
@@ -232,51 +253,58 @@
                 placeholder="e.g. threesome, outdoor"
               >
             </div>
-        
-            <div id="add-video-status" class="add-video-status"></div>
-
-
-
-            <!-- =====================================================
-                 CURRENT INGESTION
-            ====================================================== -->
-            
+    
+    
+            <div
+              id="add-video-status"
+              class="add-video-status"
+            ></div>
+    
+          </div>
+    
+    
+          <!-- ===================================================
+               RIGHT — INGESTION STATUS
+          ==================================================== -->
+    
+          <div class="add-video-right">
+    
             <div
               id="add-video-ingestion"
               class="add-video-ingestion"
               hidden
             >
-            
+    
               <div class="add-video-ingestion-header">
-            
+    
                 <div>
                   <div class="add-video-ingestion-label">
                     CURRENT INGESTION
                   </div>
-            
+    
                   <div
                     id="add-video-ingestion-name"
                     class="add-video-ingestion-name"
                   ></div>
-            
+    
                   <div
                     id="add-video-ingestion-size"
                     class="add-video-ingestion-size"
                   ></div>
                 </div>
-            
+    
                 <div
                   id="add-video-ingestion-percent"
                   class="add-video-ingestion-percent"
                 >
                   0%
                 </div>
-            
+    
               </div>
-            
-            
+    
+    
               <div class="add-video-ingestion-stages">
-            
+    
                 <div
                   class="add-video-ingestion-stage"
                   data-stage="analysis"
@@ -284,7 +312,7 @@
                   <span class="add-video-stage-icon">○</span>
                   <span>Video analysed</span>
                 </div>
-            
+    
                 <div
                   class="add-video-ingestion-stage"
                   data-stage="duplicate"
@@ -292,7 +320,7 @@
                   <span class="add-video-stage-icon">○</span>
                   <span>Duplicate check</span>
                 </div>
-            
+    
                 <div
                   class="add-video-ingestion-stage"
                   data-stage="thumbnail-generation"
@@ -300,7 +328,7 @@
                   <span class="add-video-stage-icon">○</span>
                   <span>Thumbnail generated</span>
                 </div>
-            
+    
                 <div
                   class="add-video-ingestion-stage"
                   data-stage="video-upload"
@@ -308,7 +336,7 @@
                   <span class="add-video-stage-icon">○</span>
                   <span>Video uploaded</span>
                 </div>
-            
+    
                 <div
                   class="add-video-ingestion-stage"
                   data-stage="catalogue"
@@ -316,7 +344,7 @@
                   <span class="add-video-stage-icon">○</span>
                   <span>Catalogue entry created</span>
                 </div>
-            
+    
                 <div
                   class="add-video-ingestion-stage"
                   data-stage="thumbnail-upload"
@@ -324,7 +352,7 @@
                   <span class="add-video-stage-icon">○</span>
                   <span>Thumbnail published</span>
                 </div>
-            
+    
                 <div
                   class="add-video-ingestion-stage"
                   data-stage="complete"
@@ -332,52 +360,67 @@
                   <span class="add-video-stage-icon">○</span>
                   <span>Complete</span>
                 </div>
-            
+    
               </div>
-            
-            
+    
+    
               <div
                 id="add-video-ingestion-result"
                 class="add-video-ingestion-result"
                 hidden
               ></div>
-            
+    
             </div>
-              
-            <div id="add-video-upload-progress-wrap" style="display:none;">
+    
+    
+            <div
+              id="add-video-upload-progress-wrap"
+              class="add-video-upload-progress-wrap"
+              style="display:none;"
+            >
               <progress
                 id="add-video-upload-progress"
                 value="0"
                 max="100"
-                style="width:100%;">
-              </progress>
-            
+              ></progress>
+    
               <div id="add-video-upload-progress-text">
                 0%
               </div>
             </div>
-
-              
-            <div class="add-video-actions">
-              <button
-                id="add-video-cancel"
-                class="add-video-secondary-btn"
-                type="button"
-              >
-                Cancel
-              </button>
-        
-              <button
-                id="add-video-submit"
-                class="add-video-primary-btn"
-                type="button"
-              >
-                Upload Video
-              </button>
-            </div>
+    
           </div>
+    
         </div>
-
+    
+    
+        <!-- =====================================================
+             MODAL ACTIONS
+        ====================================================== -->
+    
+        <div class="add-video-actions">
+    
+          <button
+            id="add-video-cancel"
+            class="add-video-secondary-btn"
+            type="button"
+          >
+            Cancel
+          </button>
+    
+          <button
+            id="add-video-submit"
+            class="add-video-primary-btn"
+            type="button"
+          >
+            Upload Video
+          </button>
+    
+        </div>
+    
+      </div>
+    </div>
+        
         <div
           id="deleteVideoModal"
           class="delete-video-modal"
