@@ -1957,6 +1957,7 @@ function openVideoHealthResult(
       false;
   }
 
+  attachVideoOrphanDeleteEvents();
 
   window.lucide?.createIcons();
 }
@@ -2188,6 +2189,41 @@ function renderVideoHealthRow(
     );
   }
 
+  const orphanDeleteAction =
+  key === "orphaned" &&
+  b2Filename &&
+  row.file_id
+    ? `
+        <div class="admin-video-health-result-actions">
+
+          <button
+            type="button"
+            class="admin-video-orphan-delete-button"
+            data-video-orphan-file="${escapeHtml(
+              b2Filename
+            )}"
+            data-video-orphan-file-id="${escapeHtml(
+              row.file_id
+            )}"
+          >
+
+            <i data-lucide="trash-2"></i>
+
+            <span>
+              Delete Orphan
+            </span>
+
+          </button>
+
+        </div>
+
+
+        <div
+          class="admin-video-orphan-delete-status"
+          hidden
+        ></div>
+      `
+    : "";
 
   return `
     <div class="admin-video-health-result">
@@ -2224,10 +2260,276 @@ function renderVideoHealthRow(
           : ""
       }
 
+      ${orphanDeleteAction}
+
     </div>
   `;
 }
 
+/**
+ * Attaches protected deletion to orphaned MP4 rows.
+ */
+function attachVideoOrphanDeleteEvents() {
+
+  document
+    .querySelectorAll(
+      ".admin-video-orphan-delete-button"
+    )
+    .forEach(
+      button => {
+
+        if (
+          button.dataset.bound ===
+            "true"
+        ) {
+
+          return;
+        }
+
+
+        button.dataset.bound =
+          "true";
+
+
+        button.addEventListener(
+          "click",
+          async () => {
+
+            await deleteOrphanedVideo(
+              button
+            );
+          }
+        );
+      }
+    );
+}
+
+
+/**
+ * Deletes one exact orphaned Backblaze MP4.
+ *
+ * The browser request is not trusted by the backend. zulu-video-health
+ * independently rechecks catalogue references and the exact B2 file ID
+ * before performing deletion.
+ */
+async function deleteOrphanedVideo(
+  button
+) {
+
+  const fileName =
+    button.dataset.videoOrphanFile ||
+    "";
+
+
+  const fileId =
+    button.dataset.videoOrphanFileId ||
+    "";
+
+
+  const row =
+    button.closest(
+      ".admin-video-health-result"
+    );
+
+
+  const status =
+    row?.querySelector(
+      ".admin-video-orphan-delete-status"
+    );
+
+
+  if (
+    !fileName ||
+    !fileId
+  ) {
+
+    return;
+  }
+
+
+  const confirmed =
+    window.confirm(
+      [
+        "Delete this orphaned MP4 from Backblaze?",
+        "",
+        fileName,
+        "",
+        "The catalogue will not be changed.",
+        "This permanently deletes the exact B2 file version."
+      ].join(
+        "\n"
+      )
+    );
+
+
+  if (
+    !confirmed
+  ) {
+
+    return;
+  }
+
+
+  button.disabled =
+    true;
+
+
+  button.innerHTML = `
+    <i data-lucide="loader-circle"></i>
+
+    <span>
+      Deleting…
+    </span>
+  `;
+
+
+  if (
+    status
+  ) {
+
+    status.hidden =
+      false;
+
+
+    status.className =
+      "admin-video-orphan-delete-status is-working";
+
+
+    status.textContent =
+      "Rechecking catalogue and Backblaze object…";
+  }
+
+
+  window.lucide?.createIcons();
+
+
+  try {
+
+    const {
+      data,
+      error
+    } =
+      await supabase.functions.invoke(
+        "zulu-video-health",
+        {
+          body: {
+
+            action:
+              "delete_orphan",
+
+            file_name:
+              fileName,
+
+            file_id:
+              fileId
+          }
+        }
+      );
+
+
+    if (
+      error
+    ) {
+
+      throw new Error(
+        error.message ||
+        "Orphan deletion request failed."
+      );
+    }
+
+
+    if (
+      !data ||
+      data.success !== true
+    ) {
+
+      throw new Error(
+        data?.error ||
+        "The orphaned MP4 could not be deleted."
+      );
+    }
+
+
+    if (
+      status
+    ) {
+
+      status.className =
+        "admin-video-orphan-delete-status is-success";
+
+
+      status.textContent =
+        "Orphaned MP4 deleted. Refreshing storage health…";
+    }
+
+
+    /*
+     * Reload only Video Storage Health.
+     *
+     * The catalogue and Thumbnail Health are deliberately untouched.
+     */
+    const refreshed =
+      await loadVideoHealth();
+
+
+    renderVideoHealth(
+      refreshed
+    );
+
+
+    /*
+     * renderVideoHealth() closes the old result panel because its snapshot
+     * is now stale. Reopen Orphaned Videos using the fresh snapshot.
+     */
+    openVideoHealthResult(
+      "orphaned"
+    );
+
+
+  } catch (
+    error
+  ) {
+
+    console.error(
+      "ORPHANED VIDEO DELETE ERROR:",
+      error
+    );
+
+
+    button.disabled =
+      false;
+
+
+    button.innerHTML = `
+      <i data-lucide="trash-2"></i>
+
+      <span>
+        Delete Orphan
+      </span>
+    `;
+
+
+    if (
+      status
+    ) {
+
+      status.hidden =
+        false;
+
+
+      status.className =
+        "admin-video-orphan-delete-status is-error";
+
+
+      status.textContent =
+        error?.message ||
+        "Could not delete orphaned MP4.";
+    }
+
+
+    window.lucide?.createIcons();
+  }
+}
 
 /* =====================================================================
    13. THUMBNAIL HEALTH
