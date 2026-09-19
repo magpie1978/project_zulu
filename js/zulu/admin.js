@@ -1,7 +1,15 @@
-
 import {
   supabase
 } from "../supabaseClient.js";
+
+
+import {
+  initialiseVideoHealth,
+  loadVideoHealth,
+  renderVideoHealth,
+  setVideoHealthLoadingState,
+  renderVideoHealthError
+} from "./admin/admin-video-health.js";
 
 
 import {
@@ -284,106 +292,6 @@ const integrityResultsClose =
 
 
 /* ---------------------------------------------------------------------
-   VIDEO STORAGE HEALTH
---------------------------------------------------------------------- */
-
-const videoHealthStatus =
-  document.getElementById(
-    "admin-video-health-status"
-  );
-
-
-const videoHealthCoverage =
-  document.getElementById(
-    "admin-video-health-coverage"
-  );
-
-
-const videoHealthCoverageTitle =
-  document.getElementById(
-    "admin-video-health-coverage-title"
-  );
-
-
-const videoHealthCoverageDetail =
-  document.getElementById(
-    "admin-video-health-coverage-detail"
-  );
-
-
-const videoHealthCatalogue =
-  document.getElementById(
-    "admin-video-health-catalogue"
-  );
-
-
-const videoHealthB2 =
-  document.getElementById(
-    "admin-video-health-b2"
-  );
-
-
-const videoHealthMatched =
-  document.getElementById(
-    "admin-video-health-matched"
-  );
-
-
-const videoHealthMissing =
-  document.getElementById(
-    "admin-video-health-missing"
-  );
-
-
-const videoHealthOrphaned =
-  document.getElementById(
-    "admin-video-health-orphaned"
-  );
-
-
-const videoHealthCaseMismatch =
-  document.getElementById(
-    "admin-video-health-case-mismatch"
-  );
-
-
-const videoHealthUrlError =
-  document.getElementById(
-    "admin-video-health-url-error"
-  );
-
-
-const videoHealthInvalid =
-  document.getElementById(
-    "admin-video-health-invalid"
-  );
-
-
-const videoHealthResults =
-  document.getElementById(
-    "admin-video-health-results"
-  );
-
-
-const videoHealthResultsTitle =
-  document.getElementById(
-    "admin-video-health-results-title"
-  );
-
-
-const videoHealthResultsBody =
-  document.getElementById(
-    "admin-video-health-results-body"
-  );
-
-
-const videoHealthResultsClose =
-  document.getElementById(
-    "admin-video-health-results-close"
-  );
-
-
-/* ---------------------------------------------------------------------
    THUMBNAIL HEALTH
 --------------------------------------------------------------------- */
 
@@ -455,13 +363,6 @@ const thumbnailResultsClose =
  * Latest Catalogue Integrity snapshot.
  */
 let currentIntegrityData =
-  null;
-
-
-/**
- * Latest Video Storage Health snapshot.
- */
-let currentVideoHealthData =
   null;
 
 
@@ -542,28 +443,7 @@ async function initialiseAdmin() {
      VIDEO STORAGE HEALTH
   ------------------------------------------------------------------- */
 
-  document
-    .querySelectorAll(
-      ".admin-video-health-card-action"
-    )
-    .forEach(
-      card => {
-
-        card.addEventListener(
-          "click",
-          () =>
-            openVideoHealthResult(
-              card.dataset.videoHealthKey
-            )
-        );
-      }
-    );
-
-
-  videoHealthResultsClose?.addEventListener(
-    "click",
-    closeVideoHealthResults
-  );
+  initialiseVideoHealth();
 
 
   /* -------------------------------------------------------------------
@@ -965,81 +845,6 @@ async function loadAdminDashboard() {
 
 
 /* =====================================================================
-   07. VIDEO STORAGE HEALTH REQUEST
-===================================================================== */
-
-/**
- * Retrieves the catalogue ↔ Backblaze MP4 reconciliation from the
- * protected zulu-video-health Edge Function.
- */
-async function loadVideoHealth() {
-
-  const {
-    data,
-    error
-  } =
-    await supabase.functions.invoke(
-      "zulu-video-health",
-      {
-        body: {}
-      }
-    );
-
-
-  if (
-    error
-  ) {
-
-    throw new Error(
-      `Could not load Video Storage Health: ${
-        error.message ||
-        "Edge Function request failed"
-      }`
-    );
-  }
-
-
-  if (
-    !data
-  ) {
-
-    throw new Error(
-      "Video Storage Health returned no data."
-    );
-  }
-
-
-  if (
-    data.success !== true
-  ) {
-
-    throw new Error(
-      data.error ||
-      "The Video Storage Health request was unsuccessful."
-    );
-  }
-
-
-  if (
-    !data.summary ||
-    !data.missing ||
-    !data.orphaned ||
-    !data.case_mismatch ||
-    !data.url_filename_error ||
-    !data.invalid
-  ) {
-
-    throw new Error(
-      "Video Storage Health returned an invalid response."
-    );
-  }
-
-
-  return data;
-}
-
-
-/* =====================================================================
    08. THUMBNAIL HEALTH REQUEST
 ===================================================================== */
 
@@ -1114,6 +919,7 @@ async function loadThumbnailHealth() {
 
   return data;
 }
+
 
 /* =====================================================================
    09. LIBRARY SUMMARY
@@ -1204,1522 +1010,9 @@ function renderIngestionHealth(
 }
 
 
-/* =====================================================================
-   11. VIDEO STORAGE HEALTH
-===================================================================== */
-
-/**
- * Stores and renders the latest catalogue ↔ Backblaze MP4
- * reconciliation.
- */
-function renderVideoHealth(
-  data
-) {
-
-  currentVideoHealthData =
-    data;
-
-
-  const summary =
-    data.summary ||
-    {};
-
-
-  const catalogueCount =
-    Number(
-      summary.catalogue_videos ||
-      0
-    );
-
-
-  const b2Count =
-    Number(
-      summary.b2_videos ||
-      0
-    );
-
-
-  const matched =
-    Number(
-      summary.matched ||
-      0
-    );
-
-
-  const physicallyPresent =
-    Number(
-      summary.physically_present ??
-      matched
-    );
-
-
-  const missing =
-    Number(
-      summary.missing ||
-      0
-    );
-
-
-  const orphaned =
-    Number(
-      summary.orphaned ||
-      0
-    );
-
-
-  const caseMismatch =
-    Number(
-      summary.case_mismatch ||
-      0
-    );
-
-
-  const urlError =
-    Number(
-      summary.url_filename_error ||
-      0
-    );
-
-
-  const invalid =
-    Number(
-      summary.invalid ||
-      0
-    );
-
-
-  const coverage =
-    Number.isFinite(
-      Number(
-        summary.coverage_percent
-      )
-    )
-      ? Number(
-          summary.coverage_percent
-        )
-      : catalogueCount > 0
-        ? (
-            physicallyPresent /
-            catalogueCount
-          ) * 100
-        : 0;
-
-
-  /* -------------------------------------------------------------------
-     COUNTERS
-  ------------------------------------------------------------------- */
-
-  setNumber(
-    videoHealthCatalogue,
-    catalogueCount
-  );
-
-
-  setNumber(
-    videoHealthB2,
-    b2Count
-  );
-
-
-  setNumber(
-    videoHealthMatched,
-    matched
-  );
-
-
-  setNumber(
-    videoHealthMissing,
-    missing
-  );
-
-
-  setNumber(
-    videoHealthOrphaned,
-    orphaned
-  );
-
-
-  setNumber(
-    videoHealthCaseMismatch,
-    caseMismatch
-  );
-
-
-  setNumber(
-    videoHealthUrlError,
-    urlError
-  );
-
-
-  setNumber(
-    videoHealthInvalid,
-    invalid
-  );
-
-
-  /* -------------------------------------------------------------------
-     STATIC CARD STATES
-  ------------------------------------------------------------------- */
-
-  setVideoHealthStaticCardState(
-    videoHealthCatalogue,
-    "healthy"
-  );
-
-
-  setVideoHealthStaticCardState(
-    videoHealthB2,
-    "healthy"
-  );
-
-
-  setVideoHealthStaticCardState(
-    videoHealthMatched,
-    matched === catalogueCount
-      ? "healthy"
-      : "warning"
-  );
-
-
-  /* -------------------------------------------------------------------
-     DIAGNOSTIC CARD STATES
-  ------------------------------------------------------------------- */
-
-  setVideoHealthCardState(
-    "missing",
-    missing === 0
-      ? "healthy"
-      : "problem"
-  );
-
-
-  setVideoHealthCardState(
-    "orphaned",
-    orphaned === 0
-      ? "healthy"
-      : "warning"
-  );
-
-
-  setVideoHealthCardState(
-    "case_mismatch",
-    caseMismatch === 0
-      ? "healthy"
-      : "warning"
-  );
-
-
-  setVideoHealthCardState(
-    "url_filename_error",
-    urlError === 0
-      ? "healthy"
-      : "problem"
-  );
-
-
-  setVideoHealthCardState(
-    "invalid",
-    invalid === 0
-      ? "healthy"
-      : "warning"
-  );
-
-
-  /* -------------------------------------------------------------------
-     COVERAGE
-  ------------------------------------------------------------------- */
-
-  const completelyHealthy =
-    catalogueCount > 0 &&
-    physicallyPresent ===
-      catalogueCount &&
-    missing === 0 &&
-    orphaned === 0 &&
-    caseMismatch === 0 &&
-    urlError === 0 &&
-    invalid === 0;
-
-
-  if (
-    videoHealthCoverage
-  ) {
-
-    videoHealthCoverage.classList.remove(
-      "is-loading",
-      "is-error",
-      "is-healthy",
-      "is-warning",
-      "is-problem"
-    );
-
-
-    videoHealthCoverage.classList.add(
-      completelyHealthy
-        ? "is-healthy"
-        : missing > 0 ||
-          urlError > 0
-          ? "is-problem"
-          : "is-warning"
-    );
-  }
-
-
-  if (
-    videoHealthCoverageTitle
-  ) {
-
-    videoHealthCoverageTitle.textContent =
-      `${coverage.toFixed(
-        1
-      )}% storage coverage`;
-  }
-
-
-  if (
-    videoHealthCoverageDetail
-  ) {
-
-    videoHealthCoverageDetail.textContent =
-      `${physicallyPresent.toLocaleString()} of ${catalogueCount.toLocaleString()} catalogue videos are physically present in Backblaze.`;
-  }
-
-
-  /* -------------------------------------------------------------------
-     CHECKED TIME
-  ------------------------------------------------------------------- */
-
-  if (
-    videoHealthStatus
-  ) {
-
-    const generatedAt =
-      data.generated_at
-        ? new Date(
-            data.generated_at
-          )
-        : new Date();
-
-
-    videoHealthStatus.textContent =
-      `Checked ${generatedAt.toLocaleTimeString(
-        [],
-        {
-          hour:
-            "2-digit",
-
-          minute:
-            "2-digit",
-
-          second:
-            "2-digit"
-        }
-      )}`;
-  }
-
-
-  /*
-   * If a diagnostic result was open before Refresh, close it because
-   * the underlying reconciliation snapshot has changed.
-   */
-  closeVideoHealthResults();
-
-
-  window.lucide?.createIcons();
-}
-
-
-/**
- * Applies a loading state to the complete Video Storage Health section.
- */
-function setVideoHealthLoadingState() {
-
-  currentVideoHealthData =
-    null;
-
-
-  if (
-    videoHealthStatus
-  ) {
-
-    videoHealthStatus.textContent =
-      "Checking Backblaze video storage…";
-  }
-
-
-  if (
-    videoHealthCoverageTitle
-  ) {
-
-    videoHealthCoverageTitle.textContent =
-      "Checking storage coverage…";
-  }
-
-
-  if (
-    videoHealthCoverageDetail
-  ) {
-
-    videoHealthCoverageDetail.textContent =
-      "Reconciling catalogue videos with Backblaze MP4 objects.";
-  }
-
-
-  const elements = [
-    videoHealthCoverage,
-    videoHealthCatalogue,
-    videoHealthB2,
-    videoHealthMatched,
-    videoHealthMissing,
-    videoHealthOrphaned,
-    videoHealthCaseMismatch,
-    videoHealthUrlError,
-    videoHealthInvalid
-  ];
-
-
-  for (
-    const element of elements
-  ) {
-
-    const card =
-      element?.closest(
-        ".admin-video-health-card"
-      ) ||
-      element;
-
-
-    card?.classList.remove(
-      "is-error",
-      "is-healthy",
-      "is-warning",
-      "is-problem"
-    );
-
-
-    card?.classList.add(
-      "is-loading"
-    );
-  }
-
-
-  setText(
-    videoHealthCatalogue,
-    "—"
-  );
-
-
-  setText(
-    videoHealthB2,
-    "—"
-  );
-
-
-  setText(
-    videoHealthMatched,
-    "—"
-  );
-
-
-  setText(
-    videoHealthMissing,
-    "—"
-  );
-
-
-  setText(
-    videoHealthOrphaned,
-    "—"
-  );
-
-
-  setText(
-    videoHealthCaseMismatch,
-    "—"
-  );
-
-
-  setText(
-    videoHealthUrlError,
-    "—"
-  );
-
-
-  setText(
-    videoHealthInvalid,
-    "—"
-  );
-
-
-  closeVideoHealthResults();
-}
-
-
-/**
- * Displays an independent Video Storage Health failure.
- */
-function renderVideoHealthError(
-  error
-) {
-
-  currentVideoHealthData =
-    null;
-
-
-  if (
-    videoHealthStatus
-  ) {
-
-    videoHealthStatus.textContent =
-      `Video Storage Health unavailable: ${
-        error?.message ||
-        "Unknown error"
-      }`;
-  }
-
-
-  if (
-    videoHealthCoverageTitle
-  ) {
-
-    videoHealthCoverageTitle.textContent =
-      "Storage health unavailable";
-  }
-
-
-  if (
-    videoHealthCoverageDetail
-  ) {
-
-    videoHealthCoverageDetail.textContent =
-      "The Backblaze video inventory could not be reconciled.";
-  }
-
-
-  const elements = [
-    videoHealthCoverage,
-    videoHealthCatalogue,
-    videoHealthB2,
-    videoHealthMatched,
-    videoHealthMissing,
-    videoHealthOrphaned,
-    videoHealthCaseMismatch,
-    videoHealthUrlError,
-    videoHealthInvalid
-  ];
-
-
-  for (
-    const element of elements
-  ) {
-
-    const card =
-      element?.closest(
-        ".admin-video-health-card"
-      ) ||
-      element;
-
-
-    card?.classList.remove(
-      "is-loading",
-      "is-healthy",
-      "is-warning",
-      "is-problem"
-    );
-
-
-    card?.classList.add(
-      "is-error"
-    );
-  }
-
-
-  setText(
-    videoHealthCatalogue,
-    "—"
-  );
-
-
-  setText(
-    videoHealthB2,
-    "—"
-  );
-
-
-  setText(
-    videoHealthMatched,
-    "—"
-  );
-
-
-  setText(
-    videoHealthMissing,
-    "—"
-  );
-
-
-  setText(
-    videoHealthOrphaned,
-    "—"
-  );
-
-
-  setText(
-    videoHealthCaseMismatch,
-    "—"
-  );
-
-
-  setText(
-    videoHealthUrlError,
-    "—"
-  );
-
-
-  setText(
-    videoHealthInvalid,
-    "—"
-  );
-
-
-  closeVideoHealthResults();
-}
-
-
-/**
- * Applies a health state to one clickable Video Storage Health card.
- */
-function setVideoHealthCardState(
-  key,
-  state
-) {
-
-  const card =
-    document.querySelector(
-      `[data-video-health-key="${key}"]`
-    );
-
-
-  if (
-    !card
-  ) {
-
-    return;
-  }
-
-
-  card.classList.remove(
-    "is-loading",
-    "is-error",
-    "is-healthy",
-    "is-warning",
-    "is-problem"
-  );
-
-
-  card.classList.add(
-    `is-${state}`
-  );
-}
-
-
-/**
- * Applies a health state to one informational Video Storage Health card.
- */
-function setVideoHealthStaticCardState(
-  element,
-  state
-) {
-
-  const card =
-    element?.closest(
-      ".admin-video-health-card"
-    );
-
-
-  if (
-    !card
-  ) {
-
-    return;
-  }
-
-
-  card.classList.remove(
-    "is-loading",
-    "is-error",
-    "is-healthy",
-    "is-warning",
-    "is-problem"
-  );
-
-
-  card.classList.add(
-    `is-${state}`
-  );
-}
-
-
-/* =====================================================================
-   12. VIDEO STORAGE HEALTH INTERACTION
-===================================================================== */
-
-/**
- * Opens one detailed Video Storage Health diagnostic collection.
- */
-function openVideoHealthResult(
-  key
-) {
-
-  if (
-    !key ||
-    !currentVideoHealthData
-  ) {
-
-    return;
-  }
-
-
-  const result =
-    currentVideoHealthData[
-      key
-    ];
-
-
-  if (
-    !result
-  ) {
-
-    return;
-  }
-
-
-  document
-    .querySelectorAll(
-      ".admin-video-health-card-action"
-    )
-    .forEach(
-      card => {
-
-        card.classList.toggle(
-          "is-selected",
-          card.dataset.videoHealthKey ===
-            key
-        );
-      }
-    );
-
-
-  const titles = {
-    missing:
-      "Missing Videos",
-
-    orphaned:
-      "Orphaned Videos",
-
-    case_mismatch:
-      "Filename Case Mismatches",
-
-    url_filename_error:
-      "URL / Filename Errors",
-
-    invalid:
-      "Invalid Storage Objects"
-  };
-
-
-  if (
-    videoHealthResultsTitle
-  ) {
-
-    videoHealthResultsTitle.textContent =
-      titles[key] ||
-      "Video Storage Health";
-  }
-
-
-  if (
-    videoHealthResultsBody
-  ) {
-
-    videoHealthResultsBody.innerHTML =
-      renderVideoHealthRows(
-        key,
-        result.rows ||
-        []
-      );
-  }
-
-
-  if (
-    videoHealthResults
-  ) {
-
-    videoHealthResults.hidden =
-      false;
-  }
-
-  attachVideoOrphanDeleteEvents();
-
-  window.lucide?.createIcons();
-}
-
-
-/**
- * Closes the Video Storage Health result panel.
- */
-function closeVideoHealthResults() {
-
-  if (
-    videoHealthResults
-  ) {
-
-    videoHealthResults.hidden =
-      true;
-  }
-
-
-  document
-    .querySelectorAll(
-      ".admin-video-health-card-action"
-    )
-    .forEach(
-      card => {
-
-        card.classList.remove(
-          "is-selected"
-        );
-      }
-    );
-}
-
-
-/**
- * Converts a Video Storage Health collection to HTML.
- */
-function renderVideoHealthRows(
-  key,
-  rows
-) {
-
-  if (
-    !Array.isArray(
-      rows
-    ) ||
-    !rows.length
-  ) {
-
-    return `
-      <div class="admin-video-health-empty">
-        ✓ No issues found.
-      </div>
-    `;
-  }
-
-
-  return rows
-    .map(
-      row =>
-        renderVideoHealthRow(
-          key,
-          row
-        )
-    )
-    .join(
-      ""
-    );
-}
-
-/**
- * Renders one Video Storage Health diagnostic row.
- *
- * Several alternative property names are supported intentionally. This
- * keeps the Admin UI tolerant of diagnostic-field naming differences
- * while the zulu-video-health function evolves.
- */
-function renderVideoHealthRow(
-  key,
-  row
-) {
-
-  const catalogueFilename =
-    row.catalogue_filename ??
-    row.catalogue_file ??
-    row.expected_file ??
-    null;
-
-
-  const b2Filename =
-    row.b2_file_name ??
-    row.b2_file ??
-    row.file_name ??
-    null;
-
-
-  const film =
-    row.film ||
-    (
-      key === "orphaned"
-        ? "Orphaned Backblaze video"
-        : key === "invalid"
-          ? "Invalid storage object"
-          : "Untitled"
-    );
-
-
-  const uid =
-    row.uid ??
-    null;
-
-
-  const meta = [];
-
-
-  if (
-    catalogueFilename
-  ) {
-
-    meta.push(
-      `
-        <div>
-          <strong>Catalogue filename:</strong>
-          <span class="admin-video-health-file">
-            ${escapeHtml(
-              catalogueFilename
-            )}
-          </span>
-        </div>
-      `
-    );
-  }
-
-
-  if (
-    b2Filename &&
-    b2Filename !==
-      catalogueFilename
-  ) {
-
-    meta.push(
-      `
-        <div>
-          <strong>Backblaze filename:</strong>
-          <span class="admin-video-health-file">
-            ${escapeHtml(
-              b2Filename
-            )}
-          </span>
-        </div>
-      `
-    );
-  }
-
-
-  if (
-    row.url
-  ) {
-
-    meta.push(
-      `
-        <div>
-          <strong>URL:</strong>
-          <span class="admin-video-health-file">
-            ${escapeHtml(
-              row.url
-            )}
-          </span>
-        </div>
-      `
-    );
-  }
-
-
-  if (
-    row.reason
-  ) {
-
-    meta.push(
-      `
-        <div>
-          <strong>Reason:</strong>
-          ${escapeHtml(
-            row.reason
-          )}
-        </div>
-      `
-    );
-  }
-
-
-  if (
-    row.size_bytes !==
-      undefined &&
-    row.size_bytes !==
-      null
-  ) {
-
-    meta.push(
-      `
-        <div>
-          <strong>Size:</strong>
-          ${escapeHtml(
-            formatBytes(
-              row.size_bytes
-            )
-          )}
-        </div>
-      `
-    );
-  }
-
-
-  if (
-    row.uploaded_at
-  ) {
-
-    meta.push(
-      `
-        <div>
-          <strong>Uploaded:</strong>
-          ${escapeHtml(
-            formatDateTime(
-              row.uploaded_at
-            )
-          )}
-        </div>
-      `
-    );
-  }
-
-  const orphanDeleteAction =
-  key === "orphaned" &&
-  b2Filename &&
-  row.file_id
-    ? `
-        <div class="admin-video-health-result-actions">
-
-          <button
-            type="button"
-            class="admin-video-orphan-delete-button"
-            data-video-orphan-file="${escapeHtml(
-              b2Filename
-            )}"
-            data-video-orphan-file-id="${escapeHtml(
-              row.file_id
-            )}"
-          >
-
-            <i data-lucide="trash-2"></i>
-
-            <span>
-              Delete Orphan
-            </span>
-
-          </button>
-
-        </div>
-
-
-        <div
-          class="admin-video-orphan-delete-status"
-          hidden
-        ></div>
-      `
-    : "";
-
-  return `
-    <div class="admin-video-health-result">
-
-      <div class="admin-video-health-result-title">
-
-        ${
-          uid !== null
-            ? `
-                <span class="admin-video-health-result-uid">
-                  UID ${escapeHtml(
-                    uid
-                  )}
-                </span>
-              `
-            : ""
-        }
-
-        <span class="admin-video-health-result-film">
-          ${escapeHtml(
-            film
-          )}
-        </span>
-
-      </div>
-
-      ${
-        meta.length
-          ? `
-              <div class="admin-video-health-result-meta">
-                ${meta.join("")}
-              </div>
-            `
-          : ""
-      }
-
-      ${orphanDeleteAction}
-
-    </div>
-  `;
-}
-
-/**
- * Attaches protected deletion to orphaned MP4 rows.
- */
-function attachVideoOrphanDeleteEvents() {
-
-  document
-    .querySelectorAll(
-      ".admin-video-orphan-delete-button"
-    )
-    .forEach(
-      button => {
-
-        if (
-          button.dataset.bound ===
-            "true"
-        ) {
-
-          return;
-        }
-
-
-        button.dataset.bound =
-          "true";
-
-
-        button.addEventListener(
-          "click",
-          async () => {
-
-            await deleteOrphanedVideo(
-              button
-            );
-          }
-        );
-      }
-    );
-}
-
-
-/**
- * Starts inline confirmation for deletion of one orphaned Backblaze MP4.
- *
- * Nothing is deleted at this stage.
- */
-async function deleteOrphanedVideo(
-  button
-) {
-
-  const fileName =
-    button.dataset.videoOrphanFile ||
-    "";
-
-
-  const fileId =
-    button.dataset.videoOrphanFileId ||
-    "";
-
-
-  const row =
-    button.closest(
-      ".admin-video-health-result"
-    );
-
-
-  const status =
-    row?.querySelector(
-      ".admin-video-orphan-delete-status"
-    );
-
-
-  if (
-    !fileName ||
-    !fileId ||
-    !row
-  ) {
-
-    return;
-  }
-
-
-  /*
-   * If this row already has a confirmation panel open,
-   * do not create another one.
-   */
-  if (
-    row.querySelector(
-      ".admin-video-orphan-confirm"
-    )
-  ) {
-
-    return;
-  }
-
-
-  /*
-   * Hide the original Delete Orphan button while the
-   * confirmation panel is displayed.
-   */
-  button.hidden =
-    true;
-
-
-  if (
-    status
-  ) {
-
-    status.hidden =
-      true;
-  }
-
-
-  const confirmation =
-    document.createElement(
-      "div"
-    );
-
-
-  confirmation.className =
-    "admin-video-orphan-confirm";
-
-
-  confirmation.innerHTML = `
-
-    <div class="admin-video-orphan-confirm-heading">
-
-      <i data-lucide="triangle-alert"></i>
-
-      <span>
-        Permanently delete this MP4?
-      </span>
-
-    </div>
-
-
-    <div class="admin-video-orphan-confirm-text">
-
-      This Backblaze object is not referenced by the catalogue.
-
-      The server will check that again immediately before deletion.
-
-    </div>
-
-
-    <div class="admin-video-orphan-confirm-file">
-
-      ${escapeHtml(
-        fileName
-      )}
-
-    </div>
-
-
-    <div class="admin-video-orphan-confirm-warning">
-
-      This permanently deletes the exact B2 file version and cannot be undone.
-
-    </div>
-
-
-    <div class="admin-video-orphan-confirm-actions">
-
-      <button
-        type="button"
-        class="admin-video-orphan-cancel-button"
-      >
-
-        Cancel
-
-      </button>
-
-
-      <button
-        type="button"
-        class="admin-video-orphan-confirm-button"
-      >
-
-        <i data-lucide="trash-2"></i>
-
-        <span>
-          Permanently Delete MP4
-        </span>
-
-      </button>
-
-    </div>
-  `;
-
-
-  const actions =
-    row.querySelector(
-      ".admin-video-health-result-actions"
-    );
-
-
-  actions?.insertAdjacentElement(
-    "afterend",
-    confirmation
-  );
-
-
-  const cancelButton =
-    confirmation.querySelector(
-      ".admin-video-orphan-cancel-button"
-    );
-
-
-  const confirmButton =
-    confirmation.querySelector(
-      ".admin-video-orphan-confirm-button"
-    );
-
-
-  cancelButton?.addEventListener(
-    "click",
-    () => {
-
-      confirmation.remove();
-
-
-      button.hidden =
-        false;
-
-
-      window.lucide?.createIcons();
-    }
-  );
-
-
-  confirmButton?.addEventListener(
-    "click",
-    async () => {
-
-      await performOrphanedVideoDeletion(
-        confirmButton,
-        fileName,
-        fileId,
-        row,
-        status
-      );
-    }
-  );
-
-
-  window.lucide?.createIcons();
-}
-
-
-/**
- * Performs the actual protected orphan deletion.
- *
- * zulu-video-health independently:
- *
- *   • rechecks the current catalogue
- *   • confirms the MP4 is still unreferenced
- *   • looks up the exact Backblaze object
- *   • confirms the exact B2 file ID
- *   • deletes only that exact file version
- */
-async function performOrphanedVideoDeletion(
-  confirmButton,
-  fileName,
-  fileId,
-  row,
-  status
-) {
-
-  const cancelButton =
-    row.querySelector(
-      ".admin-video-orphan-cancel-button"
-    );
-
-
-  confirmButton.disabled =
-    true;
-
-
-  if (
-    cancelButton
-  ) {
-
-    cancelButton.disabled =
-      true;
-  }
-
-
-  confirmButton.innerHTML = `
-    <i data-lucide="loader-circle"></i>
-
-    <span>
-      Deleting…
-    </span>
-  `;
-
-
-  if (
-    status
-  ) {
-
-    status.hidden =
-      false;
-
-
-    status.className =
-      "admin-video-orphan-delete-status is-working";
-
-
-    status.textContent =
-      "Rechecking catalogue and exact Backblaze file version…";
-  }
-
-
-  window.lucide?.createIcons();
-
-
-  try {
-
-    const {
-      data,
-      error
-    } =
-      await supabase.functions.invoke(
-        "zulu-video-health",
-        {
-          body: {
-
-            action:
-              "delete_orphan",
-
-            file_name:
-              fileName,
-
-            file_id:
-              fileId
-          }
-        }
-      );
-
-
-    if (
-      error
-    ) {
-
-      throw new Error(
-        error.message ||
-        "Orphan deletion request failed."
-      );
-    }
-
-
-    if (
-      !data ||
-      data.success !== true
-    ) {
-
-      throw new Error(
-        data?.error ||
-        "The orphaned MP4 could not be deleted."
-      );
-    }
-
-
-    if (
-      status
-    ) {
-
-      status.className =
-        "admin-video-orphan-delete-status is-success";
-
-
-      status.textContent =
-        "MP4 deleted. Refreshing Video Storage Health…";
-    }
-
-
-    /*
-     * Obtain a completely fresh reconciliation from the backend.
-     */
-    const refreshed =
-      await loadVideoHealth();
-
-
-    renderVideoHealth(
-      refreshed
-    );
-
-
-    /*
-     * renderVideoHealth() deliberately closes stale diagnostic
-     * results. Reopen Orphaned Videos from the new snapshot.
-     */
-    openVideoHealthResult(
-      "orphaned"
-    );
-
-
-  } catch (
-    error
-  ) {
-
-    console.error(
-      "ORPHANED VIDEO DELETE ERROR:",
-      error
-    );
-
-
-    confirmButton.disabled =
-      false;
-
-
-    if (
-      cancelButton
-    ) {
-
-      cancelButton.disabled =
-        false;
-    }
-
-
-    confirmButton.innerHTML = `
-      <i data-lucide="trash-2"></i>
-
-      <span>
-        Try Delete Again
-      </span>
-    `;
-
-
-    if (
-      status
-    ) {
-
-      status.hidden =
-        false;
-
-
-      status.className =
-        "admin-video-orphan-delete-status is-error";
-
-
-      status.textContent =
-        error?.message ||
-        "Could not delete orphaned MP4.";
-    }
-
-
-    window.lucide?.createIcons();
-  }
-}
-
-
-/* =====================================================================
-   13. THUMBNAIL HEALTH
-===================================================================== */
+/* -------------------------------------------------------------------
+   THUMBNAIL HEALTH
+------------------------------------------------------------------- */
 
 /**
  * Stores and renders the latest Backblaze thumbnail reconciliation.
@@ -2969,7 +1262,6 @@ function renderThumbnailHealth(
 
   window.lucide?.createIcons();
 }
-
 
 /**
  * Applies the loading state while zulu-thumbnail-health is running.
@@ -3510,6 +1802,7 @@ function renderMissingThumbnail(
  * Stage 10.1 remains read-only for orphaned objects. Deletion belongs to
  * the later storage-cleanup stage.
  */
+
 /**
  * Renders one Backblaze thumbnail whose numeric UID no longer exists
  * in zulu_videos.
@@ -3746,6 +2039,7 @@ function renderInvalidThumbnail(
     </div>
   `;
 }
+
 
 /* =====================================================================
    15. MISSING THUMBNAIL REPAIR — STAGE 10.1
@@ -4902,7 +3196,6 @@ function cssEscapeValue(
 }
 
 
-
 /* =====================================================================
    STAGE 10 — ORPHANED THUMBNAIL CLEANUP
 ===================================================================== */
@@ -4958,23 +3251,16 @@ function attachThumbnailDeleteEvents() {
     );
 }
 
-
 /**
- * Starts protected deletion of one orphaned thumbnail.
+ * Starts the inline confirmation flow for one orphaned thumbnail.
  *
- * The first click only opens an inline confirmation panel.
- * Nothing is deleted until the user explicitly confirms.
- *
- * The browser never possesses Backblaze credentials.
+ * This deliberately avoids window.confirm().
  */
-async function deleteOrphanedThumbnail(
+function deleteOrphanedThumbnail(
   uid,
   button
 ) {
 
-  /*
-   * Prevent concurrent cleanup operations.
-   */
   if (
     deletingThumbnailUid !==
       null
@@ -4984,32 +3270,31 @@ async function deleteOrphanedThumbnail(
   }
 
 
-  /*
-   * Retrieve the object from the latest server-generated health
-   * snapshot rather than trusting information stored in the button.
-   */
-  const item =
+  const orphanRows =
     currentThumbnailData
       ?.orphaned
-      ?.rows
-      ?.find(
-        row =>
-          Number(
-            row.uid
-          ) ===
-          Number(
-            uid
-          )
-      );
+      ?.rows ||
+    [];
+
+
+  const item =
+    orphanRows.find(
+      row =>
+        Number(
+          row.uid
+        ) ===
+        Number(
+          uid
+        )
+    );
 
 
   if (
     !item
   ) {
 
-    setThumbnailDeleteStatus(
-      uid,
-      "This orphan is no longer present in the current health results.",
+    setStatus(
+      `Could not find orphaned thumbnail UID ${uid}.`,
       "error"
     );
 
@@ -5018,14 +3303,24 @@ async function deleteOrphanedThumbnail(
   }
 
 
+  const fileName =
+    item.file_name ||
+    "";
+
+
+  const fileId =
+    item.file_id ||
+    "";
+
+
   if (
-    !item.file_name ||
-    !item.file_id
+    !fileName ||
+    !fileId
   ) {
 
     setThumbnailDeleteStatus(
       uid,
-      "This orphan does not contain enough Backblaze information to delete safely.",
+      "The orphaned thumbnail is missing its exact Backblaze filename or file ID.",
       "error"
     );
 
@@ -5034,53 +3329,32 @@ async function deleteOrphanedThumbnail(
   }
 
 
-  /*
-   * Locate the diagnostic row containing this button.
-   */
   const row =
-    button?.closest(
-      ".admin-thumbnail-result"
-    ) ||
-    button?.parentElement?.parentElement;
+    document.querySelector(
+      `[data-thumbnail-orphan-row="${cssEscapeValue(
+        uid
+      )}"]`
+    );
 
 
   if (
     !row
   ) {
 
-    setThumbnailDeleteStatus(
-      uid,
-      "Could not locate the thumbnail diagnostic row.",
-      "error"
-    );
-
-
     return;
   }
 
 
   /*
-   * Do not create more than one confirmation panel for the same row.
+   * Do not create a second confirmation panel if one is already open.
    */
   if (
     row.querySelector(
-      ".admin-thumbnail-orphan-confirm"
+      ".admin-thumbnail-delete-confirm"
     )
   ) {
 
     return;
-  }
-
-
-  /*
-   * Hide the original action while confirmation is open.
-   */
-  if (
-    button
-  ) {
-
-    button.hidden =
-      true;
   }
 
 
@@ -5091,118 +3365,95 @@ async function deleteOrphanedThumbnail(
 
 
   confirmation.className =
-    "admin-thumbnail-orphan-confirm";
+    "admin-thumbnail-delete-confirm";
 
 
-  confirmation.innerHTML = `
+  confirmation.innerHTML =
+    `
+      <div class="admin-thumbnail-delete-confirm-message">
 
-    <div class="admin-thumbnail-orphan-confirm-heading">
+        <strong>
+          Delete this orphaned thumbnail?
+        </strong>
 
-      <i data-lucide="triangle-alert"></i>
+        <div>
+          This will permanently delete the exact Backblaze file version:
+        </div>
 
-      <span>
-        Permanently delete this thumbnail?
-      </span>
+        <div class="admin-thumbnail-file">
+          ${escapeHtml(
+            fileName
+          )}
+        </div>
 
-    </div>
-
-
-    <div class="admin-thumbnail-orphan-confirm-text">
-
-      UID ${escapeHtml(
-        uid
-      )} does not exist in the current catalogue health check.
-
-      The server will check the catalogue again immediately before deletion.
-
-    </div>
+      </div>
 
 
-    <div class="admin-thumbnail-orphan-confirm-file">
+      <div class="admin-thumbnail-delete-confirm-actions">
 
-      ${escapeHtml(
-        item.file_name
-      )}
-
-    </div>
-
-
-    <div class="admin-thumbnail-orphan-confirm-warning">
-
-      This permanently deletes the exact B2 thumbnail file version and cannot be undone.
-
-    </div>
+        <button
+          type="button"
+          class="admin-thumbnail-delete-confirm-button"
+          data-thumbnail-delete-confirm="${escapeHtml(
+            uid
+          )}"
+        >
+          <i data-lucide="trash-2"></i>
+          <span>Confirm Delete</span>
+        </button>
 
 
-    <div class="admin-thumbnail-orphan-confirm-actions">
+        <button
+          type="button"
+          class="admin-thumbnail-delete-cancel-button"
+          data-thumbnail-delete-cancel="${escapeHtml(
+            uid
+          )}"
+        >
+          Cancel
+        </button>
 
-      <button
-        type="button"
-        class="admin-thumbnail-orphan-cancel-button"
-      >
-
-        Cancel
-
-      </button>
-
-
-      <button
-        type="button"
-        class="admin-thumbnail-orphan-confirm-button"
-      >
-
-        <i data-lucide="trash-2"></i>
-
-        <span>
-          Permanently Delete Thumbnail
-        </span>
-
-      </button>
-
-    </div>
-  `;
+      </div>
+    `;
 
 
-  /*
-   * Place the confirmation immediately beneath the existing
-   * Delete Orphan action.
-   */
-  const actionContainer =
-    button?.parentElement;
-
-
-  if (
-    actionContainer
-  ) {
-
-    actionContainer.insertAdjacentElement(
-      "afterend",
-      confirmation
-    );
-
-  } else {
-
-    row.appendChild(
-      confirmation
-    );
-  }
-
-
-  const cancelButton =
-    confirmation.querySelector(
-      ".admin-thumbnail-orphan-cancel-button"
-    );
+  row.appendChild(
+    confirmation
+  );
 
 
   const confirmButton =
     confirmation.querySelector(
-      ".admin-thumbnail-orphan-confirm-button"
+      `[data-thumbnail-delete-confirm="${cssEscapeValue(
+        uid
+      )}"]`
     );
 
 
-  /*
-   * Cancel makes no server request and restores the original button.
-   */
+  const cancelButton =
+    confirmation.querySelector(
+      `[data-thumbnail-delete-cancel="${cssEscapeValue(
+        uid
+      )}"]`
+    );
+
+
+  confirmButton?.addEventListener(
+    "click",
+    () => {
+
+      performOrphanedThumbnailDeletion(
+        item,
+        button,
+        confirmation
+      );
+    },
+    {
+      once: true
+    }
+  );
+
+
   cancelButton?.addEventListener(
     "click",
     () => {
@@ -5210,35 +3461,14 @@ async function deleteOrphanedThumbnail(
       confirmation.remove();
 
 
-      if (
-        button
-      ) {
-
-        button.hidden =
-          false;
-      }
-
-
-      window.lucide?.createIcons();
-    }
-  );
-
-
-  /*
-   * Only this second explicit action performs deletion.
-   */
-  confirmButton?.addEventListener(
-    "click",
-    async () => {
-
-      await performOrphanedThumbnailDeletion(
+      setThumbnailDeleteStatus(
         uid,
-        item,
-        button,
-        confirmation,
-        confirmButton,
-        cancelButton
+        "Deletion cancelled.",
+        ""
       );
+    },
+    {
+      once: true
     }
   );
 
@@ -5248,24 +3478,30 @@ async function deleteOrphanedThumbnail(
 
 
 /**
- * Performs the actual protected orphan-thumbnail deletion.
+ * Performs the protected orphan-thumbnail deletion.
  *
- * zulu-thumbnail-health remains the security boundary and independently
- * verifies that the UID is absent from the current catalogue before
- * deleting the exact Backblaze file version.
+ * The browser supplies the candidate UID, filename and exact B2 file ID.
+ *
+ * zulu-thumbnail-health is responsible for:
+ *
+ *   • authenticating the Admin
+ *   • rechecking that the UID is absent from zulu_videos
+ *   • looking up the exact B2 object
+ *   • verifying the exact B2 file ID
+ *   • deleting only that exact file version
  */
 async function performOrphanedThumbnailDeletion(
-  uid,
   item,
   button,
-  confirmation,
-  confirmButton,
-  cancelButton
+  confirmation
 ) {
 
-  /*
-   * Prevent another thumbnail cleanup operation from starting.
-   */
+  const uid =
+    Number(
+      item.uid
+    );
+
+
   if (
     deletingThumbnailUid !==
       null
@@ -5279,42 +3515,54 @@ async function performOrphanedThumbnailDeletion(
     uid;
 
 
-  /*
-   * Disable every orphan-delete button while one destructive operation
-   * is in progress.
-   */
   setAllThumbnailDeleteButtonsDisabled(
     true
   );
 
 
-  if (
-    confirmButton
-  ) {
+  confirmation
+    ?.querySelectorAll(
+      "button"
+    )
+    .forEach(
+      element => {
 
-    confirmButton.disabled =
-      true;
-
-
-    confirmButton.innerHTML = `
-      <i data-lucide="loader-circle"></i>
-      <span>Deleting…</span>
-    `;
-  }
+        element.disabled =
+          true;
+      }
+    );
 
 
   if (
-    cancelButton
+    button
   ) {
 
-    cancelButton.disabled =
+    button.disabled =
       true;
+
+
+    button.classList.remove(
+      "is-error",
+      "is-success"
+    );
+
+
+    button.classList.add(
+      "is-working"
+    );
+
+
+    button.innerHTML =
+      `
+        <i data-lucide="loader-circle"></i>
+        <span>Deleting…</span>
+      `;
   }
 
 
   setThumbnailDeleteStatus(
     uid,
-    "Checking catalogue and deleting the orphaned thumbnail…",
+    "Revalidating orphan and deleting exact Backblaze file version…",
     "working"
   );
 
@@ -5324,35 +3572,27 @@ async function performOrphanedThumbnailDeletion(
 
   try {
 
-    /* ---------------------------------------------------------------
-       DELETE THROUGH PROTECTED EDGE FUNCTION
-    --------------------------------------------------------------- */
-
     const {
       data,
       error
     } =
-      await supabase
-        .functions
-        .invoke(
-          "zulu-thumbnail-health",
-          {
-            body: {
+      await supabase.functions.invoke(
+        "zulu-thumbnail-health",
+        {
+          body: {
+            action:
+              "delete_orphan",
 
-              action:
-                "delete_orphan",
+            uid,
 
-              uid:
-                item.uid,
+            file_name:
+              item.file_name,
 
-              file_name:
-                item.file_name,
-
-              file_id:
-                item.file_id
-            }
+            file_id:
+              item.file_id
           }
-        );
+        }
+      );
 
 
     if (
@@ -5360,43 +3600,61 @@ async function performOrphanedThumbnailDeletion(
     ) {
 
       throw new Error(
-        error.message ||
-        "Thumbnail cleanup request failed."
+        `Could not delete orphaned thumbnail: ${
+          error.message ||
+          "Edge Function request failed"
+        }`
       );
     }
 
 
     if (
-      !data ||
-      data.success !==
-        true
+      !data
     ) {
 
       throw new Error(
-        data?.error ||
+        "Thumbnail deletion returned no data."
+      );
+    }
+
+
+    if (
+      data.success !== true
+    ) {
+
+      throw new Error(
+        data.error ||
         "Thumbnail deletion was unsuccessful."
       );
     }
 
 
-    /* ---------------------------------------------------------------
-       B2 REPORTED SUCCESS
-    --------------------------------------------------------------- */
-
     if (
-      confirmButton
+      button
     ) {
 
-      confirmButton.innerHTML = `
-        <i data-lucide="check"></i>
-        <span>Deleted</span>
-      `;
+      button.classList.remove(
+        "is-working",
+        "is-error"
+      );
+
+
+      button.classList.add(
+        "is-success"
+      );
+
+
+      button.innerHTML =
+        `
+          <i data-lucide="circle-check"></i>
+          <span>Deleted</span>
+        `;
     }
 
 
     setThumbnailDeleteStatus(
       uid,
-      "Thumbnail deleted. Verifying storage health…",
+      "Orphaned thumbnail deleted. Refreshing Thumbnail Health…",
       "success"
     );
 
@@ -5404,30 +3662,34 @@ async function performOrphanedThumbnailDeletion(
     window.lucide?.createIcons();
 
 
-    /* ---------------------------------------------------------------
-       RECONCILE AGAIN
-    --------------------------------------------------------------- */
-
+    /*
+     * Do not trust the deletion response alone.
+     *
+     * Re-run the complete reconciliation and ensure the deleted object
+     * disappears from the orphan list.
+     */
     const refreshed =
       await loadThumbnailHealth();
 
 
-    /*
-     * Do not assume that a successful B2 response means the diagnostic
-     * issue has disappeared. Verify it against a fresh inventory.
-     */
     const stillOrphaned =
       refreshed
         ?.orphaned
         ?.rows
         ?.some(
           row =>
-            Number(
-              row.uid
+            String(
+              row.file_id
             ) ===
-            Number(
-              uid
-            )
+              String(
+                item.file_id
+              ) ||
+            String(
+              row.file_name
+            ) ===
+              String(
+                item.file_name
+              )
         );
 
 
@@ -5436,28 +3698,24 @@ async function performOrphanedThumbnailDeletion(
     ) {
 
       throw new Error(
-        `Thumbnail ${item.file_name} was reported deleted but still appears in Thumbnail Health.`
+        "Backblaze reported the deletion as successful, but Thumbnail Health still reports the object as orphaned."
       );
     }
 
-
-    /* ---------------------------------------------------------------
-       UPDATE DASHBOARD
-    --------------------------------------------------------------- */
 
     renderThumbnailHealth(
       refreshed
     );
 
 
-    /*
-     * Keep the user in Orphaned Thumbnails.
-     *
-     * The deleted row will be absent and the counter will have
-     * decreased by one.
-     */
     openThumbnailResult(
       "orphaned"
+    );
+
+
+    setStatus(
+      `Deleted orphaned thumbnail UID ${uid}.`,
+      "success"
     );
 
 
@@ -5466,45 +3724,57 @@ async function performOrphanedThumbnailDeletion(
   ) {
 
     console.error(
-      "ORPHAN THUMBNAIL DELETE FAILED:",
+      "ORPHANED THUMBNAIL DELETE FAILED:",
       error
     );
+
+
+    confirmation
+      ?.remove();
+
+
+    if (
+      button
+    ) {
+
+      button.classList.remove(
+        "is-working",
+        "is-success"
+      );
+
+
+      button.classList.add(
+        "is-error"
+      );
+
+
+      button.innerHTML =
+        `
+          <i data-lucide="rotate-ccw"></i>
+          <span>Retry Delete</span>
+        `;
+
+
+      button.disabled =
+        false;
+    }
 
 
     setThumbnailDeleteStatus(
       uid,
       error?.message ||
-      "Could not delete the orphaned thumbnail.",
+      "Could not delete orphaned thumbnail.",
       "error"
     );
 
 
-    /*
-     * Keep the inline confirmation open after a failure so the user
-     * can retry without reopening it.
-     */
-    if (
-      confirmButton
-    ) {
-
-      confirmButton.disabled =
-        false;
-
-
-      confirmButton.innerHTML = `
-        <i data-lucide="trash-2"></i>
-        <span>Try Delete Again</span>
-      `;
-    }
-
-
-    if (
-      cancelButton
-    ) {
-
-      cancelButton.disabled =
-        false;
-    }
+    setStatus(
+      `Could not delete orphaned thumbnail UID ${uid}: ${
+        error?.message ||
+        "Unknown error"
+      }`,
+      "error"
+    );
 
 
     window.lucide?.createIcons();
@@ -5521,8 +3791,13 @@ async function performOrphanedThumbnailDeletion(
     );
   }
 }
+
+
 /**
- * Enables/disables all currently-rendered Delete Orphan buttons.
+ * Enables or disables all currently-rendered orphan deletion buttons.
+ *
+ * A button whose row does not contain an exact filename and B2 file ID
+ * remains disabled.
  */
 function setAllThumbnailDeleteButtonsDisabled(
   disabled
@@ -5535,25 +3810,58 @@ function setAllThumbnailDeleteButtonsDisabled(
     .forEach(
       button => {
 
-        button.disabled =
-          Boolean(
-            disabled
+        const uid =
+          Number(
+            button.dataset
+              .thumbnailDeleteUid
           );
+
+
+        const item =
+          currentThumbnailData
+            ?.orphaned
+            ?.rows
+            ?.find(
+              row =>
+                Number(
+                  row.uid
+                ) ===
+                uid
+            );
+
+
+        const canDelete =
+          Number.isInteger(
+            uid
+          ) &&
+          uid > 0 &&
+          Boolean(
+            item?.file_name
+          ) &&
+          Boolean(
+            item?.file_id
+          );
+
+
+        button.disabled =
+          disabled ||
+          !canDelete;
       }
     );
 }
 
 
 /**
- * Displays progress, success or failure beneath one orphan row.
+ * Displays progress or error information for one orphan deletion.
  */
 function setThumbnailDeleteStatus(
   uid,
   message,
-  state = ""
+  state =
+    "working"
 ) {
 
-  const status =
+  const element =
     document.querySelector(
       `[data-thumbnail-delete-status="${cssEscapeValue(
         uid
@@ -5562,22 +3870,22 @@ function setThumbnailDeleteStatus(
 
 
   if (
-    !status
+    !element
   ) {
 
     return;
   }
 
 
-  status.hidden =
+  element.hidden =
     false;
 
 
-  status.textContent =
+  element.textContent =
     message;
 
 
-  status.classList.remove(
+  element.classList.remove(
     "is-working",
     "is-success",
     "is-error"
@@ -5588,7 +3896,7 @@ function setThumbnailDeleteStatus(
     state
   ) {
 
-    status.classList.add(
+    element.classList.add(
       `is-${state}`
     );
   }
@@ -5600,8 +3908,26 @@ function setThumbnailDeleteStatus(
 ===================================================================== */
 
 /**
- * Stores and renders the latest Catalogue Integrity snapshot returned by
+ * Renders the Catalogue Integrity counters returned by
  * zulu-admin-dashboard.
+ *
+ * The Edge Function currently returns the following diagnostic groups:
+ *
+ *     duplicate_urls
+ *     duplicate_fingerprints
+ *     videos_without_actors
+ *     old_media_urls
+ *     missing_filesize
+ *     missing_duration
+ *     missing_resolution
+ *     missing_fingerprint
+ *
+ * Each group contains:
+ *
+ *     {
+ *       count: number,
+ *       rows: []
+ *     }
  */
 function renderCatalogueIntegrity(
   integrity
@@ -5609,147 +3935,95 @@ function renderCatalogueIntegrity(
 
   currentIntegrityData =
     integrity ||
-    null;
-
-
-  if (
-    !integrity
-  ) {
-
-    renderCatalogueIntegrityError(
-      new Error(
-        "Catalogue Integrity data is unavailable."
-      )
-    );
-
-
-    return;
-  }
-
-
-  const duplicateUrls =
-    getIntegrityCount(
-      integrity,
-      "duplicate_urls"
-    );
-
-
-  const duplicateFingerprints =
-    getIntegrityCount(
-      integrity,
-      "duplicate_fingerprints"
-    );
-
-
-  const noActors =
-    getIntegrityCount(
-      integrity,
-      "videos_without_actors"
-    );
-
-
-  const oldUrls =
-    getIntegrityCount(
-      integrity,
-      "old_media_urls"
-    );
-
-
-  const missingFilesize =
-    getIntegrityCount(
-      integrity,
-      "missing_filesize"
-    );
-
-
-  const missingDuration =
-    getIntegrityCount(
-      integrity,
-      "missing_duration"
-    );
-
-
-  const missingResolution =
-    getIntegrityCount(
-      integrity,
-      "missing_resolution"
-    );
-
-
-  const missingFingerprint =
-    getIntegrityCount(
-      integrity,
-      "missing_fingerprint"
-    );
+    {};
 
 
   setNumber(
     integrityDuplicateUrls,
-    duplicateUrls
+    getIntegrityCount(
+      "duplicate_urls"
+    )
   );
 
 
   setNumber(
     integrityDuplicateFingerprints,
-    duplicateFingerprints
+    getIntegrityCount(
+      "duplicate_fingerprints"
+    )
   );
 
 
   setNumber(
     integrityNoActors,
-    noActors
+    getIntegrityCount(
+      "videos_without_actors"
+    )
   );
 
 
   setNumber(
     integrityOldUrls,
-    oldUrls
+    getIntegrityCount(
+      "old_media_urls"
+    )
   );
 
 
   setNumber(
     integrityMissingFilesize,
-    missingFilesize
+    getIntegrityCount(
+      "missing_filesize"
+    )
   );
 
 
   setNumber(
     integrityMissingDuration,
-    missingDuration
+    getIntegrityCount(
+      "missing_duration"
+    )
   );
 
 
   setNumber(
     integrityMissingResolution,
-    missingResolution
+    getIntegrityCount(
+      "missing_resolution"
+    )
   );
 
 
   setNumber(
     integrityMissingFingerprint,
-    missingFingerprint
+    getIntegrityCount(
+      "missing_fingerprint"
+    )
   );
 
 
   /*
-   * Duplicate URLs are a strong integrity problem.
+   * Apply a visual state to each diagnostic card.
+   *
+   * Duplicate fingerprints are warnings rather than automatic errors
+   * because two catalogue rows can legitimately refer to technically
+   * identical media.
    */
   setIntegrityCardState(
     "duplicate_urls",
-    duplicateUrls === 0
+    getIntegrityCount(
+      "duplicate_urls"
+    ) === 0
       ? "healthy"
       : "problem"
   );
 
 
-  /*
-   * Duplicate fingerprints need human review rather than automatic
-   * deletion because two legitimate catalogue records can potentially
-   * reference identical media.
-   */
   setIntegrityCardState(
     "duplicate_fingerprints",
-    duplicateFingerprints === 0
+    getIntegrityCount(
+      "duplicate_fingerprints"
+    ) === 0
       ? "healthy"
       : "warning"
   );
@@ -5757,7 +4031,9 @@ function renderCatalogueIntegrity(
 
   setIntegrityCardState(
     "videos_without_actors",
-    noActors === 0
+    getIntegrityCount(
+      "videos_without_actors"
+    ) === 0
       ? "healthy"
       : "warning"
   );
@@ -5765,15 +4041,19 @@ function renderCatalogueIntegrity(
 
   setIntegrityCardState(
     "old_media_urls",
-    oldUrls === 0
+    getIntegrityCount(
+      "old_media_urls"
+    ) === 0
       ? "healthy"
-      : "problem"
+      : "warning"
   );
 
 
   setIntegrityCardState(
     "missing_filesize",
-    missingFilesize === 0
+    getIntegrityCount(
+      "missing_filesize"
+    ) === 0
       ? "healthy"
       : "warning"
   );
@@ -5781,7 +4061,9 @@ function renderCatalogueIntegrity(
 
   setIntegrityCardState(
     "missing_duration",
-    missingDuration === 0
+    getIntegrityCount(
+      "missing_duration"
+    ) === 0
       ? "healthy"
       : "warning"
   );
@@ -5789,7 +4071,9 @@ function renderCatalogueIntegrity(
 
   setIntegrityCardState(
     "missing_resolution",
-    missingResolution === 0
+    getIntegrityCount(
+      "missing_resolution"
+    ) === 0
       ? "healthy"
       : "warning"
   );
@@ -5797,12 +4081,18 @@ function renderCatalogueIntegrity(
 
   setIntegrityCardState(
     "missing_fingerprint",
-    missingFingerprint === 0
+    getIntegrityCount(
+      "missing_fingerprint"
+    ) === 0
       ? "healthy"
       : "warning"
   );
 
 
+  /*
+   * A refresh invalidates the currently-open detail panel because its
+   * rows may no longer correspond to the latest snapshot.
+   */
   closeIntegrityResults();
 
 
@@ -5811,83 +4101,108 @@ function renderCatalogueIntegrity(
 
 
 /**
- * Returns a count from a Catalogue Integrity section.
- *
- * zulu_catalogue_integrity() sections are expected to use:
- *
- *     {
- *       count: 7,
- *       rows: [...]
- *     }
- *
- * The fallback also accepts an array directly.
+ * Returns a safe numeric count for one Catalogue Integrity group.
  */
 function getIntegrityCount(
-  integrity,
   key
 ) {
 
-  const section =
-    integrity?.[
+  const result =
+    currentIntegrityData?.[
       key
     ];
 
 
   if (
-    Array.isArray(
-      section
-    )
+    result === null ||
+    result === undefined
   ) {
 
-    return section.length;
+    return 0;
+  }
+
+
+  if (
+    typeof result ===
+      "number"
+  ) {
+
+    return Number.isFinite(
+      result
+    )
+      ? result
+      : 0;
   }
 
 
   const count =
     Number(
-      section?.count
+      result.count
     );
 
 
-  return Number.isFinite(
-    count
-  )
-    ? count
-    : 0;
-}
-
-
-/**
- * Returns detailed rows from one Catalogue Integrity section.
- */
-function getIntegrityRows(
-  integrity,
-  key
-) {
-
-  const section =
-    integrity?.[
-      key
-    ];
-
-
   if (
-    Array.isArray(
-      section
+    Number.isFinite(
+      count
     )
   ) {
 
-    return section;
+    return count;
   }
 
 
   if (
     Array.isArray(
-      section?.rows
+      result.rows
     )
   ) {
 
-    return section.rows;
+    return result.rows.length;
+  }
+
+
+  return 0;
+}
+
+
+/**
+ * Returns a safe rows array for one Catalogue Integrity group.
+ */
+function getIntegrityRows(
+  key
+) {
+
+  const result =
+    currentIntegrityData?.[
+      key
+    ];
+
+
+  if (
+    !result
+  ) {
+
+    return [];
+  }
+
+
+  if (
+    Array.isArray(
+      result
+    )
+  ) {
+
+    return result;
+  }
+
+
+  if (
+    Array.isArray(
+      result.rows
+    )
+  ) {
+
+    return result.rows;
   }
 
 
@@ -5896,7 +4211,7 @@ function getIntegrityRows(
 
 
 /**
- * Applies the state class to a Catalogue Integrity card.
+ * Applies a health state to one Catalogue Integrity card.
  */
 function setIntegrityCardState(
   key,
@@ -5934,7 +4249,8 @@ function setIntegrityCardState(
 
 
 /**
- * Displays a Catalogue Integrity failure.
+ * Displays a Catalogue Integrity failure without affecting the storage
+ * reconciliation sections.
  */
 function renderCatalogueIntegrityError(
   error
@@ -5944,24 +4260,51 @@ function renderCatalogueIntegrityError(
     null;
 
 
-  const values = [
+  setText(
     integrityDuplicateUrls,
+    "—"
+  );
+
+
+  setText(
     integrityDuplicateFingerprints,
+    "—"
+  );
+
+
+  setText(
     integrityNoActors,
+    "—"
+  );
+
+
+  setText(
     integrityOldUrls,
+    "—"
+  );
+
+
+  setText(
     integrityMissingFilesize,
+    "—"
+  );
+
+
+  setText(
     integrityMissingDuration,
+    "—"
+  );
+
+
+  setText(
     integrityMissingResolution,
-    integrityMissingFingerprint
-  ];
+    "—"
+  );
 
 
-  values.forEach(
-    element =>
-      setText(
-        element,
-        "—"
-      )
+  setText(
+    integrityMissingFingerprint,
+    "—"
   );
 
 
@@ -5988,23 +4331,13 @@ function renderCatalogueIntegrityError(
     );
 
 
-  if (
-    integrityResultsBody
-  ) {
-
-    integrityResultsBody.innerHTML =
-      `
-        <div class="admin-integrity-empty">
-          ${escapeHtml(
-            error?.message ||
-            "Catalogue Integrity is unavailable."
-          )}
-        </div>
-      `;
-  }
-
-
   closeIntegrityResults();
+
+
+  console.error(
+    "CATALOGUE INTEGRITY ERROR:",
+    error
+  );
 }
 
 
@@ -6013,7 +4346,7 @@ function renderCatalogueIntegrityError(
 ===================================================================== */
 
 /**
- * Opens one Catalogue Integrity diagnostic result.
+ * Opens one Catalogue Integrity diagnostic group.
  */
 function openIntegrityResult(
   key
@@ -6030,7 +4363,6 @@ function openIntegrityResult(
 
   const rows =
     getIntegrityRows(
-      currentIntegrityData,
       key
     );
 
@@ -6062,7 +4394,7 @@ function openIntegrityResult(
       "Videos Without Actors",
 
     old_media_urls:
-      "Old Media URLs",
+      "Non-current Media URLs",
 
     missing_filesize:
       "Missing Filesize",
@@ -6109,17 +4441,12 @@ function openIntegrityResult(
   }
 
 
-  if (
-    key ===
-      "duplicate_fingerprints"
-  ) {
-
-    attachDuplicateVideoEvents();
-
-    attachDuplicateKeepBothEvents();
-
-    attachDuplicateConsolidateEvents();
-  }
+  /*
+   * Duplicate controls are dynamically created by the renderer.
+   */
+  attachDuplicateVideoEvents();
+  attachDuplicateKeepBothEvents();
+  attachDuplicateConsolidateEvents();
 
 
   window.lucide?.createIcons();
@@ -6127,7 +4454,7 @@ function openIntegrityResult(
 
 
 /**
- * Closes Catalogue Integrity diagnostics.
+ * Closes the Catalogue Integrity diagnostic panel.
  */
 function closeIntegrityResults() {
 
@@ -6156,7 +4483,7 @@ function closeIntegrityResults() {
 
 
 /**
- * Converts Catalogue Integrity rows to HTML.
+ * Converts one Catalogue Integrity diagnostic collection to HTML.
  */
 function renderIntegrityRows(
   key,
@@ -6170,20 +4497,36 @@ function renderIntegrityRows(
     !rows.length
   ) {
 
-    return `
-      <div class="admin-integrity-empty">
-        ✓ No issues found.
-      </div>
-    `;
+    return renderEmptyResult(
+      "✓ No issues found."
+    );
+  }
+
+
+  if (
+    key ===
+      "duplicate_fingerprints"
+  ) {
+
+    return rows
+      .map(
+        group =>
+          renderDuplicateFingerprintGroup(
+            group
+          )
+      )
+      .join(
+        ""
+      );
   }
 
 
   return rows
     .map(
-      row =>
+      item =>
         renderIntegrityRow(
           key,
-          row
+          item
         )
     )
     .join(
@@ -6193,561 +4536,542 @@ function renderIntegrityRows(
 
 
 /**
- * Renders one Catalogue Integrity diagnostic record.
- *
- * The RPC can return ordinary video rows as well as duplicate groups,
- * so this renderer intentionally supports both structures.
+ * Renders one non-fingerprint Catalogue Integrity row.
  */
 function renderIntegrityRow(
   key,
-  row
+  item
 ) {
 
-  /* -------------------------------------------------------------------
-     DUPLICATE FINGERPRINT GROUPS
-  ------------------------------------------------------------------- */
-
-  if (
-    key ===
-      "duplicate_fingerprints"
-  ) {
-
-    return renderDuplicateFingerprintGroup(
-      row
+  const uid =
+    firstValue(
+      item?.uid,
+      item?.video_uid
     );
-  }
 
 
-  /* -------------------------------------------------------------------
-     DUPLICATE URL GROUPS
-  ------------------------------------------------------------------- */
+  const film =
+    firstValue(
+      item?.film,
+      item?.title,
+      "Untitled"
+    );
 
-  if (
-    key ===
-      "duplicate_urls"
+
+  const url =
+    firstValue(
+      item?.url,
+      item?.video_url
+    );
+
+
+  switch (
+    key
   ) {
 
-    const videos =
-      row.videos ||
-      row.rows ||
-      row.items ||
-      [];
+    case "duplicate_urls":
 
+      return `
+        <div class="admin-integrity-result">
 
-    const groupValue =
-      row.url ||
-      row.value ||
-      row.duplicate_value ||
-      "";
+          <div class="admin-integrity-result-title">
+            ${escapeHtml(
+              film
+            )}
+          </div>
 
+          <div class="admin-integrity-result-meta">
 
-    return `
-      <div class="admin-integrity-result">
+            ${
+              uid !==
+                null &&
+              uid !==
+                undefined
+                ? `
+                    <div>
+                      <strong>UID:</strong>
+                      ${escapeHtml(
+                        uid
+                      )}
+                    </div>
+                  `
+                : ""
+            }
 
-        <div class="admin-integrity-result-title">
+            <div>
+              <strong>URL:</strong>
+              <span class="admin-integrity-file">
+                ${escapeHtml(
+                  url ||
+                  "Unavailable"
+                )}
+              </span>
+            </div>
 
-          <span class="admin-integrity-result-film">
-            Duplicate URL group
-          </span>
+            ${renderGenericIntegrityMeta(
+              item
+            )}
+
+          </div>
 
         </div>
+      `;
 
 
-        ${
-          groupValue
-            ? `
-                <div class="admin-integrity-result-meta">
+    case "videos_without_actors":
 
-                  <div>
+      return `
+        <div class="admin-integrity-result">
 
-                    <strong>
-                      URL:
-                    </strong>
+          <div class="admin-integrity-result-title">
 
-                    <span class="admin-integrity-file">
-                      ${escapeHtml(
-                        groupValue
+            ${
+              uid !==
+                null &&
+              uid !==
+                undefined
+                ? `
+                    <span class="admin-integrity-result-uid">
+                      UID ${escapeHtml(
+                        uid
                       )}
                     </span>
+                  `
+                : ""
+            }
 
-                  </div>
+            <span>
+              ${escapeHtml(
+                film
+              )}
+            </span>
 
-                </div>
-              `
-            : ""
-        }
+          </div>
+
+          <div class="admin-integrity-result-meta">
+
+            ${
+              url
+                ? `
+                    <div>
+                      <strong>URL:</strong>
+                      <span class="admin-integrity-file">
+                        ${escapeHtml(
+                          url
+                        )}
+                      </span>
+                    </div>
+                  `
+                : ""
+            }
+
+            ${renderGenericIntegrityMeta(
+              item
+            )}
+
+          </div>
+
+        </div>
+      `;
 
 
-        ${
-          Array.isArray(
-            videos
-          ) &&
-          videos.length
-            ? `
-                <div class="admin-integrity-duplicates">
+    case "old_media_urls":
 
-                  ${videos
-                    .map(
-                      video => `
-                        <div class="admin-integrity-duplicate-item">
+      return `
+        <div class="admin-integrity-result">
 
-                          <strong>
-                            UID ${escapeHtml(
-                              video.uid ??
-                              "—"
-                            )}
-                          </strong>
+          <div class="admin-integrity-result-title">
 
-                          <span>
-                            ${escapeHtml(
-                              video.film ||
-                              video.title ||
-                              "Untitled"
-                            )}
-                          </span>
+            ${
+              uid !==
+                null &&
+              uid !==
+                undefined
+                ? `
+                    <span class="admin-integrity-result-uid">
+                      UID ${escapeHtml(
+                        uid
+                      )}
+                    </span>
+                  `
+                : ""
+            }
 
-                        </div>
-                      `
-                    )
-                    .join(
-                      ""
-                    )}
+            <span>
+              ${escapeHtml(
+                film
+              )}
+            </span>
 
-                </div>
-              `
-            : renderGenericIntegrityMeta(
-                row
+          </div>
+
+          <div class="admin-integrity-result-meta">
+
+            <div>
+              <strong>URL:</strong>
+              <span class="admin-integrity-file">
+                ${escapeHtml(
+                  url ||
+                  "Unavailable"
+                )}
+              </span>
+            </div>
+
+            ${renderGenericIntegrityMeta(
+              item
+            )}
+
+          </div>
+
+        </div>
+      `;
+
+
+    case "missing_filesize":
+    case "missing_duration":
+    case "missing_resolution":
+    case "missing_fingerprint":
+
+      return `
+        <div class="admin-integrity-result">
+
+          <div class="admin-integrity-result-title">
+
+            ${
+              uid !==
+                null &&
+              uid !==
+                undefined
+                ? `
+                    <span class="admin-integrity-result-uid">
+                      UID ${escapeHtml(
+                        uid
+                      )}
+                    </span>
+                  `
+                : ""
+            }
+
+            <span>
+              ${escapeHtml(
+                film
+              )}
+            </span>
+
+          </div>
+
+          <div class="admin-integrity-result-meta">
+
+            ${
+              url
+                ? `
+                    <div>
+                      <strong>URL:</strong>
+                      <span class="admin-integrity-file">
+                        ${escapeHtml(
+                          url
+                        )}
+                      </span>
+                    </div>
+                  `
+                : ""
+            }
+
+            ${renderGenericIntegrityMeta(
+              item
+            )}
+
+          </div>
+
+        </div>
+      `;
+
+
+    default:
+
+      return `
+        <div class="admin-integrity-result">
+
+          <div class="admin-integrity-result-title">
+            ${escapeHtml(
+              film
+            )}
+          </div>
+
+          <div class="admin-integrity-result-meta">
+            ${escapeHtml(
+              safeJson(
+                item
               )
-        }
+            )}
+          </div>
 
-      </div>
-    `;
+        </div>
+      `;
   }
-
-
-  /* -------------------------------------------------------------------
-     ORDINARY VIDEO RECORD
-  ------------------------------------------------------------------- */
-
-  return `
-    <div class="admin-integrity-result">
-
-      <div class="admin-integrity-result-title">
-
-        ${
-          row.uid !==
-            undefined &&
-          row.uid !==
-            null
-            ? `
-                <span class="admin-integrity-result-uid">
-                  UID ${escapeHtml(
-                    row.uid
-                  )}
-                </span>
-              `
-            : ""
-        }
-
-        <span class="admin-integrity-result-film">
-          ${escapeHtml(
-            row.film ||
-            row.title ||
-            "Untitled"
-          )}
-        </span>
-
-      </div>
-
-      ${renderGenericIntegrityMeta(
-        row
-      )}
-
-    </div>
-  `;
 }
 
 
 /**
- * Renders one duplicate-fingerprint group as a detailed comparison.
-
+ * Renders one duplicate-fingerprint group.
  *
- * The zulu-admin-dashboard Edge Function enriches each fingerprint
- * diagnostic with the complete zulu_videos rows belonging to that group.
+ * IMPORTANT:
  *
- * No catalogue row or Backblaze object is changed merely by rendering
- * this comparison.
+ * Matching fingerprints are diagnostic evidence only. They are not
+ * treated as sufficient evidence to delete anything automatically.
+ *
+ * The user must explicitly choose what to do with the group.
  */
 function renderDuplicateFingerprintGroup(
-  row
+  group
 ) {
 
   const fingerprint =
-    String(
-      row?.fingerprint ||
-      row?.value ||
-      row?.duplicate_value ||
+    firstValue(
+      group?.fingerprint,
+      group?.value,
       ""
     );
 
 
   const videos =
-    Array.isArray(
-      row?.videos
-    )
-      ? row.videos
-      : [];
-
-
-  /* -------------------------------------------------------------------
-     FALLBACK
-
-     If the updated zulu-admin-dashboard has not yet been deployed, or
-     if it could not enrich this group, show the original diagnostic
-     information rather than rendering a blank result.
-  ------------------------------------------------------------------- */
-
-  if (
-    !videos.length
-  ) {
-
-    const uids =
-      Array.isArray(
-        row?.uids
+    asArray(
+      firstValue(
+        group?.videos,
+        group?.rows,
+        group?.items,
+        []
       )
-        ? row.uids
-        : (
-            row?.uid !==
-              undefined &&
-            row?.uid !==
-              null
-              ? [
-                  row.uid
-                ]
-              : []
-          );
-
-
-    return `
-      <div class="admin-duplicate-group">
-
-        <div class="admin-duplicate-group-header">
-
-          <div>
-
-            <div class="admin-duplicate-label">
-              DUPLICATE FINGERPRINT GROUP
-            </div>
-
-            <div class="admin-duplicate-fingerprint">
-              ${escapeHtml(
-                fingerprint ||
-                "Unknown fingerprint"
-              )}
-            </div>
-
-          </div>
-
-
-          ${
-            uids.length
-              ? `
-                  <div class="admin-duplicate-count">
-                    ${escapeHtml(
-                      uids.length
-                    )}
-                    ${
-                      uids.length === 1
-                        ? "record"
-                        : "records"
-                    }
-                  </div>
-                `
-              : ""
-          }
-
-        </div>
-
-
-        <div class="admin-duplicate-warning">
-
-          Detailed catalogue records are unavailable.
-
-          Refresh Admin after deploying the updated
-          zulu-admin-dashboard Edge Function.
-
-        </div>
-
-
-        ${
-          uids.length
-            ? `
-                <div class="admin-duplicate-fallback-uids">
-
-                  ${
-                    uids
-                      .map(
-                        uid => `
-                          <span>
-                            UID ${escapeHtml(
-                              uid
-                            )}
-                          </span>
-                        `
-                      )
-                      .join(
-                        ""
-                      )
-                  }
-
-                </div>
-              `
-            : ""
-        }
-
-      </div>
-    `;
-  }
-
-
-  /* -------------------------------------------------------------------
-     COMPARE THE CATALOGUE RECORDS
-  ------------------------------------------------------------------- */
-
-  const comparison =
-    compareDuplicateVideos(
-      videos
     );
 
 
-  /* -------------------------------------------------------------------
-     RENDER
-  ------------------------------------------------------------------- */
+  /*
+   * Some versions of the integrity RPC may return one row per duplicate
+   * rather than a nested videos array.
+   */
+  const fallbackVideos =
+    videos.length
+      ? videos
+      : asArray(
+          group
+        );
+
+
+  const reviewDecision =
+    firstValue(
+      group?.review_decision,
+      group?.decision,
+      ""
+    );
+
+
+  const survivorUid =
+    firstValue(
+      group?.survivor_uid,
+      group?.survivorUid
+    );
+
+
+  const removedUid =
+    firstValue(
+      group?.removed_uid,
+      group?.removedUid
+    );
+
 
   return `
-    <div class="admin-duplicate-group">
+    <div
+      class="admin-duplicate-group"
+      data-duplicate-fingerprint="${escapeHtml(
+        fingerprint
+      )}"
+    >
 
       <div class="admin-duplicate-group-header">
 
         <div>
 
-          <div class="admin-duplicate-label">
-            DUPLICATE FINGERPRINT GROUP
+          <div class="admin-duplicate-group-title">
+            Duplicate fingerprint
           </div>
 
           <div class="admin-duplicate-fingerprint">
             ${escapeHtml(
               fingerprint ||
-              "Unknown fingerprint"
+              "Unavailable"
             )}
           </div>
 
         </div>
 
 
-        <div class="admin-duplicate-count">
-
+        <div class="admin-duplicate-group-count">
           ${escapeHtml(
-            videos.length
+            fallbackVideos.length
           )}
-
           ${
-            videos.length === 1
-              ? "record"
-              : "records"
+            fallbackVideos.length ===
+              1
+              ? "video"
+              : "videos"
           }
-
         </div>
 
       </div>
 
 
-      <div class="admin-duplicate-video-grid">
+      ${
+        reviewDecision
+          ? `
+              <div class="admin-duplicate-review-state">
 
-        ${
-          videos
-            .map(
-              video =>
-                renderDuplicateVideoCard(
-                  video
-                )
-            )
-            .join(
-              ""
-            )
-        }
-
-      </div>
-
-
-      <div class="admin-duplicate-comparison">
-
-        ${renderDuplicateComparisonRow(
-          "Fingerprint",
-          comparison.sameFingerprint,
-          comparison.sameFingerprint
-            ? "Identical"
-            : "Different"
-        )}
-
-
-        ${renderDuplicateComparisonRow(
-          "Filesize",
-          comparison.sameFilesize,
-          comparison.sameFilesize
-            ? "Identical"
-            : "Different"
-        )}
-
-
-        ${renderDuplicateComparisonRow(
-          "Duration",
-          comparison.sameDuration,
-          comparison.sameDuration
-            ? "Identical"
-            : "Different"
-        )}
-
-
-        ${renderDuplicateComparisonRow(
-          "Resolution",
-          comparison.sameResolution,
-          comparison.sameResolution
-            ? "Identical"
-            : "Different"
-        )}
-
-
-        ${renderDuplicateComparisonRow(
-          "Film title",
-          comparison.sameFilm,
-          comparison.sameFilm
-            ? "Identical"
-            : "Different"
-        )}
-
-
-        ${renderDuplicateComparisonRow(
-          "Media URL",
-          comparison.sameUrl,
-          comparison.sameUrl
-            ? "Identical"
-            : "Different"
-        )}
-
-      </div>
-
-
-      <div
-        class="
-          admin-duplicate-review-note
-          ${
-            comparison.allTechnicalMetadataMatches
-              ? "is-strong-match"
-              : "is-investigation"
-          }
-        "
-      >
-
-        ${
-          comparison.allTechnicalMetadataMatches
-            ? `
                 <strong>
-                  Strong duplicate match.
+                  Review:
                 </strong>
 
-                The fingerprint, filesize, duration and
-                resolution agree. Review the catalogue
-                titles and media URLs before deciding
-                whether these records should be
-                consolidated.
-              `
-            : `
-                <strong>
-                  Manual investigation required.
-                </strong>
+                ${escapeHtml(
+                  humaniseStatus(
+                    reviewDecision
+                  )
+                )}
 
-                These catalogue records share a
-                fingerprint, but one or more technical
-                properties differ. They should not be
-                automatically consolidated.
-              `
-        }
+                ${
+                  survivorUid !==
+                    null &&
+                  survivorUid !==
+                    undefined
+                    ? `
+                        · Survivor UID
+                        ${escapeHtml(
+                          survivorUid
+                        )}
+                      `
+                    : ""
+                }
 
-      </div>
+                ${
+                  removedUid !==
+                    null &&
+                  removedUid !==
+                    undefined
+                    ? `
+                        · Removed UID
+                        ${escapeHtml(
+                          removedUid
+                        )}
+                      `
+                    : ""
+                }
 
-
-      <div class="admin-duplicate-actions">
-
-        <button
-          type="button"
-          class="
-            admin-button
-            admin-button-secondary
-            admin-duplicate-keep-button
-          "
-          data-duplicate-keep-both="${escapeHtml(
-            fingerprint
-          )}"
-          disabled
-          title="No current duplicate groups have been designated Keep Both."
-        >
-
-          <i data-lucide="copy-check"></i>
-
-          <span>
-            Keep Both
-          </span>
-
-        </button>
+              </div>
+            `
+          : ""
+      }
 
 
-        <button
-          type="button"
-          class="
-            admin-button
-            admin-duplicate-consolidate-button
-          "
-          data-duplicate-consolidate="${escapeHtml(
-            fingerprint
-          )}"
-          ${
-            comparison.allTechnicalMetadataMatches &&
-            videos.length === 2
-              ? ""
-              : "disabled"
-          }
-          title="${
-            comparison.allTechnicalMetadataMatches &&
-            videos.length === 2
-              ? "Review and consolidate these duplicate catalogue records."
-              : "Automatic consolidation requires exactly two records with matching technical metadata."
-          }"
-        >
+      <div class="admin-duplicate-video-list">
 
-          <i data-lucide="combine"></i>
-
-          <span>
-            Consolidate Duplicate
-          </span>
-
-        </button>
+        ${fallbackVideos
+          .map(
+            video =>
+              renderDuplicateVideoCard(
+                video,
+                fingerprint
+              )
+          )
+          .join(
+            ""
+          )}
 
       </div>
+
+
+      ${
+        fallbackVideos.length ===
+          2
+          ? `
+              <div class="admin-duplicate-actions">
+
+                <button
+                  type="button"
+                  class="admin-duplicate-compare-button"
+                  data-duplicate-compare="${escapeHtml(
+                    fingerprint
+                  )}"
+                >
+                  <i data-lucide="columns-3"></i>
+                  <span>Compare</span>
+                </button>
+
+
+                <button
+                  type="button"
+                  class="admin-duplicate-consolidate-button"
+                  data-duplicate-consolidate="${escapeHtml(
+                    fingerprint
+                  )}"
+                >
+                  <i data-lucide="merge"></i>
+                  <span>Consolidate</span>
+                </button>
+
+
+                <button
+                  type="button"
+                  class="admin-duplicate-keep-both-button"
+                  data-duplicate-keep-both="${escapeHtml(
+                    fingerprint
+                  )}"
+                >
+                  <i data-lucide="copy-check"></i>
+                  <span>Keep Both</span>
+                </button>
+
+              </div>
+
+
+              <div
+                class="admin-duplicate-comparison"
+                data-duplicate-comparison="${escapeHtml(
+                  fingerprint
+                )}"
+                hidden
+              ></div>
+
+
+              <div
+                class="admin-duplicate-consolidation"
+                data-duplicate-consolidation="${escapeHtml(
+                  fingerprint
+                )}"
+                hidden
+              ></div>
+
+
+              <div
+                class="admin-duplicate-message"
+                data-duplicate-message="${escapeHtml(
+                  fingerprint
+                )}"
+                hidden
+              ></div>
+            `
+          : `
+              <div class="admin-duplicate-warning">
+                Automatic consolidation is available only for an exact
+                two-video duplicate group.
+              </div>
+            `
+      }
 
     </div>
   `;
 }
 
-
-/* =====================================================================
-   DUPLICATE CONSOLIDATION
-===================================================================== */
-
 /**
- * Attaches the protected duplicate-consolidation controls.
+ * Attaches the Consolidate controls for duplicate-fingerprint groups.
  *
- * Consolidation deliberately uses two separate server requests:
+ * Consolidation is intentionally a two-step server-backed process:
  *
  *     1. preview_consolidation
  *     2. consolidate_duplicate
@@ -7573,6 +5897,7 @@ function attachDuplicateConsolidationPreviewEvents(
   );
 }
 
+
 /**
  * Removes any inline consolidation confirmation, success or error message.
  */
@@ -7816,6 +6141,7 @@ function showDuplicateConsolidationError(
     actions
   );
 }
+
 
 /**
  * Performs the final protected consolidation request.
@@ -8548,6 +6874,7 @@ function attachDuplicateKeepBothEvents() {
     );
 }
 
+
 /**
  * Compares the fields that help determine whether catalogue records
  * appear to represent the same physical video.
@@ -8710,6 +7037,9 @@ function normaliseDuplicateNumber(
 
   const number =
     Number(
+      value
+    );
+
       value
     );
 
@@ -9400,6 +7730,7 @@ function createIngestionRow(
   return row;
 }
 
+
 /**
  * Creates the hidden diagnostics row belonging to an ingestion summary
  * row.
@@ -9710,7 +8041,6 @@ function getVideoState(
         "muted"
     };
   }
-
 
   return {
     label:
@@ -10262,6 +8592,7 @@ function getStatusConfig(
       };
   }
 }
+
 
 /* =====================================================================
    22. COMPONENT STATE RENDERING
@@ -11218,6 +9549,7 @@ function getErrorMessage(
 
   return fallback;
 }
+
 
 /* =====================================================================
    37. SAFE JSON DISPLAY
