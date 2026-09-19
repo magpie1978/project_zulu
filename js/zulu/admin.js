@@ -450,28 +450,28 @@ const thumbnailResultsClose =
    02. DASHBOARD STATE
 ===================================================================== */
 
-/*
+/**
  * Latest Catalogue Integrity snapshot.
  */
 let currentIntegrityData =
   null;
 
 
-/*
+/**
  * Latest Video Storage Health snapshot.
  */
 let currentVideoHealthData =
   null;
 
 
-/*
+/**
  * Latest Thumbnail Health snapshot.
  */
 let currentThumbnailData =
   null;
 
 
-/*
+/**
  * UID currently undergoing Stage 10.1 thumbnail repair.
  *
  * thumbnails.js maintains shared thumbnail-candidate state. Only one
@@ -1113,7 +1113,6 @@ async function loadThumbnailHealth() {
 
   return data;
 }
-
 
 /* =====================================================================
    09. LIBRARY SUMMARY
@@ -2028,7 +2027,6 @@ function renderVideoHealthRows(
     );
 }
 
-
 /**
  * Renders one Video Storage Health diagnostic row.
  *
@@ -2229,6 +2227,7 @@ function renderVideoHealthRow(
     </div>
   `;
 }
+
 
 /* =====================================================================
    13. THUMBNAIL HEALTH
@@ -2774,11 +2773,11 @@ function openThumbnailResult(
    * Stage 10.1 repair buttons are dynamically created when the Missing
    * diagnostic panel is rendered.
    */
-    attachThumbnailRepairEvents();
-    attachThumbnailDeleteEvents();
-    
-    
-    window.lucide?.createIcons();
+  attachThumbnailRepairEvents();
+  attachThumbnailDeleteEvents();
+
+
+  window.lucide?.createIcons();
 }
 
 
@@ -3254,33 +3253,11 @@ function renderInvalidThumbnail(
 
         </div>
 
-
-        ${
-          item.file_id
-            ? `
-                <div>
-
-                  <strong>
-                    B2 file ID:
-                  </strong>
-
-                  <span class="admin-thumbnail-file">
-                    ${escapeHtml(
-                      item.file_id
-                    )}
-                  </span>
-
-                </div>
-              `
-            : ""
-        }
-
       </div>
 
     </div>
   `;
 }
-
 
 /* =====================================================================
    15. MISSING THUMBNAIL REPAIR — STAGE 10.1
@@ -3876,83 +3853,84 @@ async function repairMissingThumbnail(
       );
 
 
-/* ===============================================================
-   STEP 2B — LET USER CHOOSE THE FRAME
-=============================================================== */
+    /* ===============================================================
+       STEP 2B — LET USER CHOOSE THE FRAME
+    =============================================================== */
 
     showThumbnailRepairCandidatePicker(
       uid
     );
-    
-    
+
+
     setThumbnailRepairButtonText(
       button,
       "Choose Thumbnail"
     );
-    
-    
+
+
     setThumbnailRepairStatus(
       uid,
       "Choose a thumbnail, then press Upload Thumbnail.",
       "working"
     );
-    
-    
+
+
     const choice =
       await waitForThumbnailRepairChoice(
         uid
       );
-    
-    
+
+
     if (
       choice === "cancel"
     ) {
-    
+
       setThumbnailRepairStatus(
         uid,
         "Thumbnail repair cancelled.",
         ""
       );
-    
-    
+
+
       if (
         button
       ) {
-    
+
         button.classList.remove(
           "is-working",
           "is-error",
           "is-success"
         );
-    
-    
+
+
         button.innerHTML =
           `
             <i data-lucide="wand-sparkles"></i>
             <span>Repair Thumbnail</span>
           `;
       }
-    
-    
+
+
       window.lucide?.createIcons();
-    
-    
+
+
       return;
     }
-    
-    
+
+
     const thumbnailBlob =
       getSelectedThumbnailBlob();
-    
-    
+
+
     if (
       !thumbnailBlob
     ) {
-    
+
       throw new Error(
         "No thumbnail candidate is selected."
       );
     }
+
 
     /* ===============================================================
        STEP 3 — UPLOAD images/{uid}.png
@@ -4826,6 +4804,7 @@ async function deleteOrphanedThumbnail(
 
     window.lucide?.createIcons();
 
+
   } finally {
 
     deletingThumbnailUid =
@@ -4837,7 +4816,6 @@ async function deleteOrphanedThumbnail(
     );
   }
 }
-
 
 /**
  * Enables/disables all currently-rendered Delete Orphan buttons.
@@ -5427,18 +5405,22 @@ function openIntegrityResult(
   }
 
 
-if (
-  key ===
-    "duplicate_fingerprints"
-) {
+  if (
+    key ===
+      "duplicate_fingerprints"
+  ) {
 
-  attachDuplicateVideoEvents();
+    attachDuplicateVideoEvents();
 
-  attachDuplicateKeepBothEvents();
-}
+    attachDuplicateKeepBothEvents();
+
+    attachDuplicateConsolidateEvents();
+  }
+
 
   window.lucide?.createIcons();
 }
+
 
 /**
  * Closes Catalogue Integrity diagnostics.
@@ -5512,7 +5494,6 @@ function renderIntegrityRows(
  * The RPC can return ordinary video rows as well as duplicate groups,
  * so this renderer intentionally supports both structures.
  */
-
 function renderIntegrityRow(
   key,
   row
@@ -5685,16 +5666,13 @@ function renderIntegrityRow(
 
 /**
  * Renders one duplicate-fingerprint group as a detailed comparison.
+
  *
  * The zulu-admin-dashboard Edge Function enriches each fingerprint
  * diagnostic with the complete zulu_videos rows belonging to that group.
  *
- * Stage 10.4A is deliberately READ ONLY.
- *
- * No catalogue row or Backblaze object can be changed from this renderer.
- * The purpose of this view is to establish whether the records really do
- * appear to represent the same physical video before repair controls are
- * introduced.
+ * No catalogue row or Backblaze object is changed merely by rendering
+ * this comparison.
  */
 function renderDuplicateFingerprintGroup(
   row
@@ -5999,16 +5977,24 @@ function renderDuplicateFingerprintGroup(
 
         <button
           type="button"
-          class="admin-button admin-button-secondary admin-duplicate-keep-button"
+          class="
+            admin-button
+            admin-button-secondary
+            admin-duplicate-keep-button
+          "
           data-duplicate-keep-both="${escapeHtml(
             fingerprint
           )}"
+          disabled
+          title="No current duplicate groups have been designated Keep Both."
         >
+
           <i data-lucide="copy-check"></i>
-        
+
           <span>
             Keep Both
           </span>
+
         </button>
 
 
@@ -6018,8 +6004,21 @@ function renderDuplicateFingerprintGroup(
             admin-button
             admin-duplicate-consolidate-button
           "
-          disabled
-          title="Protected server-side consolidation will be enabled in Stage 10.4B."
+          data-duplicate-consolidate="${escapeHtml(
+            fingerprint
+          )}"
+          ${
+            comparison.allTechnicalMetadataMatches &&
+            videos.length === 2
+              ? ""
+              : "disabled"
+          }
+          title="${
+            comparison.allTechnicalMetadataMatches &&
+            videos.length === 2
+              ? "Review and consolidate these duplicate catalogue records."
+              : "Automatic consolidation requires exactly two records with matching technical metadata."
+          }"
         >
 
           <i data-lucide="combine"></i>
@@ -6034,6 +6033,927 @@ function renderDuplicateFingerprintGroup(
 
     </div>
   `;
+}
+
+
+/* =====================================================================
+   DUPLICATE CONSOLIDATION
+===================================================================== */
+
+/**
+ * Attaches the protected duplicate-consolidation controls.
+ *
+ * Consolidation deliberately uses two separate server requests:
+ *
+ *     1. preview_consolidation
+ *     2. consolidate_duplicate
+ *
+ * The first request is completely read-only.
+ *
+ * The second request is only made after the administrator has:
+ *
+ *     • reviewed both catalogue records
+ *     • explicitly chosen the surviving UID
+ *     • confirmed the destructive catalogue operation
+ *
+ * Physical Backblaze MP4 and thumbnail deletion is NOT performed here.
+ */
+function attachDuplicateConsolidateEvents() {
+
+  document
+    .querySelectorAll(
+      "[data-duplicate-consolidate]"
+    )
+    .forEach(
+      button => {
+
+        button.addEventListener(
+          "click",
+          async () => {
+
+            const fingerprint =
+              button.dataset
+                .duplicateConsolidate;
+
+
+            if (
+              !fingerprint
+            ) {
+
+              return;
+            }
+
+
+            const originalHtml =
+              button.innerHTML;
+
+
+            button.disabled =
+              true;
+
+
+            button.innerHTML = `
+              <i data-lucide="loader-circle"></i>
+
+              <span>
+                Loading Preview…
+              </span>
+            `;
+
+
+            window.lucide?.createIcons();
+
+
+            try {
+
+              const preview =
+                await requestDuplicateConsolidationPreview(
+                  fingerprint
+                );
+
+
+              renderDuplicateConsolidationPreview(
+                button,
+                preview
+              );
+
+
+            } catch (
+              error
+            ) {
+
+              console.error(
+                "DUPLICATE CONSOLIDATION PREVIEW ERROR:",
+                error
+              );
+
+
+              alert(
+                `Could not prepare consolidation: ${
+                  error?.message ||
+                  "Unknown error"
+                }`
+              );
+
+
+              button.disabled =
+                false;
+
+
+              button.innerHTML =
+                originalHtml;
+
+
+              window.lucide?.createIcons();
+            }
+          }
+        );
+      }
+    );
+}
+
+
+/**
+ * Requests the non-destructive consolidation preview from the protected
+ * zulu-catalogue-repair Edge Function.
+ */
+async function requestDuplicateConsolidationPreview(
+  fingerprint
+) {
+
+  const {
+    data,
+    error
+  } =
+    await supabase.functions.invoke(
+      "zulu-catalogue-repair",
+      {
+        body: {
+          action:
+            "preview_consolidation",
+
+          fingerprint
+        }
+      }
+    );
+
+
+  if (
+    error
+  ) {
+
+    throw new Error(
+      error.message ||
+      "Catalogue consolidation preview failed."
+    );
+  }
+
+
+  if (
+    !data ||
+    data.success !== true
+  ) {
+
+    throw new Error(
+      data?.error ||
+      "The catalogue consolidation preview was unsuccessful."
+    );
+  }
+
+
+  if (
+    data.can_consolidate !== true
+  ) {
+
+    throw new Error(
+      "The server does not consider these records safe for automatic consolidation."
+    );
+  }
+
+
+  if (
+    !Array.isArray(
+      data.videos
+    ) ||
+    data.videos.length !== 2
+  ) {
+
+    throw new Error(
+      "Consolidation currently requires exactly two catalogue records."
+    );
+  }
+
+
+  return data;
+}
+
+
+/**
+ * Replaces the duplicate group's action area with the protected
+ * consolidation preview.
+ *
+ * Nothing destructive has happened at this point.
+ */
+function renderDuplicateConsolidationPreview(
+  sourceButton,
+  preview
+) {
+
+  const group =
+    sourceButton.closest(
+      ".admin-duplicate-group"
+    );
+
+
+  if (
+    !group
+  ) {
+
+    throw new Error(
+      "Could not locate the duplicate catalogue group."
+    );
+  }
+
+
+  const actions =
+    group.querySelector(
+      ".admin-duplicate-actions"
+    );
+
+
+  if (
+    !actions
+  ) {
+
+    throw new Error(
+      "Could not locate the duplicate action controls."
+    );
+  }
+
+
+  const videos =
+    preview.videos;
+
+
+  const fingerprint =
+    String(
+      preview.fingerprint ||
+      ""
+    );
+
+
+  actions.innerHTML = `
+    <div class="admin-duplicate-consolidation-preview">
+
+      <div class="admin-duplicate-consolidation-heading">
+
+        <i data-lucide="shield-alert"></i>
+
+        <div>
+
+          <strong>
+            Choose the catalogue record to keep
+          </strong>
+
+          <div>
+            The other catalogue UID will be removed.
+            Its views, actors and ingestion references
+            will be moved to the surviving UID.
+          </div>
+
+        </div>
+
+      </div>
+
+
+      <div class="admin-duplicate-survivor-options">
+
+        ${
+          videos
+            .map(
+              (
+                video,
+                index
+              ) =>
+                renderDuplicateSurvivorOption(
+                  video,
+                  index === 0,
+                  fingerprint
+                )
+            )
+            .join(
+              ""
+            )
+        }
+
+      </div>
+
+
+      ${renderDuplicateConsolidationImpact(
+        preview
+      )}
+
+
+      <div class="admin-duplicate-consolidation-warning">
+
+        <strong>
+          Catalogue operation only.
+        </strong>
+
+        The redundant Backblaze MP4 and thumbnail
+        will NOT be deleted by this operation.
+
+      </div>
+
+
+      <div class="admin-duplicate-actions">
+
+        <button
+          type="button"
+          class="
+            admin-button
+            admin-button-secondary
+            admin-duplicate-consolidation-cancel
+          "
+        >
+
+          <i data-lucide="x"></i>
+
+          <span>
+            Cancel
+          </span>
+
+        </button>
+
+
+        <button
+          type="button"
+          class="
+            admin-button
+            admin-duplicate-consolidation-confirm
+          "
+          data-duplicate-confirm-fingerprint="${escapeHtml(
+            fingerprint
+          )}"
+        >
+
+          <i data-lucide="combine"></i>
+
+          <span>
+            Confirm Consolidation
+          </span>
+
+        </button>
+
+      </div>
+
+    </div>
+  `;
+
+
+  attachDuplicateConsolidationPreviewEvents(
+    group,
+    preview
+  );
+
+
+  window.lucide?.createIcons();
+}
+
+
+/**
+ * Renders one selectable survivor.
+ *
+ * All radio buttons belonging to this fingerprint group deliberately
+ * share one name so exactly one surviving UID can be selected.
+ */
+function renderDuplicateSurvivorOption(
+  video,
+  checked,
+  fingerprint
+) {
+
+  const uid =
+    Number(
+      video.uid
+    );
+
+
+  return `
+    <label class="admin-duplicate-survivor-option">
+
+      <input
+        type="radio"
+        name="duplicate-survivor-${escapeHtml(
+          fingerprint
+        )}"
+        value="${escapeHtml(
+          uid
+        )}"
+        ${checked ? "checked" : ""}
+      >
+
+
+      <span class="admin-duplicate-survivor-main">
+
+        <span class="admin-duplicate-survivor-uid">
+          KEEP UID ${escapeHtml(
+            uid
+          )}
+        </span>
+
+
+        <strong>
+          ${escapeHtml(
+            video.film ||
+            "Untitled"
+          )}
+        </strong>
+
+
+        <span class="admin-duplicate-survivor-file">
+          ${escapeHtml(
+            getDuplicateMediaFilename(
+              video.url
+            ) ||
+            video.url ||
+            "No media URL"
+          )}
+        </span>
+
+
+        <span class="admin-duplicate-survivor-meta">
+
+          ${escapeHtml(
+            video.actors?.length ||
+            0
+          )}
+          actor${
+            Number(
+              video.actors?.length ||
+              0
+            ) === 1
+              ? ""
+              : "s"
+          }
+
+          ·
+
+          ${escapeHtml(
+            video.view_count ||
+            0
+          )}
+          view${
+            Number(
+              video.view_count ||
+              0
+            ) === 1
+              ? ""
+              : "s"
+          }
+
+          ·
+
+          ${escapeHtml(
+            video.ingestion_count ||
+            0
+          )}
+          ingestion record${
+            Number(
+              video.ingestion_count ||
+              0
+            ) === 1
+              ? ""
+              : "s"
+          }
+
+        </span>
+
+      </span>
+
+    </label>
+  `;
+}
+
+
+/**
+ * Displays the server-calculated effects of consolidation.
+ */
+function renderDuplicateConsolidationImpact(
+  preview
+) {
+
+  const videos =
+    preview.videos ||
+    [];
+
+
+  const totalViews =
+    videos.reduce(
+      (
+        total,
+        video
+      ) =>
+        total +
+        Number(
+          video.view_count ||
+          0
+        ),
+      0
+    );
+
+
+  const totalIngestions =
+    videos.reduce(
+      (
+        total,
+        video
+      ) =>
+        total +
+        Number(
+          video.ingestion_count ||
+          0
+        ),
+      0
+    );
+
+
+  const actorSet =
+    new Set();
+
+
+  for (
+    const video of videos
+  ) {
+
+    for (
+      const actor of
+        video.actors ||
+        []
+    ) {
+
+      actorSet.add(
+        String(actor)
+      );
+    }
+  }
+
+
+  return `
+    <div class="admin-duplicate-consolidation-impact">
+
+      <div>
+        <strong>
+          ${escapeHtml(
+            totalViews
+          )}
+        </strong>
+
+        <span>
+          view event${
+            totalViews === 1
+              ? ""
+              : "s"
+          }
+          preserved
+        </span>
+      </div>
+
+
+      <div>
+        <strong>
+          ${escapeHtml(
+            actorSet.size
+          )}
+        </strong>
+
+        <span>
+          unique actor relationship${
+            actorSet.size === 1
+              ? ""
+              : "s"
+          }
+          preserved
+        </span>
+      </div>
+
+
+      <div>
+        <strong>
+          ${escapeHtml(
+            totalIngestions
+          )}
+        </strong>
+
+        <span>
+          ingestion record${
+            totalIngestions === 1
+              ? ""
+              : "s"
+          }
+          preserved
+        </span>
+      </div>
+
+    </div>
+  `;
+}
+
+
+/**
+ * Attaches Cancel and Confirm to a rendered consolidation preview.
+ */
+function attachDuplicateConsolidationPreviewEvents(
+  group,
+  preview
+) {
+
+  const cancelButton =
+    group.querySelector(
+      ".admin-duplicate-consolidation-cancel"
+    );
+
+
+  const confirmButton =
+    group.querySelector(
+      ".admin-duplicate-consolidation-confirm"
+    );
+
+
+  cancelButton?.addEventListener(
+    "click",
+    () => {
+
+      /*
+       * Re-render the complete Duplicate Fingerprints
+       * diagnostic from the current dashboard snapshot.
+       */
+      openIntegrityResult(
+        "duplicate_fingerprints"
+      );
+    }
+  );
+
+
+  confirmButton?.addEventListener(
+    "click",
+    async () => {
+
+      const selected =
+        group.querySelector(
+          'input[type="radio"]:checked'
+        );
+
+
+      if (
+        !selected
+      ) {
+
+        alert(
+          "Choose which catalogue UID should survive."
+        );
+
+        return;
+      }
+
+
+      const survivorUid =
+        Number(
+          selected.value
+        );
+
+
+      const videos =
+        preview.videos ||
+        [];
+
+
+      const survivor =
+        videos.find(
+          video =>
+            Number(
+              video.uid
+            ) ===
+              survivorUid
+        );
+
+
+      const removed =
+        videos.find(
+          video =>
+            Number(
+              video.uid
+            ) !==
+              survivorUid
+        );
+
+
+      if (
+        !survivor ||
+        !removed
+      ) {
+
+        alert(
+          "Could not determine the survivor and duplicate records."
+        );
+
+        return;
+      }
+
+
+      const confirmed =
+        window.confirm(
+          "CONFIRM CATALOGUE CONSOLIDATION\n\n" +
+
+          `KEEP:\nUID ${survivor.uid} — ${
+            survivor.film ||
+            "Untitled"
+          }\n\n` +
+
+          `REMOVE FROM CATALOGUE:\nUID ${removed.uid} — ${
+            removed.film ||
+            "Untitled"
+          }\n\n` +
+
+          "Views, actor relationships and ingestion references will be preserved under the surviving UID.\n\n" +
+
+          "The redundant Backblaze MP4 and thumbnail will NOT be deleted yet.\n\n" +
+
+          "Continue?"
+        );
+
+
+      if (
+        !confirmed
+      ) {
+
+        return;
+      }
+
+
+      await performDuplicateConsolidation(
+        confirmButton,
+        preview.fingerprint,
+        survivor,
+        removed
+      );
+    }
+  );
+}
+
+
+/**
+ * Performs the final protected consolidation request.
+ *
+ * The Edge Function independently revalidates:
+ *
+ *     • both UIDs still exist
+ *     • both fingerprints still match
+ *     • group membership has not changed
+ *     • filesize matches
+ *     • duration matches
+ *     • resolution matches
+ *
+ * The browser therefore cannot force a stale or technically mismatched
+ * consolidation merely by submitting UID values.
+ */
+async function performDuplicateConsolidation(
+  button,
+  fingerprint,
+  survivor,
+  removed
+) {
+
+  const originalHtml =
+    button.innerHTML;
+
+
+  button.disabled =
+    true;
+
+
+  button.innerHTML = `
+    <i data-lucide="loader-circle"></i>
+
+    <span>
+      Consolidating…
+    </span>
+  `;
+
+
+  window.lucide?.createIcons();
+
+
+  try {
+
+    const {
+      data,
+      error
+    } =
+      await supabase.functions.invoke(
+        "zulu-catalogue-repair",
+        {
+          body: {
+
+            action:
+              "consolidate_duplicate",
+
+            fingerprint,
+
+            survivor_uid:
+              Number(
+                survivor.uid
+              ),
+
+            removed_uid:
+              Number(
+                removed.uid
+              )
+          }
+        }
+      );
+
+
+    if (
+      error
+    ) {
+
+      throw new Error(
+        error.message ||
+        "Catalogue consolidation request failed."
+      );
+    }
+
+
+    if (
+      !data ||
+      data.success !== true
+    ) {
+
+      throw new Error(
+        data?.error ||
+        "Catalogue consolidation was unsuccessful."
+      );
+    }
+
+
+    button.innerHTML = `
+      <i data-lucide="circle-check"></i>
+
+      <span>
+        Consolidated
+      </span>
+    `;
+
+
+    window.lucide?.createIcons();
+
+
+    /*
+     * The database operation has succeeded.
+     *
+     * Refresh all three Admin health sources:
+     *
+     *     • Catalogue Integrity
+     *     • Video Storage Health
+     *     • Thumbnail Health
+     *
+     * The redundant physical MP4 / thumbnail should now be visible
+     * through the relevant orphan diagnostics.
+     */
+    await refreshAdmin();
+
+
+    /*
+     * Reopen Duplicate Fingerprints using the newly loaded dashboard
+     * snapshot. The successfully consolidated pair should have vanished.
+     */
+    openIntegrityResult(
+      "duplicate_fingerprints"
+    );
+
+
+    alert(
+      `Catalogue consolidation complete.\n\n` +
+
+      `Surviving UID: ${survivor.uid}\n` +
+
+      `Removed UID: ${removed.uid}\n\n` +
+
+      "The redundant physical MP4 and thumbnail have not been deleted. " +
+
+      "Check Video Storage Health and Thumbnail Health for the resulting orphaned objects."
+    );
+
+
+  } catch (
+    error
+  ) {
+
+    console.error(
+      "DUPLICATE CONSOLIDATION ERROR:",
+      error
+    );
+
+
+    alert(
+      `Could not consolidate duplicate: ${
+        error?.message ||
+        "Unknown error"
+      }`
+    );
+
+
+    button.disabled =
+      false;
+
+
+    button.innerHTML =
+      originalHtml;
+
+
+    window.lucide?.createIcons();
+  }
 }
 
 
@@ -6229,13 +7149,13 @@ function renderDuplicateVideoCard(
                 url
               )}"
             >
-            
+
               <i data-lucide="play"></i>
-            
+
               <span>
                 Open Video
               </span>
-            
+
             </button>
             `
           : ""
@@ -6244,7 +7164,6 @@ function renderDuplicateVideoCard(
     </div>
   `;
 }
-
 
 
 /**
@@ -6355,15 +7274,13 @@ function attachDuplicateVideoEvents() {
 }
 
 
-
 /**
  * Attaches the Keep Both controls for duplicate-fingerprint groups.
  *
- * Keep Both is a non-destructive catalogue-review action.
- *
- * The browser does not write directly to zulu_duplicate_reviews.
- * Instead it asks the protected zulu-catalogue-repair Edge Function
- * to revalidate the fingerprint and record the decision.
+ * Keep Both remains implemented for future use, but the current
+ * duplicate renderer disables its button because the present duplicate
+ * groups are intended for consolidation rather than intentional
+ * retention.
  */
 function attachDuplicateKeepBothEvents() {
 
@@ -6377,6 +7294,19 @@ function attachDuplicateKeepBothEvents() {
         button.addEventListener(
           "click",
           async () => {
+
+            /*
+             * Disabled Keep Both buttons cannot normally trigger this
+             * handler. Keep this guard so the action remains protected
+             * even if the DOM is changed manually.
+             */
+            if (
+              button.disabled
+            ) {
+
+              return;
+            }
+
 
             const fingerprint =
               button.dataset
@@ -6481,10 +7411,6 @@ function attachDuplicateKeepBothEvents() {
               window.lucide?.createIcons();
 
 
-              /*
-               * Reload the dashboard so that all diagnostic information
-               * reflects the newly recorded review.
-               */
               await refreshAdmin();
 
 
@@ -6521,9 +7447,6 @@ function attachDuplicateKeepBothEvents() {
       }
     );
 }
-
-
-
 
 /**
  * Compares the fields that help determine whether catalogue records
@@ -6966,9 +7889,6 @@ function formatDuplicateResolution(
 }
 
 
-
-
-
 /**
  * Produces useful metadata for a Catalogue Integrity row without
  * assuming one exact RPC row shape.
@@ -7107,6 +8027,7 @@ function renderGenericIntegrityMeta(
     </div>
   `;
 }
+
 
 /* =====================================================================
    18. RECENT INGESTIONS
@@ -7283,49 +8204,101 @@ function createIngestionRow(
       </td>
 
 
-      <td class="admin-date-cell">
+      <td>
         ${escapeHtml(
           formatDateTime(
+            ingestion.updated_at ||
             ingestion.created_at
           )
         )}
       </td>
 
 
-      <td class="admin-expand-cell">
+      <td class="admin-ingestion-expand-cell">
 
         <button
           type="button"
-          class="admin-expand-button"
+          class="admin-ingestion-expand-button"
           aria-label="Show ingestion details"
           aria-expanded="false"
         >
+
           <i data-lucide="chevron-down"></i>
+
         </button>
 
       </td>
     `;
 
 
-  const expandButton =
+  const button =
     row.querySelector(
-      ".admin-expand-button"
+      ".admin-ingestion-expand-button"
     );
 
 
-  expandButton?.addEventListener(
+  button?.addEventListener(
     "click",
-    () =>
-      toggleIngestionDetails(
-        row,
-        expandButton
-      )
+    () => {
+
+      const detailRow =
+        row.nextElementSibling;
+
+
+      if (
+        !detailRow ||
+        !detailRow.classList.contains(
+          "admin-ingestion-detail-row"
+        )
+      ) {
+
+        return;
+      }
+
+
+      const isOpen =
+        detailRow.hidden ===
+          false;
+
+
+      detailRow.hidden =
+        isOpen;
+
+
+      button.setAttribute(
+        "aria-expanded",
+        String(
+          !isOpen
+        )
+      );
+
+
+      const icon =
+        button.querySelector(
+          "i"
+        );
+
+
+      if (
+        icon
+      ) {
+
+        icon.setAttribute(
+          "data-lucide",
+          isOpen
+            ? "chevron-down"
+            : "chevron-up"
+        );
+      }
+
+
+      window.lucide?.createIcons();
+    }
   );
 
 
   return row;
 }
-
 
 /**
  * Creates the hidden diagnostics row belonging to an ingestion summary
@@ -8169,7 +9142,7 @@ function getStatusConfig(
 
       return {
         label:
-          "Thumbnail upload",
+          "Thumbnail uploading",
 
         className:
           "active"
@@ -8181,8 +9154,7 @@ function getStatusConfig(
       return {
         label:
           humaniseStatus(
-            status ||
-            "unknown"
+            status
           ),
 
         className:
@@ -8190,7 +9162,6 @@ function getStatusConfig(
       };
   }
 }
-
 
 /* =====================================================================
    22. COMPONENT STATE RENDERING
@@ -8734,6 +9705,7 @@ function formatBytes(
   )} ${units[unitIndex]}`;
 }
 
+
 /* =====================================================================
    31. SAFE VALUE HELPERS
 ===================================================================== */
@@ -9115,6 +10087,9 @@ function getErrorMessage(
   ) {
 
     return error;
+  }
+
+
   }
 
 
