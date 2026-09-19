@@ -5427,9 +5427,17 @@ function openIntegrityResult(
   }
 
 
+  if (
+    key ===
+      "duplicate_fingerprints"
+  ) {
+
+    attachDuplicateVideoEvents();
+  }
+
+
   window.lucide?.createIcons();
 }
-
 
 /**
  * Closes Catalogue Integrity diagnostics.
@@ -6218,28 +6226,136 @@ function renderDuplicateVideoCard(
       ${
         url
           ? `
-              <a
-                class="admin-duplicate-video-link"
-                href="${escapeHtml(
-                  url
-                )}"
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-
-                <i data-lucide="external-link"></i>
-
-                <span>
-                  Open Media URL
-                </span>
-
-              </a>
+            <button
+              type="button"
+              class="admin-duplicate-video-link"
+              data-duplicate-open-video="${escapeHtml(
+                url
+              )}"
+            >
+            
+              <i data-lucide="play"></i>
+            
+              <span>
+                Open Video
+              </span>
+            
+            </button>
             `
           : ""
       }
 
     </div>
   `;
+}
+
+
+
+/**
+ * Attaches the Open Video controls used by duplicate-fingerprint
+ * catalogue records.
+ *
+ * The raw catalogue URL cannot be opened directly because the media
+ * Worker correctly rejects unsigned requests.
+ *
+ * Instead we reuse getAdminSignedVideoUrl(), which calls the protected
+ * zulu-sign-media Edge Function and returns a temporary signed URL.
+ */
+function attachDuplicateVideoEvents() {
+
+  document
+    .querySelectorAll(
+      "[data-duplicate-open-video]"
+    )
+    .forEach(
+      button => {
+
+        button.addEventListener(
+          "click",
+          async () => {
+
+            const originalUrl =
+              button.dataset
+                .duplicateOpenVideo;
+
+
+            if (
+              !originalUrl
+            ) {
+
+              return;
+            }
+
+
+            const originalHtml =
+              button.innerHTML;
+
+
+            button.disabled =
+              true;
+
+
+            button.innerHTML = `
+              <i data-lucide="loader-circle"></i>
+
+              <span>
+                Opening…
+              </span>
+            `;
+
+
+            window.lucide?.createIcons();
+
+
+            try {
+
+              const signedUrl =
+                await getAdminSignedVideoUrl(
+                  originalUrl
+                );
+
+
+              window.open(
+                signedUrl,
+                "_blank",
+                "noopener,noreferrer"
+              );
+
+
+            } catch (
+              error
+            ) {
+
+              console.error(
+                "OPEN DUPLICATE VIDEO ERROR:",
+                error
+              );
+
+
+              alert(
+                `Could not open video: ${
+                  error?.message ||
+                  "Unknown error"
+                }`
+              );
+
+
+            } finally {
+
+              button.disabled =
+                false;
+
+
+              button.innerHTML =
+                originalHtml;
+
+
+              window.lucide?.createIcons();
+            }
+          }
+        );
+      }
+    );
 }
 
 
