@@ -10100,11 +10100,6 @@ function getErrorMessage(
     error.error
   ) {
 
-    return String(
-      error.error
-    );
-  }
-
 
   if (
     error.details
