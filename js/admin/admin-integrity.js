@@ -3757,6 +3757,45 @@ function firstValue(
   return null;
 }
 
+/**
+ * Safely renders a numeric value into a DOM element.
+ */
+function setNumber(
+  element,
+  value
+) {
+
+  if (
+    !element
+  ) {
+
+    return;
+  }
+
+
+  const number =
+    Number(
+      value
+    );
+
+
+  if (
+    !Number.isFinite(
+      number
+    )
+  ) {
+
+    element.textContent =
+      "—";
+
+
+    return;
+  }
+
+
+  element.textContent =
+    number.toLocaleString();
+}
 
 /**
  * Converts a value to a safe finite number.
