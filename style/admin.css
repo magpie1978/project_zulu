@@ -3270,3 +3270,697 @@ a {
   }
 
 }
+
+
+/* =====================================================================
+   DUPLICATE CONSOLIDATION PREVIEW
+   =====================================================================
+
+   Displayed after "Consolidate Duplicate" has been selected.
+
+   The two catalogue records are presented as selectable survivor cards.
+
+   Selecting a record means:
+
+       KEEP this catalogue UID
+       REMOVE the other catalogue UID
+
+   This section is presentation-only. It does not alter the
+   consolidation behaviour.
+   ===================================================================== */
+
+
+/* ---------------------------------------------------------------------
+   PREVIEW CONTAINER
+--------------------------------------------------------------------- */
+
+.admin-duplicate-consolidation-preview {
+  margin-top: 20px;
+  padding: 20px;
+
+  background: #0f0f0f;
+
+  border: 1px solid #343434;
+  border-radius: 10px;
+}
+
+
+/* ---------------------------------------------------------------------
+   PREVIEW HEADING
+--------------------------------------------------------------------- */
+
+.admin-duplicate-consolidation-heading {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+
+  margin-bottom: 18px;
+  padding-bottom: 17px;
+
+  border-bottom: 1px solid #292929;
+}
+
+
+.admin-duplicate-consolidation-heading > svg {
+  width: 22px;
+  height: 22px;
+
+  flex: 0 0 22px;
+
+  margin-top: 1px;
+
+  color: #e8aa37;
+}
+
+
+.admin-duplicate-consolidation-heading strong {
+  display: block;
+
+  margin-bottom: 4px;
+
+  color: #fff;
+
+  font-size: 15px;
+  font-weight: 700;
+}
+
+
+.admin-duplicate-consolidation-heading span {
+  display: block;
+
+  color: #8d8d8d;
+
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+
+/* ---------------------------------------------------------------------
+   SURVIVOR OPTIONS
+--------------------------------------------------------------------- */
+
+.admin-duplicate-survivor-options {
+  display: grid;
+
+  grid-template-columns:
+    repeat(
+      2,
+      minmax(0, 1fr)
+    );
+
+  gap: 14px;
+
+  margin-bottom: 18px;
+}
+
+
+/* ---------------------------------------------------------------------
+   SURVIVOR CARD
+--------------------------------------------------------------------- */
+
+.admin-duplicate-survivor-option {
+  position: relative;
+
+  display: grid;
+
+  grid-template-columns:
+    20px
+    minmax(0, 1fr);
+
+  align-items: flex-start;
+
+  gap: 12px;
+
+  min-width: 0;
+  padding: 17px;
+
+  background: #181818;
+
+  border: 1px solid #303030;
+  border-radius: 9px;
+
+  cursor: pointer;
+
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+
+.admin-duplicate-survivor-option:hover {
+  background: #1c1c1c;
+  border-color: #444;
+}
+
+
+/* ---------------------------------------------------------------------
+   RADIO CONTROL
+--------------------------------------------------------------------- */
+
+.admin-duplicate-survivor-option input[type="radio"] {
+  width: 17px;
+  height: 17px;
+
+  margin: 2px 0 0;
+
+  accent-color: #e50914;
+
+  cursor: pointer;
+}
+
+
+/* Highlight the complete card when its radio is selected */
+
+.admin-duplicate-survivor-option:has(
+  input[type="radio"]:checked
+) {
+  background: rgba(
+    229,
+    9,
+    20,
+    0.07
+  );
+
+  border-color: rgba(
+    229,
+    9,
+    20,
+    0.6
+  );
+
+  box-shadow:
+    inset 0 0 0 1px
+    rgba(
+      229,
+      9,
+      20,
+      0.08
+    );
+}
+
+
+/* ---------------------------------------------------------------------
+   CARD CONTENT
+--------------------------------------------------------------------- */
+
+.admin-duplicate-survivor-main {
+  min-width: 0;
+}
+
+
+.admin-duplicate-survivor-uid {
+  display: inline-flex;
+  align-items: center;
+
+  margin-bottom: 8px;
+  padding: 4px 8px;
+
+  background: #252525;
+
+  border: 1px solid #393939;
+  border-radius: 5px;
+
+  color: #aaa;
+
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+
+/* Selected UID */
+
+.admin-duplicate-survivor-option:has(
+  input[type="radio"]:checked
+)
+.admin-duplicate-survivor-uid {
+  background: rgba(
+    229,
+    9,
+    20,
+    0.12
+  );
+
+  border-color: rgba(
+    229,
+    9,
+    20,
+    0.35
+  );
+
+  color: #ff646b;
+}
+
+
+.admin-duplicate-survivor-main strong {
+  display: block;
+
+  margin-bottom: 7px;
+
+  color: #f4f4f4;
+
+  font-size: 15px;
+  line-height: 1.35;
+
+  overflow-wrap: anywhere;
+}
+
+
+.admin-duplicate-survivor-file {
+  margin-bottom: 10px;
+
+  color: #8c8c8c;
+
+  font-family:
+    ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    Monaco,
+    Consolas,
+    monospace;
+
+  font-size: 11px;
+  line-height: 1.45;
+
+  overflow-wrap: anywhere;
+}
+
+
+/* ---------------------------------------------------------------------
+   RECORD IMPACT METADATA
+--------------------------------------------------------------------- */
+
+.admin-duplicate-survivor-meta {
+  color: #aaa;
+
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+
+/* ---------------------------------------------------------------------
+   KEEP / REMOVE VISUAL LABELS
+
+   These will also support the inline confirmation stage that we'll
+   add to admin.js next.
+--------------------------------------------------------------------- */
+
+.admin-duplicate-survivor-option::after {
+  content: "REMOVE";
+
+  position: absolute;
+
+  top: 15px;
+  right: 15px;
+
+  padding: 4px 7px;
+
+  background: rgba(
+    239,
+    83,
+    80,
+    0.08
+  );
+
+  border: 1px solid rgba(
+    239,
+    83,
+    80,
+    0.22
+  );
+
+  border-radius: 5px;
+
+  color: #a96669;
+
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+
+
+.admin-duplicate-survivor-option:has(
+  input[type="radio"]:checked
+)::after {
+  content: "KEEP";
+
+  background: rgba(
+    76,
+    175,
+    80,
+    0.1
+  );
+
+  border-color: rgba(
+    102,
+    187,
+    106,
+    0.32
+  );
+
+  color: #81c784;
+}
+
+
+/* ---------------------------------------------------------------------
+   IMPACT SUMMARY
+--------------------------------------------------------------------- */
+
+.admin-duplicate-consolidation-impact {
+  display: grid;
+
+  grid-template-columns:
+    repeat(
+      3,
+      minmax(0, 1fr)
+    );
+
+  gap: 10px;
+
+  margin-top: 4px;
+  margin-bottom: 16px;
+}
+
+
+/*
+   Current JavaScript may output the summary as text rather than
+   individual cards. This still gives it a contained readable panel.
+*/
+
+.admin-duplicate-consolidation-impact:not(:has(> *)) {
+  display: block;
+
+  padding: 14px 16px;
+
+  background: #171717;
+
+  border: 1px solid #2e2e2e;
+  border-radius: 8px;
+
+  color: #bbb;
+
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+
+.admin-duplicate-consolidation-impact > div {
+  min-width: 0;
+  padding: 13px 14px;
+
+  background: #171717;
+
+  border: 1px solid #2e2e2e;
+  border-radius: 8px;
+}
+
+
+.admin-duplicate-consolidation-impact strong {
+  display: block;
+
+  margin-bottom: 3px;
+
+  color: #fff;
+
+  font-size: 18px;
+  font-weight: 700;
+}
+
+
+.admin-duplicate-consolidation-impact span {
+  color: #888;
+
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+
+/* ---------------------------------------------------------------------
+   STORAGE WARNING
+--------------------------------------------------------------------- */
+
+.admin-duplicate-consolidation-warning {
+  position: relative;
+
+  margin: 0 0 18px;
+  padding: 13px 15px 13px 42px;
+
+  background: rgba(
+    232,
+    170,
+    55,
+    0.07
+  );
+
+  border: 1px solid rgba(
+    232,
+    170,
+    55,
+    0.28
+  );
+
+  border-radius: 8px;
+
+  color: #d8c7a5;
+
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+
+.admin-duplicate-consolidation-warning::before {
+  content: "!";
+
+  position: absolute;
+
+  top: 12px;
+  left: 14px;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  width: 18px;
+  height: 18px;
+
+  border: 1px solid rgba(
+    232,
+    170,
+    55,
+    0.5
+  );
+
+  border-radius: 50%;
+
+  color: #e8aa37;
+
+  font-size: 11px;
+  font-weight: 800;
+}
+
+
+/* ---------------------------------------------------------------------
+   ACTION BAR
+--------------------------------------------------------------------- */
+
+.admin-duplicate-consolidation-preview
+.admin-duplicate-actions {
+  align-items: center;
+
+  margin-top: 0;
+  padding-top: 17px;
+
+  border-top: 1px solid #292929;
+}
+
+
+/* Cancel */
+
+.admin-duplicate-consolidation-cancel {
+  min-width: 92px;
+}
+
+
+/* Confirm */
+
+.admin-duplicate-consolidation-confirm {
+  min-width: 180px;
+
+  background: #e50914;
+  border-color: #e50914;
+  color: #fff;
+}
+
+
+.admin-duplicate-consolidation-confirm:hover:not(:disabled) {
+  background: #f11620;
+  border-color: #f11620;
+  color: #fff;
+}
+
+
+.admin-duplicate-consolidation-confirm:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+
+/* ---------------------------------------------------------------------
+   WORKING STATE
+--------------------------------------------------------------------- */
+
+.admin-duplicate-consolidation-confirm.is-working {
+  background: #252525;
+  border-color: #444;
+  color: #aaa;
+
+  cursor: wait;
+}
+
+
+.admin-duplicate-consolidation-confirm.is-working svg {
+  animation: admin-spin 0.9s linear infinite;
+}
+
+
+/* ---------------------------------------------------------------------
+   INLINE SUCCESS STATE
+
+   Used by the next admin.js change instead of window.alert().
+--------------------------------------------------------------------- */
+
+.admin-duplicate-consolidation-success {
+  padding: 18px;
+
+  background: rgba(
+    76,
+    175,
+    80,
+    0.07
+  );
+
+  border: 1px solid rgba(
+    102,
+    187,
+    106,
+    0.32
+  );
+
+  border-radius: 9px;
+}
+
+
+.admin-duplicate-consolidation-success-heading {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+
+  margin-bottom: 8px;
+
+  color: #81c784;
+
+  font-size: 14px;
+  font-weight: 800;
+}
+
+
+.admin-duplicate-consolidation-success-heading svg {
+  width: 18px;
+  height: 18px;
+}
+
+
+.admin-duplicate-consolidation-success p {
+  margin: 0;
+
+  color: #bbb;
+
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+
+.admin-duplicate-consolidation-success strong {
+  color: #fff;
+}
+
+
+/* ---------------------------------------------------------------------
+   INLINE ERROR STATE
+--------------------------------------------------------------------- */
+
+.admin-duplicate-consolidation-error {
+  margin-top: 14px;
+  padding: 13px 15px;
+
+  background: rgba(
+    229,
+    9,
+    20,
+    0.08
+  );
+
+  border: 1px solid rgba(
+    239,
+    83,
+    80,
+    0.35
+  );
+
+  border-radius: 8px;
+
+  color: #ef8a8f;
+
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+
+/* ---------------------------------------------------------------------
+   TABLET / MOBILE
+--------------------------------------------------------------------- */
+
+@media (
+  max-width: 800px
+) {
+
+  .admin-duplicate-survivor-options {
+    grid-template-columns: 1fr;
+  }
+
+
+  .admin-duplicate-consolidation-impact {
+    grid-template-columns: 1fr;
+  }
+
+}
+
+
+@media (
+  max-width: 700px
+) {
+
+  .admin-duplicate-consolidation-preview {
+    padding: 15px;
+  }
+
+
+  .admin-duplicate-survivor-option {
+    padding: 15px;
+  }
+
+
+  .admin-duplicate-consolidation-preview
+  .admin-duplicate-actions {
+    flex-direction: column-reverse;
+  }
+
+
+  .admin-duplicate-consolidation-preview
+  .admin-duplicate-actions button {
+    width: 100%;
+  }
+
+}
