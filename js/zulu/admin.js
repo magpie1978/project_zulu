@@ -9,7 +9,7 @@ import {
   renderVideoHealth,
   setVideoHealthLoadingState,
   renderVideoHealthError
-} from "./admin/admin-video-health.js";
+} from "../admin/admin-video-health.js";
 
 
 import {
