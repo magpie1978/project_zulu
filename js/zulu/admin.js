@@ -10090,13 +10090,15 @@ function getErrorMessage(
   }
 
 
-  }
-
-
   if (
     error.message
   ) {
 
+    return String(
+      error.message
+    );
+  }
+  
     return String(
       error.message
     );
