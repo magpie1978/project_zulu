@@ -4754,3 +4754,165 @@ a {
     width: 100%;
   }
 }
+
+/* =====================================================================
+   THUMBNAIL RE-EVALUATION
+===================================================================== */
+
+.admin-thumbnail-reevaluate-intro {
+  margin-bottom: 18px;
+
+  color: #888;
+
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+
+.admin-thumbnail-reevaluate-panel {
+  padding: 20px;
+
+  border: 1px solid #303030;
+  border-radius: 10px;
+
+  background: #101010;
+}
+
+
+.admin-thumbnail-reevaluate-panel[hidden] {
+  display: none;
+}
+
+
+.admin-thumbnail-reevaluate-film {
+  margin-bottom: 18px;
+
+  color: #fff;
+
+  font-size: 16px;
+  font-weight: 700;
+}
+
+
+.admin-thumbnail-reevaluate-comparison {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+
+
+.admin-thumbnail-reevaluate-image-card {
+  min-width: 0;
+}
+
+
+.admin-thumbnail-reevaluate-label {
+  margin-bottom: 8px;
+
+  color: #777;
+
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+
+.admin-thumbnail-reevaluate-image-wrap {
+  position: relative;
+
+  overflow: hidden;
+
+  aspect-ratio: 16 / 9;
+
+  border: 1px solid #292929;
+  border-radius: 8px;
+
+  background: #080808;
+}
+
+
+.admin-thumbnail-reevaluate-image-wrap img {
+  display: block;
+
+  width: 100%;
+  height: 100%;
+
+  object-fit: cover;
+}
+
+
+.admin-thumbnail-reevaluate-detail,
+.admin-thumbnail-reevaluate-status {
+  margin-top: 14px;
+
+  color: #888;
+
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+
+.admin-thumbnail-reevaluate-status.is-error {
+  color: #ef777d;
+}
+
+
+.admin-thumbnail-reevaluate-candidate-nav,
+.admin-thumbnail-reevaluate-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+
+  margin-top: 16px;
+}
+
+
+.admin-thumbnail-reevaluate-use {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+
+  min-height: 38px;
+  padding: 8px 14px;
+
+  border: 1px solid #e50914;
+  border-radius: 7px;
+
+  background: #e50914;
+  color: #fff;
+
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+
+  cursor: pointer;
+}
+
+
+.admin-thumbnail-reevaluate-use:hover:not(:disabled) {
+  background: #f20d18;
+}
+
+
+.admin-thumbnail-reevaluate-use:disabled {
+  opacity: 0.5;
+  cursor: wait;
+}
+
+
+.admin-thumbnail-reevaluate-use svg {
+  width: 16px;
+  height: 16px;
+}
+
+
+@media (max-width: 800px) {
+
+  .admin-thumbnail-reevaluate-comparison {
+    grid-template-columns: 1fr;
+  }
+
+}
