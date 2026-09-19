@@ -4960,10 +4960,12 @@ function attachThumbnailDeleteEvents() {
 
 
 /**
- * Deletes one orphaned thumbnail through the protected
- * zulu-thumbnail-health Edge Function.
+ * Starts protected deletion of one orphaned thumbnail.
  *
- * The browser does not possess B2 credentials.
+ * The first click only opens an inline confirmation panel.
+ * Nothing is deleted until the user explicitly confirms.
+ *
+ * The browser never possesses Backblaze credentials.
  */
 async function deleteOrphanedThumbnail(
   uid,
@@ -5033,21 +5035,240 @@ async function deleteOrphanedThumbnail(
 
 
   /*
-   * Every deletion requires explicit confirmation.
-   *
-   * There is intentionally no bulk-delete behaviour here.
+   * Locate the diagnostic row containing this button.
    */
-  const confirmed =
-    window.confirm(
-      `Delete orphaned thumbnail?\n\n` +
-      `${item.file_name}\n\n` +
-      `UID ${uid} does not exist in the current catalogue health check.\n\n` +
-      `The server will check the catalogue again immediately before deletion.`
-    );
+  const row =
+    button?.closest(
+      ".admin-thumbnail-result"
+    ) ||
+    button?.parentElement?.parentElement;
 
 
   if (
-    !confirmed
+    !row
+  ) {
+
+    setThumbnailDeleteStatus(
+      uid,
+      "Could not locate the thumbnail diagnostic row.",
+      "error"
+    );
+
+
+    return;
+  }
+
+
+  /*
+   * Do not create more than one confirmation panel for the same row.
+   */
+  if (
+    row.querySelector(
+      ".admin-thumbnail-orphan-confirm"
+    )
+  ) {
+
+    return;
+  }
+
+
+  /*
+   * Hide the original action while confirmation is open.
+   */
+  if (
+    button
+  ) {
+
+    button.hidden =
+      true;
+  }
+
+
+  const confirmation =
+    document.createElement(
+      "div"
+    );
+
+
+  confirmation.className =
+    "admin-thumbnail-orphan-confirm";
+
+
+  confirmation.innerHTML = `
+
+    <div class="admin-thumbnail-orphan-confirm-heading">
+
+      <i data-lucide="triangle-alert"></i>
+
+      <span>
+        Permanently delete this thumbnail?
+      </span>
+
+    </div>
+
+
+    <div class="admin-thumbnail-orphan-confirm-text">
+
+      UID ${escapeHtml(
+        uid
+      )} does not exist in the current catalogue health check.
+
+      The server will check the catalogue again immediately before deletion.
+
+    </div>
+
+
+    <div class="admin-thumbnail-orphan-confirm-file">
+
+      ${escapeHtml(
+        item.file_name
+      )}
+
+    </div>
+
+
+    <div class="admin-thumbnail-orphan-confirm-warning">
+
+      This permanently deletes the exact B2 thumbnail file version and cannot be undone.
+
+    </div>
+
+
+    <div class="admin-thumbnail-orphan-confirm-actions">
+
+      <button
+        type="button"
+        class="admin-thumbnail-orphan-cancel-button"
+      >
+
+        Cancel
+
+      </button>
+
+
+      <button
+        type="button"
+        class="admin-thumbnail-orphan-confirm-button"
+      >
+
+        <i data-lucide="trash-2"></i>
+
+        <span>
+          Permanently Delete Thumbnail
+        </span>
+
+      </button>
+
+    </div>
+  `;
+
+
+  /*
+   * Place the confirmation immediately beneath the existing
+   * Delete Orphan action.
+   */
+  const actionContainer =
+    button?.parentElement;
+
+
+  if (
+    actionContainer
+  ) {
+
+    actionContainer.insertAdjacentElement(
+      "afterend",
+      confirmation
+    );
+
+  } else {
+
+    row.appendChild(
+      confirmation
+    );
+  }
+
+
+  const cancelButton =
+    confirmation.querySelector(
+      ".admin-thumbnail-orphan-cancel-button"
+    );
+
+
+  const confirmButton =
+    confirmation.querySelector(
+      ".admin-thumbnail-orphan-confirm-button"
+    );
+
+
+  /*
+   * Cancel makes no server request and restores the original button.
+   */
+  cancelButton?.addEventListener(
+    "click",
+    () => {
+
+      confirmation.remove();
+
+
+      if (
+        button
+      ) {
+
+        button.hidden =
+          false;
+      }
+
+
+      window.lucide?.createIcons();
+    }
+  );
+
+
+  /*
+   * Only this second explicit action performs deletion.
+   */
+  confirmButton?.addEventListener(
+    "click",
+    async () => {
+
+      await performOrphanedThumbnailDeletion(
+        uid,
+        item,
+        button,
+        confirmation,
+        confirmButton,
+        cancelButton
+      );
+    }
+  );
+
+
+  window.lucide?.createIcons();
+}
+
+
+/**
+ * Performs the actual protected orphan-thumbnail deletion.
+ *
+ * zulu-thumbnail-health remains the security boundary and independently
+ * verifies that the UID is absent from the current catalogue before
+ * deleting the exact Backblaze file version.
+ */
+async function performOrphanedThumbnailDeletion(
+  uid,
+  item,
+  button,
+  confirmation,
+  confirmButton,
+  cancelButton
+) {
+
+  /*
+   * Prevent another thumbnail cleanup operation from starting.
+   */
+  if (
+    deletingThumbnailUid !==
+      null
   ) {
 
     return;
@@ -5059,7 +5280,8 @@ async function deleteOrphanedThumbnail(
 
 
   /*
-   * Disable every Delete Orphan button while the operation is active.
+   * Disable every orphan-delete button while one destructive operation
+   * is in progress.
    */
   setAllThumbnailDeleteButtonsDisabled(
     true
@@ -5067,24 +5289,26 @@ async function deleteOrphanedThumbnail(
 
 
   if (
-    button
+    confirmButton
   ) {
 
-    button.classList.remove(
-      "is-error",
-      "is-success"
-    );
+    confirmButton.disabled =
+      true;
 
 
-    button.classList.add(
-      "is-working"
-    );
-
-
-    button.innerHTML = `
+    confirmButton.innerHTML = `
       <i data-lucide="loader-circle"></i>
       <span>Deleting…</span>
     `;
+  }
+
+
+  if (
+    cancelButton
+  ) {
+
+    cancelButton.disabled =
+      true;
   }
 
 
@@ -5101,7 +5325,7 @@ async function deleteOrphanedThumbnail(
   try {
 
     /* ---------------------------------------------------------------
-       DELETE THROUGH EDGE FUNCTION
+       DELETE THROUGH PROTECTED EDGE FUNCTION
     --------------------------------------------------------------- */
 
     const {
@@ -5114,6 +5338,7 @@ async function deleteOrphanedThumbnail(
           "zulu-thumbnail-health",
           {
             body: {
+
               action:
                 "delete_orphan",
 
@@ -5159,20 +5384,10 @@ async function deleteOrphanedThumbnail(
     --------------------------------------------------------------- */
 
     if (
-      button
+      confirmButton
     ) {
 
-      button.classList.remove(
-        "is-working"
-      );
-
-
-      button.classList.add(
-        "is-success"
-      );
-
-
-      button.innerHTML = `
+      confirmButton.innerHTML = `
         <i data-lucide="check"></i>
         <span>Deleted</span>
       `;
@@ -5198,10 +5413,8 @@ async function deleteOrphanedThumbnail(
 
 
     /*
-     * Never assume that a successful API response means our diagnostic
-     * problem has disappeared.
-     *
-     * Verify against a fresh B2 inventory.
+     * Do not assume that a successful B2 response means the diagnostic
+     * issue has disappeared. Verify it against a fresh inventory.
      */
     const stillOrphaned =
       refreshed
@@ -5238,9 +5451,9 @@ async function deleteOrphanedThumbnail(
 
 
     /*
-     * Keep the user in the Orphaned diagnostic panel.
+     * Keep the user in Orphaned Thumbnails.
      *
-     * The deleted row will now be absent and the count should have
+     * The deleted row will be absent and the counter will have
      * decreased by one.
      */
     openThumbnailResult(
@@ -5248,7 +5461,9 @@ async function deleteOrphanedThumbnail(
     );
 
 
-  } catch (error) {
+  } catch (
+    error
+  ) {
 
     console.error(
       "ORPHAN THUMBNAIL DELETE FAILED:",
@@ -5264,29 +5479,31 @@ async function deleteOrphanedThumbnail(
     );
 
 
+    /*
+     * Keep the inline confirmation open after a failure so the user
+     * can retry without reopening it.
+     */
     if (
-      button
+      confirmButton
     ) {
 
-      button.disabled =
+      confirmButton.disabled =
         false;
 
 
-      button.classList.remove(
-        "is-working",
-        "is-success"
-      );
-
-
-      button.classList.add(
-        "is-error"
-      );
-
-
-      button.innerHTML = `
+      confirmButton.innerHTML = `
         <i data-lucide="trash-2"></i>
-        <span>Try Again</span>
+        <span>Try Delete Again</span>
       `;
+    }
+
+
+    if (
+      cancelButton
+    ) {
+
+      cancelButton.disabled =
+        false;
     }
 
 
@@ -5304,7 +5521,6 @@ async function deleteOrphanedThumbnail(
     );
   }
 }
-
 /**
  * Enables/disables all currently-rendered Delete Orphan buttons.
  */
