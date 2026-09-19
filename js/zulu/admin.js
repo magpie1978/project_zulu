@@ -5427,14 +5427,15 @@ function openIntegrityResult(
   }
 
 
-  if (
-    key ===
-      "duplicate_fingerprints"
-  ) {
+if (
+  key ===
+    "duplicate_fingerprints"
+) {
 
-    attachDuplicateVideoEvents();
-  }
+  attachDuplicateVideoEvents();
 
+  attachDuplicateKeepBothEvents();
+}
 
   window.lucide?.createIcons();
 }
@@ -5998,21 +5999,16 @@ function renderDuplicateFingerprintGroup(
 
         <button
           type="button"
-          class="
-            admin-button
-            admin-button-secondary
-            admin-duplicate-keep-button
-          "
-          disabled
-          title="Persistent Keep Both decisions will be enabled in the next catalogue-repair stage."
+          class="admin-button admin-button-secondary admin-duplicate-keep-button"
+          data-duplicate-keep-both="${escapeHtml(
+            fingerprint
+          )}"
         >
-
           <i data-lucide="copy-check"></i>
-
+        
           <span>
             Keep Both
           </span>
-
         </button>
 
 
@@ -6357,6 +6353,176 @@ function attachDuplicateVideoEvents() {
       }
     );
 }
+
+
+
+/**
+ * Attaches the Keep Both controls for duplicate-fingerprint groups.
+ *
+ * Keep Both is a non-destructive catalogue-review action.
+ *
+ * The browser does not write directly to zulu_duplicate_reviews.
+ * Instead it asks the protected zulu-catalogue-repair Edge Function
+ * to revalidate the fingerprint and record the decision.
+ */
+function attachDuplicateKeepBothEvents() {
+
+  document
+    .querySelectorAll(
+      "[data-duplicate-keep-both]"
+    )
+    .forEach(
+      button => {
+
+        button.addEventListener(
+          "click",
+          async () => {
+
+            const fingerprint =
+              button.dataset
+                .duplicateKeepBoth;
+
+
+            if (
+              !fingerprint
+            ) {
+
+              return;
+            }
+
+
+            const confirmed =
+              window.confirm(
+                "Keep both catalogue records?\n\n" +
+                "This will mark this duplicate fingerprint group as reviewed and intentionally retained.\n\n" +
+                "No catalogue records, videos or thumbnails will be deleted."
+              );
+
+
+            if (
+              !confirmed
+            ) {
+
+              return;
+            }
+
+
+            const originalHtml =
+              button.innerHTML;
+
+
+            button.disabled =
+              true;
+
+
+            button.innerHTML = `
+              <i data-lucide="loader-circle"></i>
+
+              <span>
+                Saving…
+              </span>
+            `;
+
+
+            window.lucide?.createIcons();
+
+
+            try {
+
+              const {
+                data,
+                error
+              } =
+                await supabase.functions.invoke(
+                  "zulu-catalogue-repair",
+                  {
+                    body: {
+                      action:
+                        "keep_both",
+
+                      fingerprint
+                    }
+                  }
+                );
+
+
+              if (
+                error
+              ) {
+
+                throw new Error(
+                  error.message ||
+                  "Catalogue repair request failed."
+                );
+              }
+
+
+              if (
+                !data ||
+                data.success !== true
+              ) {
+
+                throw new Error(
+                  data?.error ||
+                  "The Keep Both request was unsuccessful."
+                );
+              }
+
+
+              button.innerHTML = `
+                <i data-lucide="circle-check"></i>
+
+                <span>
+                  Kept Both
+                </span>
+              `;
+
+
+              window.lucide?.createIcons();
+
+
+              /*
+               * Reload the dashboard so that all diagnostic information
+               * reflects the newly recorded review.
+               */
+              await refreshAdmin();
+
+
+            } catch (
+              error
+            ) {
+
+              console.error(
+                "KEEP BOTH ERROR:",
+                error
+              );
+
+
+              alert(
+                `Could not record Keep Both: ${
+                  error?.message ||
+                  "Unknown error"
+                }`
+              );
+
+
+              button.disabled =
+                false;
+
+
+              button.innerHTML =
+                originalHtml;
+
+
+              window.lucide?.createIcons();
+            }
+          }
+        );
+      }
+    );
+}
+
+
 
 
 /**
