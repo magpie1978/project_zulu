@@ -1310,85 +1310,235 @@ export async function generateThumbnailCandidatesFromUrl(
         resolve,
         reject
       ) => {
-
-        const timeout =
-          window.setTimeout(
-            () => {
-
-              cleanup();
-
-              reject(
-                new Error(
-                  "Timed out while loading video metadata."
-                )
-              );
-            },
-            30000
-          );
-
-
+    
+        /*
+         * Some large/older MP4 files can take considerably longer than
+         * 30 seconds before the browser has fetched enough of the file to
+         * expose its metadata.
+         *
+         * Give remote repair jobs up to 90 seconds.
+         */
+        const METADATA_TIMEOUT_MS =
+          90000;
+    
+    
+        let settled =
+          false;
+    
+    
         const cleanup =
           () => {
-
+    
             window.clearTimeout(
               timeout
             );
-
+    
             video.removeEventListener(
               "loadedmetadata",
               onLoaded
             );
-
+    
+            video.removeEventListener(
+              "durationchange",
+              onDurationChange
+            );
+    
             video.removeEventListener(
               "error",
               onError
             );
           };
-
-
-        const onLoaded =
+    
+    
+        const finish =
           () => {
-
+    
+            if (
+              settled
+            ) {
+    
+              return;
+            }
+    
+    
+            settled =
+              true;
+    
             cleanup();
+    
             resolve();
           };
-
-
+    
+    
+        const fail =
+          (
+            error
+          ) => {
+    
+            if (
+              settled
+            ) {
+    
+              return;
+            }
+    
+    
+            settled =
+              true;
+    
+            cleanup();
+    
+            reject(
+              error
+            );
+          };
+    
+    
+        const metadataIsUsable =
+          () => {
+    
+            return (
+              video.readyState >=
+                HTMLMediaElement.HAVE_METADATA &&
+              Number.isFinite(
+                video.duration
+              ) &&
+              video.duration >
+                0
+            );
+          };
+    
+    
+        const onLoaded =
+          () => {
+    
+            /*
+             * loadedmetadata normally gives us everything required.
+             * Check the duration as well before continuing.
+             */
+            if (
+              metadataIsUsable()
+            ) {
+    
+              finish();
+            }
+          };
+    
+    
+        const onDurationChange =
+          () => {
+    
+            /*
+             * Some MP4s expose the duration slightly after loadedmetadata.
+             * durationchange therefore gives those files another route to
+             * completing metadata initialisation.
+             */
+            if (
+              metadataIsUsable()
+            ) {
+    
+              finish();
+            }
+          };
+    
+    
         const onError =
           () => {
-
-            cleanup();
-
-            reject(
+    
+            const mediaError =
+              video.error;
+    
+            const errorCode =
+              mediaError?.code ??
+              "unknown";
+    
+            const errorMessage =
+              mediaError?.message ??
+              "No browser media error was supplied.";
+    
+    
+            fail(
               new Error(
-                "Could not read the remote video for thumbnail repair."
+                `Could not read the remote video for thumbnail repair. ` +
+                `Media error ${errorCode}: ${errorMessage}`
               )
             );
           };
-
-
+    
+    
+        const timeout =
+          window.setTimeout(
+            () => {
+    
+              /*
+               * Check one final time before failing. It is possible for
+               * metadata to have become available immediately around the
+               * timeout boundary without our event handler having completed.
+               */
+              if (
+                metadataIsUsable()
+              ) {
+    
+                finish();
+    
+                return;
+              }
+    
+    
+              fail(
+                new Error(
+                  `Timed out after ${
+                    METADATA_TIMEOUT_MS /
+                    1000
+                  } seconds while loading video metadata. ` +
+                  `readyState=${video.readyState}, ` +
+                  `networkState=${video.networkState}, ` +
+                  `duration=${video.duration}.`
+                )
+              );
+            },
+            METADATA_TIMEOUT_MS
+          );
+    
+    
         video.addEventListener(
           "loadedmetadata",
-          onLoaded,
-          {
-            once: true
-          }
+          onLoaded
         );
-
-
+    
+    
+        video.addEventListener(
+          "durationchange",
+          onDurationChange
+        );
+    
+    
         video.addEventListener(
           "error",
-          onError,
-          {
-            once: true
-          }
+          onError
         );
-
-
+    
+    
+        /*
+         * The video may conceivably already have usable metadata by the
+         * time this Promise is established.
+         */
+        if (
+          metadataIsUsable()
+        ) {
+    
+          finish();
+    
+          return;
+        }
+    
+    
+        /*
+         * Explicitly begin loading the signed remote MP4.
+         */
         video.load();
       }
     );
-
 
     const duration =
       video.duration;
