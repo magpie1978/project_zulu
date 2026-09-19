@@ -10100,6 +10100,11 @@ function getErrorMessage(
     error.error
   ) {
 
+    return String(
+      error.error
+    );
+  }
+
 
   if (
     error.details
@@ -10113,7 +10118,6 @@ function getErrorMessage(
 
   return fallback;
 }
-
 
 /* =====================================================================
    37. SAFE JSON DISPLAY
