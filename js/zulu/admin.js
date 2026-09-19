@@ -10063,10 +10063,6 @@ async function copyText(
    36. ERROR NORMALISATION
 ===================================================================== */
 
-/**
- * Produces a useful message from the different error shapes returned by
- * JavaScript, Supabase and Edge Functions.
- */
 function getErrorMessage(
   error,
   fallback =
@@ -10094,11 +10090,6 @@ function getErrorMessage(
     error.message
   ) {
 
-    return String(
-      error.message
-    );
-  }
-  
     return String(
       error.message
     );
