@@ -6642,6 +6642,22 @@ function renderDuplicateConsolidationImpact(
 
 /**
  * Attaches Cancel and Confirm to a rendered consolidation preview.
+ *
+ * Confirmation is deliberately handled inside the Admin UI rather than
+ * through window.confirm().
+ *
+ * First click:
+ *
+ *     • validates the selected survivor
+ *     • shows the exact KEEP / REMOVE plan
+ *     • changes the button to the final destructive confirmation state
+ *
+ * Second click:
+ *
+ *     • performs the protected consolidation request
+ *
+ * Any change to the selected survivor cancels the pending confirmation
+ * and returns the button to its normal state.
  */
 function attachDuplicateConsolidationPreviewEvents(
   group,
@@ -6660,6 +6676,20 @@ function attachDuplicateConsolidationPreviewEvents(
     );
 
 
+  const survivorInputs =
+    group.querySelectorAll(
+      'input[type="radio"]'
+    );
+
+
+  let confirmationArmed =
+    false;
+
+
+  /* -------------------------------------------------------------------
+     CANCEL
+  ------------------------------------------------------------------- */
+
   cancelButton?.addEventListener(
     "click",
     () => {
@@ -6675,6 +6705,39 @@ function attachDuplicateConsolidationPreviewEvents(
   );
 
 
+  /* -------------------------------------------------------------------
+     SURVIVOR CHANGE
+  ------------------------------------------------------------------- */
+
+  survivorInputs.forEach(
+    input => {
+
+      input.addEventListener(
+        "change",
+        () => {
+
+          confirmationArmed =
+            false;
+
+
+          clearDuplicateConsolidationMessage(
+            group
+          );
+
+
+          resetDuplicateConsolidationConfirmButton(
+            confirmButton
+          );
+        }
+      );
+    }
+  );
+
+
+  /* -------------------------------------------------------------------
+     CONFIRM
+  ------------------------------------------------------------------- */
+
   confirmButton?.addEventListener(
     "click",
     async () => {
@@ -6689,7 +6752,8 @@ function attachDuplicateConsolidationPreviewEvents(
         !selected
       ) {
 
-        alert(
+        showDuplicateConsolidationError(
+          group,
           "Choose which catalogue UID should survive."
         );
 
@@ -6733,7 +6797,8 @@ function attachDuplicateConsolidationPreviewEvents(
         !removed
       ) {
 
-        alert(
+        showDuplicateConsolidationError(
+          group,
           "Could not determine the survivor and duplicate records."
         );
 
@@ -6741,46 +6806,312 @@ function attachDuplicateConsolidationPreviewEvents(
       }
 
 
-      const confirmed =
-        window.confirm(
-          "CONFIRM CATALOGUE CONSOLIDATION\n\n" +
+      /* ---------------------------------------------------------------
+         FIRST CLICK
 
-          `KEEP:\nUID ${survivor.uid} — ${
-            survivor.film ||
-            "Untitled"
-          }\n\n` +
+         Arm the operation and display the exact plan.
+      --------------------------------------------------------------- */
 
-          `REMOVE FROM CATALOGUE:\nUID ${removed.uid} — ${
-            removed.film ||
-            "Untitled"
-          }\n\n` +
+      if (
+        !confirmationArmed
+      ) {
 
-          "Views, actor relationships and ingestion references will be preserved under the surviving UID.\n\n" +
+        confirmationArmed =
+          true;
 
-          "The redundant Backblaze MP4 and thumbnail will NOT be deleted yet.\n\n" +
 
-          "Continue?"
+        showDuplicateConsolidationConfirmation(
+          group,
+          survivor,
+          removed
         );
 
 
-      if (
-        !confirmed
-      ) {
+        confirmButton.innerHTML = `
+          <i data-lucide="triangle-alert"></i>
+
+          <span>
+            Yes, Consolidate These Records
+          </span>
+        `;
+
+
+        confirmButton.classList.add(
+          "is-armed"
+        );
+
+
+        window.lucide?.createIcons();
+
 
         return;
       }
+
+
+      /* ---------------------------------------------------------------
+         SECOND CLICK
+
+         The user has now explicitly confirmed the displayed plan.
+      --------------------------------------------------------------- */
+
+      confirmationArmed =
+        false;
 
 
       await performDuplicateConsolidation(
         confirmButton,
         preview.fingerprint,
         survivor,
-        removed
+        removed,
+        group
       );
     }
   );
 }
 
+/**
+ * Removes any inline consolidation confirmation, success or error message.
+ */
+function clearDuplicateConsolidationMessage(
+  group
+) {
+
+  group
+    ?.querySelectorAll(
+      [
+        ".admin-duplicate-consolidation-confirmation",
+        ".admin-duplicate-consolidation-success",
+        ".admin-duplicate-consolidation-error"
+      ].join(",")
+    )
+    .forEach(
+      element =>
+        element.remove()
+    );
+}
+
+
+/**
+ * Returns the final confirmation button to its normal state.
+ */
+function resetDuplicateConsolidationConfirmButton(
+  button
+) {
+
+  if (
+    !button
+  ) {
+
+    return;
+  }
+
+
+  button.disabled =
+    false;
+
+
+  button.classList.remove(
+    "is-armed",
+    "is-working"
+  );
+
+
+  button.innerHTML = `
+    <i data-lucide="combine"></i>
+
+    <span>
+      Confirm Consolidation
+    </span>
+  `;
+
+
+  window.lucide?.createIcons();
+}
+
+
+/**
+ * Displays the exact catalogue operation that will occur if the user
+ * presses the final confirmation button.
+ */
+function showDuplicateConsolidationConfirmation(
+  group,
+  survivor,
+  removed
+) {
+
+  clearDuplicateConsolidationMessage(
+    group
+  );
+
+
+  const preview =
+    group.querySelector(
+      ".admin-duplicate-consolidation-preview"
+    );
+
+
+  const actions =
+    preview?.querySelector(
+      ".admin-duplicate-actions"
+    );
+
+
+  if (
+    !preview ||
+    !actions
+  ) {
+
+    return;
+  }
+
+
+  const message =
+    document.createElement(
+      "div"
+    );
+
+
+  message.className =
+    "admin-duplicate-consolidation-confirmation";
+
+
+  message.innerHTML = `
+    <div class="admin-duplicate-consolidation-confirmation-heading">
+
+      <i data-lucide="triangle-alert"></i>
+
+      <strong>
+        Confirm this catalogue change
+      </strong>
+
+    </div>
+
+
+    <div class="admin-duplicate-consolidation-confirmation-grid">
+
+      <div class="admin-duplicate-consolidation-confirmation-item is-keep">
+
+        <span>
+          KEEP
+        </span>
+
+        <strong>
+          UID ${escapeHtml(
+            survivor.uid
+          )}
+        </strong>
+
+        <div>
+          ${escapeHtml(
+            survivor.film ||
+            "Untitled"
+          )}
+        </div>
+
+      </div>
+
+
+      <div class="admin-duplicate-consolidation-confirmation-item is-remove">
+
+        <span>
+          REMOVE
+        </span>
+
+        <strong>
+          UID ${escapeHtml(
+            removed.uid
+          )}
+        </strong>
+
+        <div>
+          ${escapeHtml(
+            removed.film ||
+            "Untitled"
+          )}
+        </div>
+
+      </div>
+
+    </div>
+
+
+    <p>
+      Views, actor relationships and ingestion references
+      will be preserved under UID
+      <strong>
+        ${escapeHtml(
+          survivor.uid
+        )}
+      </strong>.
+      The redundant Backblaze MP4 and thumbnail will not
+      be deleted by this operation.
+    </p>
+  `;
+
+
+  preview.insertBefore(
+    message,
+    actions
+  );
+
+
+  window.lucide?.createIcons();
+}
+
+
+/**
+ * Displays a consolidation error inside the duplicate group.
+ */
+function showDuplicateConsolidationError(
+  group,
+  message
+) {
+
+  clearDuplicateConsolidationMessage(
+    group
+  );
+
+
+  const preview =
+    group?.querySelector(
+      ".admin-duplicate-consolidation-preview"
+    );
+
+
+  const actions =
+    preview?.querySelector(
+      ".admin-duplicate-actions"
+    );
+
+
+  if (
+    !preview ||
+    !actions
+  ) {
+
+    return;
+  }
+
+
+  const errorBox =
+    document.createElement(
+      "div"
+    );
+
+
+  errorBox.className =
+    "admin-duplicate-consolidation-error";
+
+
+  errorBox.textContent =
+    message;
+
+
+  preview.insertBefore(
+    errorBox,
+    actions
+  );
+}
 
 /**
  * Performs the final protected consolidation request.
@@ -6796,20 +7127,30 @@ function attachDuplicateConsolidationPreviewEvents(
  *
  * The browser therefore cannot force a stale or technically mismatched
  * consolidation merely by submitting UID values.
+ *
+ * Success and failure are displayed inline rather than through browser
+ * alert dialogs.
  */
 async function performDuplicateConsolidation(
   button,
   fingerprint,
   survivor,
-  removed
+  removed,
+  group
 ) {
-
-  const originalHtml =
-    button.innerHTML;
-
 
   button.disabled =
     true;
+
+
+  button.classList.remove(
+    "is-armed"
+  );
+
+
+  button.classList.add(
+    "is-working"
+  );
 
 
   button.innerHTML = `
@@ -6819,6 +7160,11 @@ async function performDuplicateConsolidation(
       Consolidating…
     </span>
   `;
+
+
+  clearDuplicateConsolidationMessage(
+    group
+  );
 
 
   window.lucide?.createIcons();
@@ -6877,29 +7223,81 @@ async function performDuplicateConsolidation(
     }
 
 
-    button.innerHTML = `
-      <i data-lucide="circle-check"></i>
+    /* ---------------------------------------------------------------
+       SUCCESS
 
-      <span>
-        Consolidated
-      </span>
-    `;
+       Show the result before refreshing the health snapshots.
+    --------------------------------------------------------------- */
+
+    const preview =
+      group?.querySelector(
+        ".admin-duplicate-consolidation-preview"
+      );
+
+
+    if (
+      preview
+    ) {
+
+      preview.innerHTML = `
+        <div class="admin-duplicate-consolidation-success">
+
+          <div class="admin-duplicate-consolidation-success-heading">
+
+            <i data-lucide="circle-check"></i>
+
+            <span>
+              Catalogue consolidation complete
+            </span>
+
+          </div>
+
+
+          <p>
+
+            <strong>
+              UID ${escapeHtml(
+                survivor.uid
+              )}
+            </strong>
+
+            has been retained and
+
+            <strong>
+              UID ${escapeHtml(
+                removed.uid
+              )}
+            </strong>
+
+            has been removed from the catalogue.
+
+            Views, actor relationships and ingestion references
+            have been preserved under the surviving UID.
+
+            The redundant physical MP4 and thumbnail have not
+            been deleted.
+
+          </p>
+
+        </div>
+      `;
+    }
 
 
     window.lucide?.createIcons();
 
 
     /*
-     * The database operation has succeeded.
-     *
      * Refresh all three Admin health sources:
      *
      *     • Catalogue Integrity
      *     • Video Storage Health
      *     • Thumbnail Health
      *
-     * The redundant physical MP4 / thumbnail should now be visible
+     * The redundant physical MP4 / thumbnail should now appear
      * through the relevant orphan diagnostics.
+     *
+     * Do not await this before the success message has been rendered.
      */
     await refreshAdmin();
 
@@ -6913,19 +7311,6 @@ async function performDuplicateConsolidation(
     );
 
 
-    alert(
-      `Catalogue consolidation complete.\n\n` +
-
-      `Surviving UID: ${survivor.uid}\n` +
-
-      `Removed UID: ${removed.uid}\n\n` +
-
-      "The redundant physical MP4 and thumbnail have not been deleted. " +
-
-      "Check Video Storage Health and Thumbnail Health for the resulting orphaned objects."
-    );
-
-
   } catch (
     error
   ) {
@@ -6936,7 +7321,8 @@ async function performDuplicateConsolidation(
     );
 
 
-    alert(
+    showDuplicateConsolidationError(
+      group,
       `Could not consolidate duplicate: ${
         error?.message ||
         "Unknown error"
@@ -6948,8 +7334,18 @@ async function performDuplicateConsolidation(
       false;
 
 
-    button.innerHTML =
-      originalHtml;
+    button.classList.remove(
+      "is-working"
+    );
+
+
+    button.innerHTML = `
+      <i data-lucide="rotate-ccw"></i>
+
+      <span>
+        Try Consolidation Again
+      </span>
+    `;
 
 
     window.lucide?.createIcons();
