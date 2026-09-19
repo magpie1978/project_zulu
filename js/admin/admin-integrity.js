@@ -2595,7 +2595,7 @@ async function performDuplicateConsolidation(
      *
      * Do not await this before the success message has been rendered.
      */
-    await refreshAdmin();
+    await refreshAdminCallback?.();
 
 
     /*
