@@ -2,7 +2,6 @@ import {
   supabase
 } from "../supabaseClient.js";
 
-
 import {
   initialiseVideoHealth,
   loadVideoHealth,
@@ -10,7 +9,6 @@ import {
   setVideoHealthLoadingState,
   renderVideoHealthError
 } from "../admin/admin-video-health.js";
-
 
 import {
   generateThumbnailCandidatesFromUrl,
