@@ -2991,8 +2991,21 @@ if (
     addVideoThumbnailStatus.textContent =
       `Fallback frame at ${time}s`;
   }
-}
 
+
+  /*
+   * Tell the user when this thumbnail can be manually repositioned.
+   */
+  if (
+    candidate.crop?.movable &&
+    candidate.crop.direction ===
+      "vertical"
+  ) {
+
+    addVideoThumbnailStatus.textContent +=
+      " — drag image up/down to reposition";
+  }
+}
 
 /* =====================================================================
    12. GET SELECTED THUMBNAIL
