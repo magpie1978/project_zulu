@@ -1446,6 +1446,183 @@
     </section>
 
 
+        <!-- ===================================================
+         THUMBNAIL RE-EVALUATION
+    ==================================================== -->
+
+    <section
+      class="admin-section"
+      aria-labelledby="admin-thumbnail-reevaluate-heading"
+    >
+
+      <div class="admin-section-heading admin-section-heading-row">
+
+        <div>
+
+          <div class="admin-section-kicker">
+            THUMBNAIL REVIEW
+          </div>
+
+          <h2 id="admin-thumbnail-reevaluate-heading">
+            Re-evaluate Thumbnails
+          </h2>
+
+        </div>
+
+
+        <button
+          id="admin-thumbnail-reevaluate-start"
+          class="admin-button admin-button-secondary"
+          type="button"
+        >
+          <i data-lucide="scan-search"></i>
+          <span>Start Review</span>
+        </button>
+
+      </div>
+
+
+      <div class="admin-thumbnail-reevaluate-intro">
+
+        Re-run existing videos through the current face-aware thumbnail
+        selection system. Existing thumbnails are not replaced unless you
+        explicitly choose <strong>Use New</strong>.
+
+      </div>
+
+
+      <div
+        id="admin-thumbnail-reevaluate-panel"
+        class="admin-thumbnail-reevaluate-panel"
+        hidden
+      >
+
+        <div
+          id="admin-thumbnail-reevaluate-film"
+          class="admin-thumbnail-reevaluate-film"
+        ></div>
+
+
+        <div class="admin-thumbnail-reevaluate-comparison">
+
+          <!-- CURRENT THUMBNAIL -->
+
+          <div class="admin-thumbnail-reevaluate-image-card">
+
+            <div class="admin-thumbnail-reevaluate-label">
+              Current
+            </div>
+
+            <div class="admin-thumbnail-reevaluate-image-wrap">
+
+              <img
+                id="admin-thumbnail-reevaluate-current"
+                alt="Current thumbnail"
+              >
+
+            </div>
+
+          </div>
+
+
+          <!-- SUGGESTED THUMBNAIL -->
+
+          <div class="admin-thumbnail-reevaluate-image-card">
+
+            <div class="admin-thumbnail-reevaluate-label">
+              Suggested
+            </div>
+
+            <div class="admin-thumbnail-reevaluate-image-wrap">
+
+              <img
+                id="admin-thumbnail-reevaluate-suggested"
+                alt="Suggested thumbnail"
+              >
+
+            </div>
+
+          </div>
+
+        </div>
+
+
+        <div
+          id="admin-thumbnail-reevaluate-detail"
+          class="admin-thumbnail-reevaluate-detail"
+        ></div>
+
+
+        <div class="admin-thumbnail-reevaluate-candidate-nav">
+
+          <button
+            type="button"
+            id="admin-thumbnail-reevaluate-prev"
+            class="admin-button admin-button-secondary"
+          >
+            <i data-lucide="chevron-left"></i>
+            <span>Previous Candidate</span>
+          </button>
+
+
+          <button
+            type="button"
+            id="admin-thumbnail-reevaluate-next"
+            class="admin-button admin-button-secondary"
+          >
+            <span>Next Candidate</span>
+            <i data-lucide="chevron-right"></i>
+          </button>
+
+        </div>
+
+
+        <div class="admin-thumbnail-reevaluate-actions">
+
+          <button
+            type="button"
+            id="admin-thumbnail-reevaluate-keep"
+            class="admin-button admin-button-secondary"
+          >
+            <i data-lucide="check"></i>
+            <span>Keep Current</span>
+          </button>
+
+
+          <button
+            type="button"
+            id="admin-thumbnail-reevaluate-use"
+            class="admin-thumbnail-reevaluate-use"
+          >
+            <i data-lucide="image"></i>
+            <span>Use New</span>
+          </button>
+
+
+          <button
+            type="button"
+            id="admin-thumbnail-reevaluate-stop"
+            class="admin-button admin-button-secondary"
+            disabled
+          >
+            <i data-lucide="square"></i>
+            <span>Stop Review</span>
+          </button>
+
+        </div>
+
+
+        <div
+          id="admin-thumbnail-reevaluate-status"
+          class="admin-thumbnail-reevaluate-status"
+          role="status"
+        ></div>
+
+      </div>
+
+    </section>
+
+
     <!-- ===================================================
          RECENT INGESTIONS
     ==================================================== -->
