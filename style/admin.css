@@ -4916,3 +4916,142 @@ a {
   }
 
 }
+
+/* =====================================================================
+   ADMIN SECTION TABS
+===================================================================== */
+
+.admin-tabs {
+  position: sticky;
+  top: 100px;
+  z-index: 90;
+
+  margin: -1px 0 28px;
+
+  border-bottom: 1px solid #303030;
+
+  background: #0b0c0e;
+}
+
+.admin-tabs-scroll {
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+
+  overflow-x: auto;
+  overflow-y: hidden;
+
+  padding: 7px 6px 0;
+
+  scrollbar-width: thin;
+  scrollbar-color: #333 transparent;
+}
+
+.admin-tab {
+  position: relative;
+
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+
+  min-width: max-content;
+  min-height: 43px;
+  padding: 9px 16px 10px;
+
+  border: 1px solid transparent;
+  border-bottom: 0;
+  border-radius: 10px 10px 0 0;
+
+  background: transparent;
+  color: #858585;
+
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+
+  cursor: pointer;
+
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.admin-tab:hover {
+  background: #151515;
+  color: #d6d6d6;
+}
+
+.admin-tab.is-active {
+  margin-bottom: -1px;
+
+  border-color: #303030;
+
+  background: #141414;
+  color: #fff;
+}
+
+.admin-tab.is-active::after {
+  position: absolute;
+  right: 0;
+  bottom: -1px;
+  left: 0;
+
+  height: 1px;
+
+  background: #141414;
+
+  content: "";
+}
+
+.admin-tab svg {
+  width: 15px;
+  height: 15px;
+
+  flex: 0 0 15px;
+}
+
+.admin-tab:focus-visible {
+  outline: 2px solid #e50914;
+  outline-offset: -3px;
+}
+
+.admin-section[data-admin-tab-panel][hidden] {
+  display: none;
+}
+
+.admin-section[data-admin-tab-panel] {
+  margin-bottom: 0;
+}
+
+@media (max-width: 900px) {
+  .admin-tabs {
+    top: 94px;
+  }
+
+  .admin-tabs-scroll {
+    padding-left: 0;
+    padding-right: 0;
+  }
+
+  .admin-tab {
+    min-height: 40px;
+    padding: 8px 12px 9px;
+
+    font-size: 11px;
+  }
+}
+
+@media (max-width: 620px) {
+  .admin-tabs {
+    position: static;
+
+    margin-bottom: 22px;
+  }
+
+  .admin-tab span {
+    display: inline;
+  }
+}
+
