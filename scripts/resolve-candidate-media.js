@@ -29,20 +29,129 @@ async function resolveCandidate(candidate) {
   console.log(candidate.title);
   console.log(candidate.source_url);
 
-  const pageResponse = await fetch(candidate.source_url, {
-    headers: {
-      "User-Agent": USER_AGENT,
-      "Accept":
-        "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
-    }
-  });
+let pageUrl =
+  candidate.source_url;
 
-  if (!pageResponse.ok) {
-    throw new Error(
-      `Page returned HTTP ${pageResponse.status}`
+let pageResponse = null;
+
+const MAX_REDIRECTS = 5;
+
+for (
+  let redirectCount = 0;
+  redirectCount <= MAX_REDIRECTS;
+  redirectCount++
+) {
+
+  console.log(
+    `Fetching page: ${pageUrl}`
+  );
+
+  pageResponse =
+    await fetch(
+      pageUrl,
+      {
+        headers: {
+          "User-Agent":
+            USER_AGENT,
+
+          "Accept":
+            "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+
+          "Accept-Language":
+            "en-GB,en;q=0.9",
+
+          "Cache-Control":
+            "no-cache"
+        },
+
+        redirect:
+          "manual"
+      }
     );
+
+
+  console.log(
+    `Page response: HTTP ${pageResponse.status}`
+  );
+
+
+  if (
+    [
+      301,
+      302,
+      303,
+      307,
+      308
+    ].includes(
+      pageResponse.status
+    )
+  ) {
+
+    const location =
+      pageResponse.headers.get(
+        "location"
+      );
+
+
+    if (
+      !location
+    ) {
+
+      throw new Error(
+        `HTTP ${pageResponse.status} redirect had no Location header`
+      );
+    }
+
+
+    const nextUrl =
+      new URL(
+        location,
+        pageUrl
+      ).href;
+
+
+    console.log(
+      `Redirect → ${nextUrl}`
+    );
+
+
+    pageUrl =
+      nextUrl;
+
+
+    continue;
   }
 
+
+  break;
+}
+
+
+if (
+  !pageResponse
+) {
+
+  throw new Error(
+    "No response received from candidate page"
+  );
+}
+
+
+if (
+  !pageResponse.ok
+) {
+
+  throw new Error(
+    `Page returned HTTP ${pageResponse.status} (${pageUrl})`
+  );
+}
+
+
+console.log(
+  `Final page URL: ${pageUrl}`
+);
+
+  
   const html = await pageResponse.text();
 
   const $ = cheerio.load(html);
@@ -79,10 +188,10 @@ async function resolveCandidate(candidate) {
     );
   }
 
-  mediaUrl = new URL(
-    mediaUrl,
-    candidate.source_url
-  ).href;
+mediaUrl = new URL(
+  mediaUrl,
+  pageUrl
+).href;
 
   console.log(`Media URL: ${mediaUrl}`);
 
