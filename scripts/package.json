@@ -5,6 +5,7 @@
     "scrape:candidates": "node scrape-justthegays.js",
     "inspect:video": "node inspect-video-page.js",
     "resolve:candidates": "node resolve-candidate-media.js"
+    "test:candidate-import": "node test-candidate-import.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.57.4",
