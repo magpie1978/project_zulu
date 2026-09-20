@@ -345,9 +345,39 @@ async function run() {
       video => video.source_url
     );
 
+/*
+ * Check existing URLs in small batches.
+ *
+ * Source URLs are long, so putting all 200 into a single
+ * Supabase .in() request can exceed HTTP header limits.
+ */
+
+const existingRows = [];
+
+const LOOKUP_BATCH_SIZE = 25;
+
+for (
+  let i = 0;
+  i < sourceUrls.length;
+  i += LOOKUP_BATCH_SIZE
+) {
+
+  const batch =
+    sourceUrls.slice(
+      i,
+      i + LOOKUP_BATCH_SIZE
+    );
+
+  console.log(
+    `Checking existing candidates ${i + 1}-${Math.min(
+      i + LOOKUP_BATCH_SIZE,
+      sourceUrls.length
+    )} of ${sourceUrls.length}...`
+  );
+
   const {
-    data: existingRows,
-    error: existingError
+    data,
+    error
   } =
     await supabase
       .from("zulu_candidates")
@@ -356,12 +386,18 @@ async function run() {
       )
       .in(
         "source_url",
-        sourceUrls
+        batch
       );
 
-  if (existingError) {
-    throw existingError;
+  if (error) {
+    throw error;
   }
+
+  if (data) {
+    existingRows.push(...data);
+  }
+
+}
 
 
   const existingByUrl =
