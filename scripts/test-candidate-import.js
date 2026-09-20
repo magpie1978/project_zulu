@@ -128,63 +128,125 @@ function inferActorsFromTitle(title) {
       .trim();
 
 
-  const match =
-    workingTitle.match(
-      /^(.+?)\s+with\s+(.+)$/i
-    );
-
-
   if (
-    !match
+    !workingTitle
   ) {
 
     return [];
   }
 
 
-  const actors = [
-    match[1].trim()
-  ];
+  /*
+   * FORMAT 1
+   * --------
+   *
+   * Actor A with Actor B
+   * Actor A with Actor B & Actor C
+   * Actor A with Actor B and Actor C
+   */
+  const withMatch =
+    workingTitle.match(
+      /^(.+?)\s+with\s+(.+)$/i
+    );
 
 
-  const rest =
-    match[2]
-      .replace(
-        /\s+-\s+.*$/,
-        ""
+  if (
+    withMatch
+  ) {
+
+    const actors = [
+      withMatch[1].trim()
+    ];
+
+
+    const rest =
+      withMatch[2]
+        .replace(
+          /\s+-\s+.*$/,
+          ""
+        )
+        .replace(
+          /\s+#\d+$/,
+          ""
+        );
+
+
+    const others =
+      rest
+        .replace(
+          /\s+and\s+/gi,
+          " & "
+        )
+        .split(
+          /\s*,\s*|\s*&\s*/
+        )
+        .map(
+          value =>
+            value.trim()
+        )
+        .filter(Boolean);
+
+
+    actors.push(
+      ...others
+    );
+
+
+    return [
+      ...new Set(
+        actors.filter(Boolean)
       )
-      .replace(
-        /\s+#\d+$/,
-        ""
-      );
+    ];
+  }
 
 
-  const others =
-    rest
-      .replace(
-        /\s+and\s+/gi,
-        " & "
-      )
-      .split(
-        /\s*,\s*|\s*&\s*/
-      )
-      .map(
-        value =>
-          value.trim()
-      )
-      .filter(Boolean);
+  /*
+   * FORMAT 2
+   * --------
+   *
+   * Actor – description
+   * Actor - description
+   *
+   * Example:
+   *
+   * TheMaskedsukr – a blowjob through the glorygole
+   *
+   * becomes:
+   *
+   * TheMaskedsukr
+   */
+  const dashMatch =
+    workingTitle.match(
+      /^(.+?)\s+[–—-]\s+(.+)$/
+    );
 
 
-  actors.push(
-    ...others
-  );
+  if (
+    dashMatch
+  ) {
+
+    const actor =
+      dashMatch[1]
+        .trim();
 
 
-  return [
-    ...new Set(
-      actors.filter(Boolean)
-    )
-  ];
+    if (
+      actor
+    ) {
+
+      return [
+        actor
+      ];
+    }
+  }
+
+
+  /*
+   * Unknown title format.
+   *
+   * Deliberately return nothing rather than guessing.
+   */
+  return [];
 }
 
 
