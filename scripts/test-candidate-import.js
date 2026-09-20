@@ -1005,14 +1005,28 @@ async function finalizeVideo({
         method:
           "POST",
 
-        headers: {
-          "Content-Type":
-            "application/json",
-
-          "X-Zulu-Automation-Key":
-            ZULU_AUTOMATION_KEY
-        },
-
+          headers: {
+            "Content-Type":
+              "application/json",
+          
+            /*
+             * Required by the Supabase Edge Function gateway.
+             *
+             * The service-role key is available only inside this GitHub Actions
+             * job and is never exposed to the browser.
+             */
+            "Authorization":
+              `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+          
+            /*
+             * Our own server-to-server authentication.
+             *
+             * zulu-finalize-video validates this separately.
+             */
+            "X-Zulu-Automation-Key":
+              ZULU_AUTOMATION_KEY
+          },
+        
         body:
           JSON.stringify({
             ingestion_id:
