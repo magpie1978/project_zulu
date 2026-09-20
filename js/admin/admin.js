@@ -1862,18 +1862,111 @@ async function submitCandidateApproval(
         );
 
 
-    if (
-      error
-    ) {
-      throw error;
+if (
+  error
+) {
+  throw error;
+}
+
+
+/* ---------------------------------------------------------------
+   START AUTOMATED CANDIDATE IMPORT PIPELINE
+
+   The candidate is now safely stored as:
+
+       status        = accepted
+       import_status = ready
+
+   Ask the protected Edge Function to start the GitHub resolver.
+
+   If GitHub cannot be triggered, do NOT undo the approval. The
+   candidate remains "ready" and can be processed manually later.
+---------------------------------------------------------------- */
+
+let automationWarning =
+  null;
+
+
+try {
+
+  const {
+    data: automationData,
+    error: automationError
+  } =
+    await supabase.functions.invoke(
+      "zulu-trigger-candidate-import",
+      {
+        body: {
+          candidate_id:
+            id
+        }
+      }
+    );
+
+
+  if (
+    automationError
+  ) {
+    throw automationError;
+  }
+
+
+  if (
+    !automationData?.success ||
+    !automationData?.dispatched
+  ) {
+
+    throw new Error(
+      automationData?.error ||
+      "Candidate import automation was not started."
+    );
+  }
+
+
+  console.log(
+    "CANDIDATE IMPORT AUTOMATION STARTED:",
+    {
+      candidate_id:
+        id,
+
+      workflow:
+        automationData.workflow
     }
+  );
 
 
-    closeCandidateApprovalModal();
+} catch (
+  automationError
+) {
+
+  console.error(
+    "CANDIDATE IMPORT AUTOMATION ERROR:",
+    automationError
+  );
 
 
-    await loadCandidates();
+  automationWarning =
+    automationError?.message ||
+    "The automatic import could not be started.";
+}
 
+
+closeCandidateApprovalModal();
+
+
+await loadCandidates();
+
+
+if (
+  automationWarning
+) {
+
+  window.alert(
+    `Candidate ${id} was approved successfully, but the automatic import could not be started.\n\n${automationWarning}\n\nThe candidate remains ready for import and can be processed manually.`
+  );
+}
+
+    
 
   } catch (
     error
