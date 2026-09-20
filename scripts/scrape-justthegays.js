@@ -66,6 +66,40 @@ async function scrapePage(pageNumber, cutoff, now) {
 
   const $ = cheerio.load(html);
 
+  if (pageNumber === 2) {
+
+  console.log("");
+  console.log("===== PAGE 2 DEBUG =====");
+
+  console.log(
+    `post-grid count: ${$(".post-grid").length}`
+  );
+
+  $(".post-grid").each((index, element) => {
+
+    const grid = $(element);
+
+    console.log("");
+    console.log(
+      `GRID ${index + 1}: ${grid.find(".post-item").length} post-items`
+    );
+
+    console.log(
+      grid
+        .text()
+        .replace(/\s+/g, " ")
+        .trim()
+        .substring(0, 1000)
+    );
+
+  });
+
+  console.log("");
+  console.log("===== END PAGE 2 DEBUG =====");
+  console.log("");
+
+}
+
   let grid = null;
 
 
