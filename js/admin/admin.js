@@ -243,9 +243,18 @@ async function initialiseAdmin() {
   initialiseThumbnailHealth();
 
 
-  await refreshAdmin();
-}
+  /* -------------------------------------------------------------------
+     CANDIDATES
+  ------------------------------------------------------------------- */
 
+  initialiseCandidates();
+
+
+  await refreshAdmin();
+
+  await loadCandidates();
+
+  }
 
 /* =====================================================================
    03. AUTHENTICATION
@@ -633,7 +642,834 @@ function renderIngestionHealth(
 
 
 
+/* =====================================================================
+   CANDIDATES
+===================================================================== */
 
+const candidatesGrid =
+  document.getElementById("admin-candidates-grid");
+
+const candidatesStatus =
+  document.getElementById("admin-candidates-status");
+
+const candidatesTotal =
+  document.getElementById("admin-candidates-total");
+
+const candidatesTabCount =
+  document.getElementById("admin-candidates-tab-count");
+
+const candidatesRefresh =
+  document.getElementById("admin-candidates-refresh");
+
+const candidatesPagination =
+  document.getElementById("admin-candidates-pagination");
+
+const candidatesPrev =
+  document.getElementById("admin-candidates-prev");
+
+const candidatesNext =
+  document.getElementById("admin-candidates-next");
+
+const candidatesPageLabel =
+  document.getElementById("admin-candidates-page");
+
+const candidateFilters =
+  Array.from(
+    document.querySelectorAll("[data-candidate-status]")
+  );
+
+const CANDIDATES_PAGE_SIZE = 48;
+
+let candidatesPage = 0;
+let candidatesCurrentStatus = "pending";
+let candidatesCount = 0;
+
+
+function initialiseCandidates() {
+
+  candidatesRefresh?.addEventListener(
+    "click",
+    () => loadCandidates()
+  );
+
+  candidatesPrev?.addEventListener(
+    "click",
+    () => {
+      if (candidatesPage > 0) {
+        candidatesPage--;
+        loadCandidates();
+      }
+    }
+  );
+
+  candidatesNext?.addEventListener(
+    "click",
+    () => {
+
+      const maxPage =
+        Math.max(
+          0,
+          Math.ceil(
+            candidatesCount /
+            CANDIDATES_PAGE_SIZE
+          ) - 1
+        );
+
+      if (
+        candidatesPage <
+        maxPage
+      ) {
+
+        candidatesPage++;
+
+        loadCandidates();
+      }
+    }
+  );
+
+
+  candidateFilters.forEach(
+    button => {
+
+      button.addEventListener(
+        "click",
+        () => {
+
+          candidatesCurrentStatus =
+            button.dataset.candidateStatus;
+
+          candidatesPage = 0;
+
+          candidateFilters.forEach(
+            item =>
+              item.classList.toggle(
+                "is-active",
+                item === button
+              )
+          );
+
+          loadCandidates();
+        }
+      );
+    }
+  );
+
+
+  candidatesGrid?.addEventListener(
+    "click",
+    handleCandidateAction
+  );
+}
+
+async function loadCandidates() {
+
+  if (
+    !candidatesGrid ||
+    !candidatesStatus
+  ) {
+    return;
+  }
+
+
+  setCandidatesLoading(
+    true
+  );
+
+
+  const from =
+    candidatesPage *
+    CANDIDATES_PAGE_SIZE;
+
+
+  const to =
+    from +
+    CANDIDATES_PAGE_SIZE -
+    1;
+
+
+  try {
+
+    const {
+      data,
+      error,
+      count
+    } =
+      await supabase
+        .from(
+          "zulu_candidates"
+        )
+        .select(
+          `
+            id,
+            title,
+            source_url,
+            source_age,
+            source_uploaded_at,
+            thumbnail_url,
+            status,
+            first_seen_at,
+            reviewed_at
+          `,
+          {
+            count: "exact"
+          }
+        )
+        .eq(
+          "status",
+          candidatesCurrentStatus
+        )
+        .order(
+          "source_uploaded_at",
+          {
+            ascending: false,
+            nullsFirst: false
+          }
+        )
+        .range(
+          from,
+          to
+        );
+
+
+    if (error) {
+      throw error;
+    }
+
+
+    candidatesCount =
+      Number(count) || 0;
+
+
+    renderCandidates(
+      data || []
+    );
+
+
+    if (
+      candidatesCurrentStatus ===
+      "pending"
+    ) {
+
+      if (
+        candidatesTotal
+      ) {
+
+        candidatesTotal.textContent =
+          candidatesCount.toLocaleString();
+      }
+
+
+      if (
+        candidatesTabCount
+      ) {
+
+        candidatesTabCount.textContent =
+          candidatesCount.toLocaleString();
+      }
+    }
+
+
+    updateCandidatesPagination();
+
+
+    candidatesStatus.textContent =
+      candidatesCount
+        ? `${candidatesCount.toLocaleString()} ${candidatesCurrentStatus} candidate${candidatesCount === 1 ? "" : "s"}.`
+        : `No ${candidatesCurrentStatus} candidates.`;
+
+
+  } catch (
+    error
+  ) {
+
+    console.error(
+      "CANDIDATES ERROR:",
+      error
+    );
+
+
+    candidatesGrid.innerHTML =
+      "";
+
+
+    candidatesStatus.textContent =
+      `Could not load candidates: ${
+        error?.message ||
+        "Unknown error"
+      }`;
+
+
+    candidatesStatus.classList.add(
+      "is-error"
+    );
+
+
+  } finally {
+
+    setCandidatesLoading(
+      false
+    );
+
+
+    window.lucide?.createIcons();
+  }
+}
+
+function renderCandidates(
+  rows
+) {
+
+  if (
+    !candidatesGrid
+  ) {
+    return;
+  }
+
+
+  if (
+    !rows.length
+  ) {
+
+    candidatesGrid.innerHTML = `
+      <div class="admin-candidates-empty">
+        No ${escapeCandidateHtml(
+          candidatesCurrentStatus
+        )} candidates to show.
+      </div>
+    `;
+
+    return;
+  }
+
+
+  candidatesGrid.innerHTML =
+    rows
+      .map(
+        row =>
+          renderCandidateCard(
+            row
+          )
+      )
+      .join("");
+}
+
+
+function renderCandidateCard(
+  row
+) {
+
+  const title =
+    escapeCandidateHtml(
+      row.title ||
+      "Untitled"
+    );
+
+
+  const sourceUrl =
+    escapeCandidateAttribute(
+      row.source_url ||
+      ""
+    );
+
+
+  const thumbnailUrl =
+    escapeCandidateAttribute(
+      row.thumbnail_url ||
+      ""
+    );
+
+
+  const sourceAge =
+    escapeCandidateHtml(
+      row.source_age ||
+      ""
+    );
+
+
+  const uploaded =
+    formatCandidateDate(
+      row.source_uploaded_at
+    );
+
+
+  const thumbnail =
+    thumbnailUrl
+      ? `
+          <img
+            src="${thumbnailUrl}"
+            alt=""
+            loading="lazy"
+            referrerpolicy="no-referrer"
+          >
+        `
+      : `
+          <div class="admin-candidate-no-thumbnail">
+            <i data-lucide="image-off"></i>
+          </div>
+        `;
+
+
+  let actions =
+    "";
+
+
+  if (
+    candidatesCurrentStatus ===
+    "pending"
+  ) {
+
+    actions = `
+      <button
+        type="button"
+        class="admin-candidate-action admin-candidate-accept"
+        data-candidate-action="accepted"
+        data-candidate-id="${Number(
+          row.id
+        )}"
+      >
+        <i data-lucide="check"></i>
+        <span>Accept</span>
+      </button>
+
+      <button
+        type="button"
+        class="admin-candidate-action admin-candidate-reject"
+        data-candidate-action="rejected"
+        data-candidate-id="${Number(
+          row.id
+        )}"
+      >
+        <i data-lucide="x"></i>
+        <span>Reject</span>
+      </button>
+    `;
+
+  } else {
+
+    actions = `
+      <button
+        type="button"
+        class="admin-candidate-action admin-candidate-restore"
+        data-candidate-action="pending"
+        data-candidate-id="${Number(
+          row.id
+        )}"
+      >
+        <i data-lucide="undo-2"></i>
+        <span>Return to Pending</span>
+      </button>
+    `;
+  }
+
+
+  return `
+    <article
+      class="admin-candidate-card"
+      data-candidate-card="${Number(
+        row.id
+      )}"
+    >
+
+      <a
+        class="admin-candidate-thumbnail"
+        href="${sourceUrl}"
+        target="_blank"
+        rel="noopener noreferrer"
+        title="Open source page"
+      >
+        ${thumbnail}
+      </a>
+
+      <div class="admin-candidate-body">
+
+        <h3 class="admin-candidate-title">
+          ${title}
+        </h3>
+
+        <div class="admin-candidate-meta">
+
+          ${
+            uploaded
+              ? `
+                  <span>
+                    <i data-lucide="calendar-clock"></i>
+                    ${escapeCandidateHtml(
+                      uploaded
+                    )}
+                  </span>
+                `
+              : ""
+          }
+
+          ${
+            sourceAge
+              ? `
+                  <span>
+                    <i data-lucide="clock-3"></i>
+                    ${sourceAge}
+                  </span>
+                `
+              : ""
+          }
+
+        </div>
+
+        <div class="admin-candidate-actions">
+
+          <a
+            class="admin-candidate-source"
+            href="${sourceUrl}"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            <i data-lucide="external-link"></i>
+            <span>View Source</span>
+          </a>
+
+          ${actions}
+
+        </div>
+
+      </div>
+
+    </article>
+  `;
+}
+
+async function handleCandidateAction(
+  event
+) {
+
+  const button =
+    event.target.closest(
+      "[data-candidate-action]"
+    );
+
+
+  if (
+    !button
+  ) {
+    return;
+  }
+
+
+  const id =
+    Number(
+      button.dataset.candidateId
+    );
+
+
+  const status =
+    button.dataset.candidateAction;
+
+
+  if (
+    !Number.isFinite(
+      id
+    ) ||
+    ![
+      "pending",
+      "accepted",
+      "rejected"
+    ].includes(
+      status
+    )
+  ) {
+    return;
+  }
+
+
+  const card =
+    button.closest(
+      "[data-candidate-card]"
+    );
+
+
+  button.disabled =
+    true;
+
+
+  card?.classList.add(
+    "is-updating"
+  );
+
+
+  try {
+
+    const update = {
+
+      status,
+
+      reviewed_at:
+        status === "pending"
+          ? null
+          : new Date().toISOString()
+
+    };
+
+
+    const {
+      error
+    } =
+      await supabase
+        .from(
+          "zulu_candidates"
+        )
+        .update(
+          update
+        )
+        .eq(
+          "id",
+          id
+        );
+
+
+    if (
+      error
+    ) {
+      throw error;
+    }
+
+
+    card?.remove();
+
+
+    candidatesCount =
+      Math.max(
+        0,
+        candidatesCount - 1
+      );
+
+
+    if (
+      candidatesCurrentStatus ===
+      "pending"
+    ) {
+
+      if (
+        candidatesTotal
+      ) {
+
+        candidatesTotal.textContent =
+          candidatesCount.toLocaleString();
+      }
+
+
+      if (
+        candidatesTabCount
+      ) {
+
+        candidatesTabCount.textContent =
+          candidatesCount.toLocaleString();
+      }
+    }
+
+
+    if (
+      !candidatesGrid.children.length &&
+      candidatesPage > 0
+    ) {
+
+      candidatesPage--;
+    }
+
+
+    await loadCandidates();
+
+
+  } catch (
+    error
+  ) {
+
+    console.error(
+      "CANDIDATE UPDATE ERROR:",
+      error
+    );
+
+
+    window.alert(
+      `Could not update candidate: ${
+        error?.message ||
+        "Unknown error"
+      }`
+    );
+
+
+    button.disabled =
+      false;
+
+
+    card?.classList.remove(
+      "is-updating"
+    );
+  }
+}
+
+  function updateCandidatesPagination() {
+
+  if (
+    !candidatesPagination ||
+    !candidatesPrev ||
+    !candidatesNext ||
+    !candidatesPageLabel
+  ) {
+    return;
+  }
+
+
+  const totalPages =
+    Math.max(
+      1,
+      Math.ceil(
+        candidatesCount /
+        CANDIDATES_PAGE_SIZE
+      )
+    );
+
+
+  if (
+    candidatesPage >=
+    totalPages
+  ) {
+
+    candidatesPage =
+      totalPages - 1;
+  }
+
+
+  candidatesPagination.hidden =
+    candidatesCount <=
+    CANDIDATES_PAGE_SIZE;
+
+
+  candidatesPrev.disabled =
+    candidatesPage <= 0;
+
+
+  candidatesNext.disabled =
+    candidatesPage >=
+    totalPages - 1;
+
+
+  candidatesPageLabel.textContent =
+    `Page ${candidatesPage + 1} of ${totalPages}`;
+}
+
+
+function setCandidatesLoading(
+  loading
+) {
+
+  candidatesRefresh?.classList.toggle(
+    "loading",
+    loading
+  );
+
+
+  if (
+    candidatesRefresh
+  ) {
+
+    candidatesRefresh.disabled =
+      loading;
+  }
+
+
+  candidatesStatus?.classList.remove(
+    "is-error"
+  );
+
+
+  if (
+    loading &&
+    candidatesStatus
+  ) {
+
+    candidatesStatus.textContent =
+      "Loading candidates…";
+  }
+}
+
+
+function formatCandidateDate(
+  value
+) {
+
+  if (
+    !value
+  ) {
+    return "";
+  }
+
+
+  const date =
+    new Date(
+      value
+    );
+
+
+  if (
+    Number.isNaN(
+      date.getTime()
+    )
+  ) {
+    return "";
+  }
+
+
+  return date.toLocaleString(
+    [],
+    {
+      dateStyle:
+        "medium",
+
+      timeStyle:
+        "short"
+    }
+  );
+}
+
+
+function escapeCandidateHtml(
+  value
+) {
+
+  return String(
+    value ?? ""
+  )
+    .replaceAll(
+      "&",
+      "&amp;"
+    )
+    .replaceAll(
+      "<",
+      "&lt;"
+    )
+    .replaceAll(
+      ">",
+      "&gt;"
+    )
+    .replaceAll(
+      '"',
+      "&quot;"
+    )
+    .replaceAll(
+      "'",
+      "&#039;"
+    );
+}
+
+
+function escapeCandidateAttribute(
+  value
+) {
+
+  return escapeCandidateHtml(
+    value
+  );
+}
+
+  
 
 
 /* =====================================================================
