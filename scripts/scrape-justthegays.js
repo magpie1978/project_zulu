@@ -78,7 +78,24 @@ async function run() {
   }
 
   console.log('Found "Latest Videos" section.');
-
+  
+  console.log("");
+  console.log("===== LATEST VIDEOS HTML DEBUG =====");
+  console.log("");
+  
+  const headingElement = $(heading);
+  
+  console.log(
+    headingElement
+      .parent()
+      .parent()
+      .html()
+      ?.substring(0, 15000)
+  );
+  
+  console.log("");
+  console.log("===== END HTML DEBUG =====");
+  console.log("");
   /*
    * Find video links after that heading.
    */
