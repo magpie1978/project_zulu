@@ -2,35 +2,8 @@ const cheerio = require("cheerio");
 
 const SOURCE_URL = "https://justthegays.com/";
 
-function parseAge(text) {
-  const match = text.match(
-    /(\d+)\s+(minute|minutes|hour|hours|day|days)\s+ago/i
-  );
-
-  if (!match) return null;
-
-  const amount = Number(match[1]);
-  const unit = match[2].toLowerCase();
-
-  let hours;
-
-  if (unit.startsWith("minute")) {
-    hours = amount / 60;
-  } else if (unit.startsWith("hour")) {
-    hours = amount;
-  } else if (unit.startsWith("day")) {
-    hours = amount * 24;
-  } else {
-    return null;
-  }
-
-  return {
-    text: match[0],
-    hours
-  };
-}
-
 async function run() {
+
   console.log(`Fetching ${SOURCE_URL}`);
 
   const response = await fetch(SOURCE_URL, {
@@ -55,178 +28,270 @@ async function run() {
   const $ = cheerio.load(html);
 
   /*
-   * Locate the Latest Videos heading.
+   * Find the Latest Videos heading.
    */
-  let heading;
+
+  let latestHeading = null;
 
   $("h1, h2, h3, h4").each((_, element) => {
+
     const text = $(element)
       .text()
       .replace(/\s+/g, " ")
       .trim();
 
     if (/latest videos/i.test(text)) {
-      heading = element;
+      latestHeading = element;
       return false;
     }
+
   });
 
-  if (!heading) {
+  if (!latestHeading) {
     throw new Error(
       'Could not locate the "Latest Videos" section.'
     );
   }
 
   console.log('Found "Latest Videos" section.');
-  
-  console.log("");
-  console.log("===== LATEST VIDEOS HTML DEBUG =====");
-  console.log("");
-  
-  const headingElement = $(heading);
-  
-  console.log(
-    headingElement
-      .parent()
-      .parent()
-      .html()
-      ?.substring(0, 15000)
-  );
-  
-  console.log("");
-  console.log("===== END HTML DEBUG =====");
-  console.log("");
+
   /*
-   * Find video links after that heading.
+   * The site's structure is:
+   *
+   * widget-title-wrap
+   * post-grid
+   *   row
+   *     post-item
+   *       article
    */
+
+  const titleWrap =
+    $(latestHeading).closest(".widget-title-wrap");
+
+  const grid =
+    titleWrap.next(".post-grid");
+
+  if (!grid.length) {
+    throw new Error(
+      "Could not locate Latest Videos post grid."
+    );
+  }
+
+  const cards =
+    grid.find(".post-item");
+
+  console.log(
+    `Found ${cards.length} video cards in Latest Videos.`
+  );
+
+  const now = Date.now();
+
+  const cutoff =
+    now - (24 * 60 * 60 * 1000);
+
   const videos = [];
 
-  let node = $(heading).next();
 
-  while (node.length) {
-    const tag =
-      node.prop("tagName")?.toLowerCase();
+  cards.each((_, element) => {
+
+    const card = $(element);
 
     /*
-     * Stop when another main section begins.
+     * TITLE + VIDEO URL
      */
-    if (
-      ["h1", "h2"].includes(tag) &&
-      !/latest videos/i.test(node.text())
-    ) {
-      break;
-    }
 
-    const links = node.is("a")
-      ? node
-      : node.find("a");
+    const titleLink =
+      card.find(
+        ".post-meta__title a"
+      ).first();
 
-    links.each((_, element) => {
-      const link = $(element);
-
-      const href = link.attr("href");
-
-      if (!href) return;
-
-      /*
-       * Look around the link for its age.
-       */
-      const container = link.closest(
-        "article, li, .video, .video-item, .item, .post, .card, div"
-      );
-
-      if (!container.length) return;
-
-      const text = container
+    const title =
+      titleLink
         .text()
         .replace(/\s+/g, " ")
         .trim();
 
-      const age = parseAge(text);
+    const href =
+      titleLink.attr("href");
 
-      if (!age) return;
+    if (!title || !href) {
+      return;
+    }
 
-      /*
-       * Last 24 hours only.
-       */
-      if (age.hours > 24) return;
 
-      let url;
+    /*
+     * EXACT UPLOAD DATE
+     */
 
-      try {
-        url = new URL(
+    const time =
+      card.find(
+        ".post-meta__date time"
+      ).first();
+
+    const datetime =
+      time.attr("datetime");
+
+    if (!datetime) {
+      return;
+    }
+
+
+    /*
+     * JustTheGays provides:
+     *
+     * 2026-09-19 16:51:22
+     *
+     * Convert it into an ISO-compatible format.
+     */
+
+    const uploaded =
+      new Date(
+        datetime.replace(" ", "T")
+      );
+
+    if (
+      Number.isNaN(
+        uploaded.getTime()
+      )
+    ) {
+      return;
+    }
+
+
+    /*
+     * Only videos uploaded during
+     * the previous 24 hours.
+     */
+
+    if (
+      uploaded.getTime() < cutoff ||
+      uploaded.getTime() > now
+    ) {
+      return;
+    }
+
+
+    /*
+     * THUMBNAIL
+     */
+
+    const image =
+      card.find(
+        ".post-thumbnail img"
+      ).first();
+
+    const thumbnail =
+      image.attr("src") ||
+      image.attr("data-src") ||
+      null;
+
+
+    /*
+     * RELATIVE AGE
+     */
+
+    const dateContainer =
+      card.find(
+        ".post-meta__date"
+      );
+
+    const sourceAge =
+      dateContainer
+        .text()
+        .replace(/\s+/g, " ")
+        .trim();
+
+
+    let sourceUrl;
+
+    try {
+
+      sourceUrl =
+        new URL(
           href,
           SOURCE_URL
         ).href;
-      } catch {
-        return;
+
+    }
+    catch {
+
+      return;
+
+    }
+
+
+    let thumbnailUrl = null;
+
+    if (thumbnail) {
+
+      try {
+
+        thumbnailUrl =
+          new URL(
+            thumbnail,
+            SOURCE_URL
+          ).href;
+
+      }
+      catch {
+        thumbnailUrl = null;
       }
 
-      let title = link
-        .text()
-        .replace(/\s+/g, " ")
-        .trim();
+    }
 
-      if (
-        !title ||
-        /^\d+$/.test(title) ||
-        /^\d+:\d+$/.test(title) ||
-        /ago$/i.test(title)
-      ) {
-        title = container
-          .find("h2, h3, h4")
-          .first()
-          .text()
-          .replace(/\s+/g, " ")
-          .trim();
-      }
 
-      if (!title) return;
+    videos.push({
 
-      const image = container
-        .find("img")
-        .first();
+      title,
 
-      const thumbnail =
-        image.attr("data-src") ||
-        image.attr("data-lazy-src") ||
-        image.attr("src") ||
-        null;
+      source_url:
+        sourceUrl,
 
-      videos.push({
-        title,
-        source_url: url,
-        source_age: age.text,
-        age_hours: age.hours,
+      source_age:
+        sourceAge,
 
-        thumbnail_url: thumbnail
-          ? new URL(
-              thumbnail,
-              SOURCE_URL
-            ).href
-          : null
-      });
+      source_uploaded_at:
+        uploaded.toISOString(),
+
+      thumbnail_url:
+        thumbnailUrl
+
     });
 
-    node = node.next();
-  }
+  });
+
 
   /*
-   * Remove duplicate URLs.
+   * Deduplicate by source URL.
    */
-  const unique = [
-    ...new Map(
-      videos.map(video => [
-        video.source_url,
-        video
-      ])
-    ).values()
-  ];
+
+  const unique =
+    [
+      ...new Map(
+        videos.map(
+          video => [
+            video.source_url,
+            video
+          ]
+        )
+      ).values()
+    ];
+
+
+  /*
+   * Newest first.
+   */
 
   unique.sort(
     (a, b) =>
-      a.age_hours - b.age_hours
+      new Date(
+        b.source_uploaded_at
+      ) -
+      new Date(
+        a.source_uploaded_at
+      )
   );
+
 
   console.log("");
   console.log(
@@ -241,35 +306,59 @@ async function run() {
     "============================================"
   );
 
-  unique.forEach((video, index) => {
-    console.log("");
 
-    console.log(
-      `${index + 1}. ${video.title}`
-    );
+  unique.forEach(
+    (video, index) => {
 
-    console.log(
-      `   Age: ${video.source_age}`
-    );
+      console.log("");
 
-    console.log(
-      `   URL: ${video.source_url}`
-    );
-
-    if (video.thumbnail_url) {
       console.log(
-        `   Thumbnail: ${video.thumbnail_url}`
+        `${index + 1}. ${video.title}`
       );
+
+      console.log(
+        `   Uploaded: ${video.source_uploaded_at}`
+      );
+
+      console.log(
+        `   Age: ${video.source_age}`
+      );
+
+      console.log(
+        `   URL: ${video.source_url}`
+      );
+
+      if (
+        video.thumbnail_url
+      ) {
+
+        console.log(
+          `   Thumbnail: ${video.thumbnail_url}`
+        );
+
+      }
+
     }
-  });
+  );
+
 
   console.log("");
   console.log(
     "TEST MODE — nothing written to Supabase."
   );
+
 }
 
+
 run().catch(error => {
+
+  console.error("");
+  console.error(
+    "SCRAPER FAILED:"
+  );
+
   console.error(error);
+
   process.exit(1);
+
 });
