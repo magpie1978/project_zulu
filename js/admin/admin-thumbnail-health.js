@@ -3810,6 +3810,196 @@ async function markThumbnailEvaluated(
   await loadThumbnailEvaluationCounts();
 }
 
+
+/**
+ * If this video came from an ingestion which originally completed
+ * without a thumbnail, upgrade that ingestion now that Thumbnail Review
+ * has successfully published images/{uid}.png.
+ *
+ * Older/manual catalogue videos may have no ingestion record. That is
+ * normal and requires no action.
+ */
+async function completeThumbnailIngestionIfNeeded(
+  uid
+) {
+
+  const numericUid =
+    Number(
+      uid
+    );
+
+
+  if (
+    !Number.isInteger(
+      numericUid
+    ) ||
+    numericUid <= 0
+  ) {
+
+    return;
+  }
+
+
+  /*
+   * Find the most recent ingestion associated with this catalogue UID.
+   *
+   * We only care about an ingestion which is currently
+   * complete_without_thumbnail.
+   */
+  const {
+    data:
+      ingestion,
+
+    error:
+      lookupError
+  } =
+    await supabase
+      .from(
+        "zulu_ingestions"
+      )
+      .select(
+        `
+          id,
+          status,
+          thumbnail_status,
+          video_uid,
+          created_at
+        `
+      )
+      .eq(
+        "video_uid",
+        numericUid
+      )
+      .eq(
+        "status",
+        "complete_without_thumbnail"
+      )
+      .order(
+        "created_at",
+        {
+          ascending:
+            false
+        }
+      )
+      .limit(
+        1
+      )
+      .maybeSingle();
+
+
+  if (
+    lookupError
+  ) {
+
+    throw new Error(
+      `Could not find the ingestion record for UID ${numericUid}: ${
+        lookupError.message ||
+        "Supabase query failed"
+      }`
+    );
+  }
+
+
+  /*
+   * No matching ingestion is perfectly valid for older catalogue
+   * entries or videos created before ingestion tracking existed.
+   */
+  if (
+    !ingestion
+  ) {
+
+    return;
+  }
+
+
+  /*
+   * zulu-ingestion-status owns ingestion lifecycle changes.
+   *
+   * The Edge Function now permits:
+   *
+   *     complete_without_thumbnail
+   *              ↓
+   *           complete
+   *
+   * when the final thumbnail state is "uploaded".
+   */
+  const {
+    data,
+    error
+  } =
+    await supabase.functions.invoke(
+      "zulu-ingestion-status",
+      {
+        body: {
+
+          action:
+            "complete",
+
+          ingestion_id:
+            ingestion.id,
+
+          thumbnail_status:
+            "uploaded"
+        }
+      }
+    );
+
+
+  if (
+    error
+  ) {
+
+    throw new Error(
+      `Thumbnail uploaded, but the ingestion record could not be completed: ${
+        error.message ||
+        "Edge Function request failed"
+      }`
+    );
+  }
+
+
+  if (
+    !data
+  ) {
+
+    throw new Error(
+      "Thumbnail uploaded, but the ingestion status service returned no data."
+    );
+  }
+
+
+  if (
+    data.success !==
+      true
+  ) {
+
+    throw new Error(
+      data.error ||
+      "Thumbnail uploaded, but the ingestion record could not be completed."
+    );
+  }
+
+
+  console.log(
+    "THUMBNAIL INGESTION COMPLETED:",
+    {
+      uid:
+        numericUid,
+
+      ingestion_id:
+        ingestion.id,
+
+      status:
+        data.ingestion?.status,
+
+      thumbnail_status:
+        data.ingestion
+          ?.thumbnail_status
+    }
+  );
+}
+
+
 /**
  * Loads the current set of catalogue UIDs whose expected
  * images/{uid}.png thumbnail is missing from Backblaze.
@@ -4871,16 +5061,30 @@ await uploadThumbnailToBackblaze(
   }
 );
 
-        /*
-     * The replacement has uploaded successfully.
-     *
-     * Only now mark the catalogue row as evaluated. This prevents a
-     * failed Backblaze upload from removing the video from the normal
-     * review queue.
-     */
-    await markThumbnailEvaluated(
-      item.uid
-    );
+/*
+ * The replacement has uploaded successfully.
+ *
+ * First synchronise any ingestion which originally completed without
+ * a thumbnail.
+ *
+ * For ordinary/older catalogue videos there may be no ingestion record,
+ * in which case this helper deliberately does nothing.
+ */
+await completeThumbnailIngestionIfNeeded(
+  item.uid
+);
+
+
+/*
+ * Only after the Backblaze upload and any required ingestion update
+ * succeed do we mark the catalogue row as evaluated.
+ *
+ * This prevents a failed upload or failed ingestion transition from
+ * silently removing the video from the normal review queue.
+ */
+await markThumbnailEvaluated(
+  item.uid
+);
     
 
     /*
