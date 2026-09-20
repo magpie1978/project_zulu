@@ -39,4 +39,5 @@ jobs:
           B2_APPLICATION_KEY: ${{ secrets.B2_APPLICATION_KEY }}
           B2_BUCKET_ID: ${{ secrets.B2_BUCKET_ID }}
           ZULU_AUTOMATION_KEY: ${{ secrets.ZULU_AUTOMATION_KEY }}
+          MAX_CANDIDATES_PER_RUN: 10
         run: npm run test:candidate-import
