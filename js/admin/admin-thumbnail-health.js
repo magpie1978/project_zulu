@@ -3412,6 +3412,34 @@ const thumbnailReevaluateStart =
     "admin-thumbnail-reevaluate-start"
   );
 
+const thumbnailReevaluateReviewed =
+  document.getElementById(
+    "admin-thumbnail-reevaluate-reviewed"
+  );
+
+
+const thumbnailReevaluateAwaitingCount =
+  document.getElementById(
+    "admin-thumbnail-reevaluate-awaiting-count"
+  );
+
+
+const thumbnailReevaluateEvaluatedCount =
+  document.getElementById(
+    "admin-thumbnail-reevaluate-evaluated-count"
+  );
+
+
+const thumbnailReevaluateMode =
+  document.getElementById(
+    "admin-thumbnail-reevaluate-mode"
+  );
+
+
+const thumbnailReevaluateProgress =
+  document.getElementById(
+    "admin-thumbnail-reevaluate-progress"
+  );
 
 const thumbnailReevaluatePanel =
   document.getElementById(
@@ -3498,6 +3526,8 @@ let thumbnailReevaluationBusy =
 let thumbnailReevaluationPreviewUrl =
   null;
 
+let thumbnailReevaluationMode =
+  "unevaluated";
 
 /**
  * Connects the persistent re-evaluation controls.
@@ -3508,7 +3538,19 @@ function initialiseThumbnailReevaluation() {
 
   thumbnailReevaluateStart?.addEventListener(
     "click",
-    startThumbnailReevaluation
+    () =>
+      startThumbnailReevaluation(
+        "unevaluated"
+      )
+  );
+
+
+  thumbnailReevaluateReviewed?.addEventListener(
+    "click",
+    () =>
+      startThumbnailReevaluation(
+        "evaluated"
+      )
   );
 
 
@@ -3596,13 +3638,183 @@ function initialiseThumbnailReevaluation() {
     "click",
     stopThumbnailReevaluation
   );
+
+
+  loadThumbnailEvaluationCounts();
+}
+
+async function loadThumbnailEvaluationCounts() {
+
+  try {
+
+    const [
+      awaitingResult,
+      evaluatedResult
+    ] =
+      await Promise.all([
+
+        supabase
+          .from(
+            "zulu_videos"
+          )
+          .select(
+            "uid",
+            {
+              count: "exact",
+              head: true
+            }
+          )
+          .eq(
+            "thumbnail_evaluated",
+            false
+          ),
+
+        supabase
+          .from(
+            "zulu_videos"
+          )
+          .select(
+            "uid",
+            {
+              count: "exact",
+              head: true
+            }
+          )
+          .eq(
+            "thumbnail_evaluated",
+            true
+          )
+
+      ]);
+
+
+    if (
+      awaitingResult.error
+    ) {
+
+      throw awaitingResult.error;
+    }
+
+
+    if (
+      evaluatedResult.error
+    ) {
+
+      throw evaluatedResult.error;
+    }
+
+
+    if (
+      thumbnailReevaluateAwaitingCount
+    ) {
+
+      thumbnailReevaluateAwaitingCount.textContent =
+        Number(
+          awaitingResult.count ||
+          0
+        ).toLocaleString();
+    }
+
+
+    if (
+      thumbnailReevaluateEvaluatedCount
+    ) {
+
+      thumbnailReevaluateEvaluatedCount.textContent =
+        Number(
+          evaluatedResult.count ||
+          0
+        ).toLocaleString();
+    }
+
+
+  } catch (
+    error
+  ) {
+
+    console.error(
+      "Could not load thumbnail evaluation counts:",
+      error
+    );
+
+
+    if (
+      thumbnailReevaluateAwaitingCount
+    ) {
+
+      thumbnailReevaluateAwaitingCount.textContent =
+        "—";
+    }
+
+
+    if (
+      thumbnailReevaluateEvaluatedCount
+    ) {
+
+      thumbnailReevaluateEvaluatedCount.textContent =
+        "—";
+    }
+  }
+}
+
+
+/**
+ * Records that the current thumbnail has been manually evaluated.
+ *
+ * This is called for both Keep Current and Use New.
+ */
+async function markThumbnailEvaluated(
+  uid
+) {
+
+  const evaluatedAt =
+    new Date().toISOString();
+
+
+  const {
+    error
+  } =
+    await supabase
+      .from(
+        "zulu_videos"
+      )
+      .update({
+        thumbnail_evaluated:
+          true,
+
+        thumbnail_evaluated_at:
+          evaluatedAt
+      })
+      .eq(
+        "uid",
+        uid
+      );
+
+
+  if (
+    error
+  ) {
+
+    throw new Error(
+      `Could not mark thumbnail as evaluated: ${
+        error.message ||
+        "Supabase update failed"
+      }`
+    );
+  }
+
+
+  await loadThumbnailEvaluationCounts();
 }
 
 
 /**
  * Begins a new review session.
  */
-async function startThumbnailReevaluation() {
+async function startThumbnailReevaluation(
+  mode =
+    "unevaluated"
+) {
 
   if (
     thumbnailReevaluationRunning ||
@@ -3611,6 +3823,12 @@ async function startThumbnailReevaluation() {
 
     return;
   }
+
+
+  thumbnailReevaluationMode =
+    mode === "evaluated"
+      ? "evaluated"
+      : "unevaluated";
 
 
   setThumbnailReevaluationBusy(
@@ -3627,44 +3845,88 @@ async function startThumbnailReevaluation() {
   }
 
 
+  if (
+    thumbnailReevaluateMode
+  ) {
+
+    thumbnailReevaluateMode.textContent =
+      thumbnailReevaluationMode ===
+        "evaluated"
+        ? "Re-reviewing evaluated thumbnails"
+        : "Reviewing unevaluated thumbnails";
+  }
+
+
   setThumbnailReevaluationStatus(
-    "Loading catalogue videos…"
+    thumbnailReevaluationMode ===
+      "evaluated"
+      ? "Loading evaluated thumbnails…"
+      : "Loading thumbnails awaiting evaluation…"
   );
 
 
   try {
 
-    /*
-     * We deliberately request the catalogue here rather than deriving
-     * the queue from Thumbnail Health.
-     *
-     * Thumbnail Health is primarily a reconciliation report and its
-     * Missing collection does not represent videos which already have
-     * thumbnails.
-     */
-
-    const {
-      data,
-      error
-    } =
-      await supabase
+    let query =
+      supabase
         .from(
           "zulu_videos"
         )
         .select(
-          "uid, film, url"
+          "uid, film, url, thumbnail_evaluated, thumbnail_evaluated_at"
         )
         .not(
           "url",
           "is",
           null
         )
-        .order(
+        .eq(
+          "thumbnail_evaluated",
+          thumbnailReevaluationMode ===
+            "evaluated"
+        );
+
+
+    /*
+     * Normal review:
+     * catalogue UID order.
+     *
+     * Re-review:
+     * oldest evaluation first, so thumbnails which have gone longest
+     * without being reviewed appear first.
+     */
+    if (
+      thumbnailReevaluationMode ===
+        "evaluated"
+    ) {
+
+      query =
+        query.order(
+          "thumbnail_evaluated_at",
+          {
+            ascending: true,
+            nullsFirst: true
+          }
+        );
+
+
+    } else {
+
+      query =
+        query.order(
           "uid",
           {
             ascending: true
           }
         );
+    }
+
+
+    const {
+      data,
+      error
+    } =
+      await query;
 
 
     if (
@@ -3672,7 +3934,7 @@ async function startThumbnailReevaluation() {
     ) {
 
       throw new Error(
-        `Could not load the video catalogue: ${
+        `Could not load the thumbnail review queue: ${
           error.message ||
           "Supabase request failed"
         }`
@@ -3701,7 +3963,10 @@ async function startThumbnailReevaluation() {
     ) {
 
       throw new Error(
-        "No catalogue videos with video URLs were found."
+        thumbnailReevaluationMode ===
+          "evaluated"
+          ? "There are no evaluated thumbnails to re-review."
+          : "There are no thumbnails awaiting evaluation."
       );
     }
 
@@ -3719,6 +3984,15 @@ async function startThumbnailReevaluation() {
     ) {
 
       thumbnailReevaluateStart.disabled =
+        true;
+    }
+
+
+    if (
+      thumbnailReevaluateReviewed
+    ) {
+
+      thumbnailReevaluateReviewed.disabled =
         true;
     }
 
@@ -3771,6 +4045,15 @@ async function startThumbnailReevaluation() {
 
 
     if (
+      thumbnailReevaluateReviewed
+    ) {
+
+      thumbnailReevaluateReviewed.disabled =
+        false;
+    }
+
+
+    if (
       thumbnailReevaluateStop
     ) {
 
@@ -3786,7 +4069,6 @@ async function startThumbnailReevaluation() {
     );
   }
 }
-
 
 /**
  * Generates candidates for the video at the current queue position.
@@ -3806,7 +4088,19 @@ async function loadCurrentThumbnailReevaluationVideo() {
       thumbnailReevaluationIndex
     ];
 
+    if (
+      thumbnailReevaluateProgress
+    ) {
+  
+      thumbnailReevaluateProgress.textContent =
+        `${
+          thumbnailReevaluationIndex + 1
+        } of ${
+          thumbnailReevaluationQueue.length
+        }`;
+    }
 
+  
   if (
     !item
   ) {
@@ -4045,9 +4339,8 @@ const candidateCount =
   }
 }
 /**
- * Keeps the existing thumbnail and advances to the next video.
- *
- * No upload or database change is made.
+ * Keeps the existing thumbnail, marks it as evaluated,
+ * then advances to the next video.
  */
 async function keepCurrentThumbnail() {
 
@@ -4060,9 +4353,64 @@ async function keepCurrentThumbnail() {
   }
 
 
-  await advanceThumbnailReevaluation();
-}
+  const item =
+    thumbnailReevaluationQueue[
+      thumbnailReevaluationIndex
+    ];
 
+
+  if (
+    !item
+  ) {
+
+    return;
+  }
+
+
+  setThumbnailReevaluationBusy(
+    true
+  );
+
+
+  setThumbnailReevaluationStatus(
+    `Saving evaluation for ${
+      item.film ||
+      `UID ${item.uid}`
+    }…`
+  );
+
+
+  try {
+
+    await markThumbnailEvaluated(
+      item.uid
+    );
+
+
+    setThumbnailReevaluationBusy(
+      false
+    );
+
+
+    await advanceThumbnailReevaluation();
+
+
+  } catch (
+    error
+  ) {
+
+    setThumbnailReevaluationBusy(
+      false
+    );
+
+
+    setThumbnailReevaluationStatus(
+      error?.message ||
+        "Could not save the thumbnail evaluation.",
+      "error"
+    );
+  }
+}
 
 /**
  * Replaces images/{uid}.png with the currently selected candidate,
@@ -4148,6 +4496,17 @@ await uploadThumbnailToBackblaze(
   }
 );
 
+        /*
+     * The replacement has uploaded successfully.
+     *
+     * Only now mark the catalogue row as evaluated. This prevents a
+     * failed Backblaze upload from removing the video from the normal
+     * review queue.
+     */
+    await markThumbnailEvaluated(
+      item.uid
+    );
+    
 
     /*
      * Briefly refresh the Current image so the reviewer can see that
@@ -4275,6 +4634,14 @@ function stopThumbnailReevaluation() {
       false;
   }
 
+    if (
+    thumbnailReevaluateReviewed
+  ) {
+
+    thumbnailReevaluateReviewed.disabled =
+      false;
+  }
+
 
   if (
     thumbnailReevaluateStop
@@ -4306,6 +4673,14 @@ function finishThumbnailReevaluation() {
 
   thumbnailReevaluationBusy =
     false;
+
+    if (
+    thumbnailReevaluateReviewed
+  ) {
+
+    thumbnailReevaluateReviewed.disabled =
+      false;
+  }
 
 
   resetThumbnailState();
@@ -4355,8 +4730,13 @@ function finishThumbnailReevaluation() {
   }
 
 
-  setThumbnailReevaluationStatus(
-    `Finished reviewing ${reviewedCount} ${
+   setThumbnailReevaluationStatus(
+    `${
+      thumbnailReevaluationMode ===
+      "evaluated"
+        ? "Finished re-reviewing"
+        : "Finished reviewing"
+    } ${reviewedCount} ${
       reviewedCount === 1
         ? "video"
         : "videos"
@@ -4439,6 +4819,16 @@ function setThumbnailReevaluationBusy(
       thumbnailReevaluationRunning ||
       thumbnailReevaluationBusy;
   }
+
+    if (
+    thumbnailReevaluateReviewed
+  ) {
+
+    thumbnailReevaluateReviewed.disabled =
+      thumbnailReevaluationRunning ||
+      thumbnailReevaluationBusy;
+  }
+  
 }
 
 
