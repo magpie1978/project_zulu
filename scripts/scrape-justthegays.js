@@ -1,7 +1,7 @@
 const cheerio = require("cheerio");
 const { createClient } = require("@supabase/supabase-js");
 
-const SOURCE_URL = "https://justthegays.com/";
+const BASE_URL = "https://justthegays.com/";
 
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseServiceRoleKey =
@@ -28,11 +28,24 @@ const supabase = createClient(
   }
 );
 
-async function run() {
 
-  console.log(`Fetching ${SOURCE_URL}`);
+/*
+ * ------------------------------------------------------------
+ * FETCH + PARSE ONE PAGE
+ * ------------------------------------------------------------
+ */
 
-  const response = await fetch(SOURCE_URL, {
+async function scrapePage(pageNumber, cutoff, now) {
+
+  const pageUrl =
+    pageNumber === 1
+      ? BASE_URL
+      : `${BASE_URL}page/${pageNumber}/`;
+
+  console.log("");
+  console.log(`Fetching page ${pageNumber}: ${pageUrl}`);
+
+  const response = await fetch(pageUrl, {
     headers: {
       "User-Agent":
         "Mozilla/5.0 (compatible; PornflixCandidateMonitor/1.0)"
@@ -41,7 +54,7 @@ async function run() {
 
   if (!response.ok) {
     throw new Error(
-      `HTTP ${response.status} ${response.statusText}`
+      `Page ${pageNumber}: HTTP ${response.status} ${response.statusText}`
     );
   }
 
@@ -53,77 +66,83 @@ async function run() {
 
   const $ = cheerio.load(html);
 
+  let grid = null;
+
+
   /*
-   * ------------------------------------------------------------
-   * FIND LATEST VIDEOS SECTION
-   * ------------------------------------------------------------
+   * Page 1 contains the "Latest Videos" heading.
+   *
+   * Locate its associated post grid so that we don't accidentally
+   * scrape another collection of videos elsewhere on the homepage.
    */
 
-  let latestHeading = null;
+  if (pageNumber === 1) {
 
-  $("h1, h2, h3, h4").each((_, element) => {
+    let latestHeading = null;
 
-    const text = $(element)
-      .text()
-      .replace(/\s+/g, " ")
-      .trim();
+    $("h1, h2, h3, h4").each((_, element) => {
 
-    if (/latest videos/i.test(text)) {
-      latestHeading = element;
-      return false;
+      const text = $(element)
+        .text()
+        .replace(/\s+/g, " ")
+        .trim();
+
+      if (/latest videos/i.test(text)) {
+        latestHeading = element;
+        return false;
+      }
+
+    });
+
+    if (!latestHeading) {
+      throw new Error(
+        'Could not locate the "Latest Videos" section.'
+      );
     }
 
-  });
+    const titleWrap =
+      $(latestHeading).closest(".widget-title-wrap");
 
-  if (!latestHeading) {
+    grid =
+      titleWrap.next(".post-grid");
+
+  }
+  else {
+
+    /*
+     * Paginated archive pages don't necessarily have the
+     * "Latest Videos" heading, so use the main video grid.
+     */
+
+    grid =
+      $(".post-grid").first();
+
+  }
+
+
+  if (!grid || !grid.length) {
     throw new Error(
-      'Could not locate the "Latest Videos" section.'
+      `Could not locate video grid on page ${pageNumber}.`
     );
   }
 
-  console.log('Found "Latest Videos" section.');
-
-  const titleWrap =
-    $(latestHeading).closest(".widget-title-wrap");
-
-  const grid =
-    titleWrap.next(".post-grid");
-
-  if (!grid.length) {
-    throw new Error(
-      "Could not locate Latest Videos post grid."
-    );
-  }
 
   const cards =
     grid.find(".post-item");
 
   console.log(
-    `Found ${cards.length} video cards in Latest Videos.`
+    `Found ${cards.length} video cards on page ${pageNumber}.`
   );
 
 
-  /*
-   * ------------------------------------------------------------
-   * EXTRACT VIDEOS
-   * ------------------------------------------------------------
-   */
-
-  const now = Date.now();
-
-  const cutoff =
-    now - (24 * 60 * 60 * 1000);
-
   const videos = [];
+
+  let oldestTimestamp = null;
 
 
   cards.each((_, element) => {
 
     const card = $(element);
-
-    /*
-     * TITLE + VIDEO URL
-     */
 
     const titleLink =
       card.find(
@@ -145,7 +164,7 @@ async function run() {
 
 
     /*
-     * UPLOAD DATE
+     * Exact timestamp supplied by the site.
      */
 
     const time =
@@ -165,30 +184,33 @@ async function run() {
         datetime.replace(" ", "T")
       );
 
-    if (
-      Number.isNaN(
-        uploaded.getTime()
-      )
-    ) {
+    const uploadedMs =
+      uploaded.getTime();
+
+    if (Number.isNaN(uploadedMs)) {
       return;
     }
 
 
-    /*
-     * ONLY VIDEOS FROM LAST 24 HOURS
-     */
-
     if (
-      uploaded.getTime() < cutoff ||
-      uploaded.getTime() > now
+      oldestTimestamp === null ||
+      uploadedMs < oldestTimestamp
     ) {
-      return;
+      oldestTimestamp = uploadedMs;
     }
 
 
     /*
-     * SOURCE URL
+     * Ignore anything outside our 24-hour window.
      */
+
+    if (
+      uploadedMs < cutoff ||
+      uploadedMs > now
+    ) {
+      return;
+    }
+
 
     let sourceUrl;
 
@@ -197,7 +219,7 @@ async function run() {
       sourceUrl =
         new URL(
           href,
-          SOURCE_URL
+          pageUrl
         ).href;
 
     }
@@ -207,10 +229,6 @@ async function run() {
 
     }
 
-
-    /*
-     * THUMBNAIL
-     */
 
     const image =
       card.find(
@@ -231,7 +249,7 @@ async function run() {
         thumbnailUrl =
           new URL(
             thumbnail,
-            SOURCE_URL
+            pageUrl
           ).href;
 
       }
@@ -243,10 +261,6 @@ async function run() {
 
     }
 
-
-    /*
-     * DISPLAYED AGE
-     */
 
     const sourceAge =
       card.find(
@@ -278,16 +292,135 @@ async function run() {
   });
 
 
+  console.log(
+    `${videos.length} videos on page ${pageNumber} are within 24 hours.`
+  );
+
+
+  return {
+    videos,
+    cardCount: cards.length,
+    oldestTimestamp
+  };
+
+}
+
+
+/*
+ * ------------------------------------------------------------
+ * MAIN
+ * ------------------------------------------------------------
+ */
+
+async function run() {
+
+  const now =
+    Date.now();
+
+  const cutoff =
+    now - (24 * 60 * 60 * 1000);
+
+  const allVideos = [];
+
+  let pageNumber = 1;
+
+  /*
+   * Safety limit. We should normally stop after only a few pages,
+   * but this prevents an unexpected site change causing an
+   * unlimited crawl.
+   */
+
+  const MAX_PAGES = 20;
+
+
+  while (pageNumber <= MAX_PAGES) {
+
+    const result =
+      await scrapePage(
+        pageNumber,
+        cutoff,
+        now
+      );
+
+
+    allVideos.push(
+      ...result.videos
+    );
+
+
+    /*
+     * No cards means there is nothing further to inspect.
+     */
+
+    if (result.cardCount === 0) {
+
+      console.log(
+        "No video cards found. Stopping pagination."
+      );
+
+      break;
+
+    }
+
+
+    /*
+     * Once a page contains no videos within the last 24 hours,
+     * we've reached the older archive.
+     */
+
+    if (result.videos.length === 0) {
+
+      console.log(
+        `Page ${pageNumber} contains no videos within 24 hours.`
+      );
+
+      console.log(
+        "Stopping pagination."
+      );
+
+      break;
+
+    }
+
+
+    /*
+     * If this page already contains records older than our
+     * cutoff, there is no reason to request another page.
+     */
+
+    if (
+      result.oldestTimestamp !== null &&
+      result.oldestTimestamp < cutoff
+    ) {
+
+      console.log(
+        `Page ${pageNumber} has reached videos older than 24 hours.`
+      );
+
+      console.log(
+        "Stopping pagination."
+      );
+
+      break;
+
+    }
+
+
+    pageNumber++;
+
+  }
+
+
   /*
    * ------------------------------------------------------------
-   * REMOVE DUPLICATES
+   * DEDUPLICATE ACROSS ALL PAGES
    * ------------------------------------------------------------
    */
 
   const unique =
     [
       ...new Map(
-        videos.map(
+        allVideos.map(
           video => [
             video.source_url,
             video
@@ -308,8 +441,17 @@ async function run() {
   );
 
 
+  console.log("");
   console.log(
-    `Found ${unique.length} candidate videos <= 24 hours.`
+    "============================================"
+  );
+
+  console.log(
+    `TOTAL UNIQUE CANDIDATES <= 24 HOURS: ${unique.length}`
+  );
+
+  console.log(
+    "============================================"
   );
 
 
@@ -326,18 +468,8 @@ async function run() {
 
   /*
    * ------------------------------------------------------------
-   * CHECK WHICH URLS ALREADY EXIST
+   * CHECK EXISTING CANDIDATES
    * ------------------------------------------------------------
-   *
-   * This is deliberate rather than doing a blind upsert.
-   *
-   * We don't want future scraper runs to reset:
-   *
-   * status
-   * first_seen_at
-   * reviewed_at
-   *
-   * for candidates you have already reviewed.
    */
 
   const sourceUrls =
@@ -345,64 +477,61 @@ async function run() {
       video => video.source_url
     );
 
-/*
- * Check existing URLs in small batches.
- *
- * Source URLs are long, so putting all 200 into a single
- * Supabase .in() request can exceed HTTP header limits.
- */
+  const existingRows = [];
 
-const existingRows = [];
+  const LOOKUP_BATCH_SIZE = 25;
 
-const LOOKUP_BATCH_SIZE = 25;
 
-for (
-  let i = 0;
-  i < sourceUrls.length;
-  i += LOOKUP_BATCH_SIZE
-) {
+  for (
+    let i = 0;
+    i < sourceUrls.length;
+    i += LOOKUP_BATCH_SIZE
+  ) {
 
-  const batch =
-    sourceUrls.slice(
-      i,
-      i + LOOKUP_BATCH_SIZE
-    );
-
-  console.log(
-    `Checking existing candidates ${i + 1}-${Math.min(
-      i + LOOKUP_BATCH_SIZE,
-      sourceUrls.length
-    )} of ${sourceUrls.length}...`
-  );
-
-  const {
-    data,
-    error
-  } =
-    await supabase
-      .from("zulu_candidates")
-      .select(
-        "id, source_url, status, first_seen_at, reviewed_at"
-      )
-      .in(
-        "source_url",
-        batch
+    const batch =
+      sourceUrls.slice(
+        i,
+        i + LOOKUP_BATCH_SIZE
       );
 
-  if (error) {
-    throw error;
-  }
+    console.log(
+      `Checking existing candidates ${i + 1}-${Math.min(
+        i + LOOKUP_BATCH_SIZE,
+        sourceUrls.length
+      )} of ${sourceUrls.length}...`
+    );
 
-  if (data) {
-    existingRows.push(...data);
-  }
 
-}
+    const {
+      data,
+      error
+    } =
+      await supabase
+        .from("zulu_candidates")
+        .select(
+          "id, source_url, status, first_seen_at, reviewed_at"
+        )
+        .in(
+          "source_url",
+          batch
+        );
+
+
+    if (error) {
+      throw error;
+    }
+
+
+    if (data) {
+      existingRows.push(...data);
+    }
+
+  }
 
 
   const existingByUrl =
     new Map(
-      (existingRows || []).map(
+      existingRows.map(
         row => [
           row.source_url,
           row
@@ -464,10 +593,6 @@ for (
    * ------------------------------------------------------------
    * EXISTING CANDIDATES
    * ------------------------------------------------------------
-   *
-   * Only refresh metadata.
-   *
-   * We DO NOT alter status, reviewed_at or first_seen_at.
    */
 
   const existingCandidates =
@@ -481,7 +606,7 @@ for (
 
   /*
    * ------------------------------------------------------------
-   * INSERT NEW ROWS
+   * INSERT NEW CANDIDATES
    * ------------------------------------------------------------
    */
 
@@ -493,34 +618,62 @@ for (
       `Inserting ${newCandidates.length} new candidates...`
     );
 
-    const {
-      data,
-      error
-    } =
-      await supabase
-        .from("zulu_candidates")
-        .insert(
-          newCandidates
-        )
-        .select("id");
 
-    if (error) {
-      throw error;
+    /*
+     * Insert in batches as the candidate set can now span
+     * several source pages.
+     */
+
+    const INSERT_BATCH_SIZE = 100;
+
+
+    for (
+      let i = 0;
+      i < newCandidates.length;
+      i += INSERT_BATCH_SIZE
+    ) {
+
+      const batch =
+        newCandidates.slice(
+          i,
+          i + INSERT_BATCH_SIZE
+        );
+
+
+      const {
+        data,
+        error
+      } =
+        await supabase
+          .from("zulu_candidates")
+          .insert(batch)
+          .select("id");
+
+
+      if (error) {
+        throw error;
+      }
+
+
+      insertedCount +=
+        data?.length || 0;
+
     }
-
-    insertedCount =
-      data?.length || 0;
 
   }
 
 
   /*
    * ------------------------------------------------------------
-   * UPDATE EXISTING ROWS
+   * UPDATE EXISTING CANDIDATES
    * ------------------------------------------------------------
+   *
+   * Status, first_seen_at and reviewed_at are deliberately
+   * NOT changed.
    */
 
   let updatedCount = 0;
+
 
   for (
     const video of existingCandidates
@@ -554,9 +707,11 @@ for (
           video.source_url
         );
 
+
     if (error) {
       throw error;
     }
+
 
     updatedCount++;
 
@@ -583,15 +738,19 @@ for (
   );
 
   console.log(
-    `Scraped:  ${unique.length}`
+    `Pages checked: ${pageNumber}`
   );
 
   console.log(
-    `Inserted: ${insertedCount}`
+    `Scraped:       ${unique.length}`
   );
 
   console.log(
-    `Updated:  ${updatedCount}`
+    `Inserted:      ${insertedCount}`
+  );
+
+  console.log(
+    `Updated:       ${updatedCount}`
   );
 
   console.log(
