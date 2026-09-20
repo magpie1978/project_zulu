@@ -3529,6 +3529,9 @@ let thumbnailReevaluationPreviewUrl =
 let thumbnailReevaluationMode =
   "unevaluated";
 
+let thumbnailReevaluationMissingUids =
+  new Set();
+
 /**
  * Connects the persistent re-evaluation controls.
  *
@@ -3807,6 +3810,40 @@ async function markThumbnailEvaluated(
   await loadThumbnailEvaluationCounts();
 }
 
+/**
+ * Loads the current set of catalogue UIDs whose expected
+ * images/{uid}.png thumbnail is missing from Backblaze.
+ *
+ * We reuse Thumbnail Health as the authority rather than assuming that
+ * thumbnail_evaluated=false means the physical image is missing.
+ */
+async function loadThumbnailReevaluationMissingUids() {
+
+  const health =
+    await loadThumbnailHealth();
+
+
+  const rows =
+    health
+      ?.missing
+      ?.rows ||
+    [];
+
+
+  thumbnailReevaluationMissingUids =
+    new Set(
+      rows
+        .map(
+          row =>
+            String(
+              row.uid
+            )
+        )
+        .filter(
+          Boolean
+        )
+    );
+}
 
 /**
  * Begins a new review session.
@@ -3865,7 +3902,29 @@ async function startThumbnailReevaluation(
   );
 
 
-  try {
+try {
+
+    /*
+     * Normal review needs to know which catalogue videos do not yet
+     * have images/{uid}.png.
+     *
+     * Re-review mode contains already-evaluated videos, so those should
+     * normally already have thumbnails and does not need this extra
+     * health request.
+     */
+    if (
+      thumbnailReevaluationMode ===
+        "unevaluated"
+    ) {
+
+      await loadThumbnailReevaluationMissingUids();
+
+    } else {
+
+      thumbnailReevaluationMissingUids =
+        new Set();
+    }
+
 
     let query =
       supabase
@@ -3942,21 +4001,33 @@ async function startThumbnailReevaluation(
     }
 
 
-    thumbnailReevaluationQueue =
-      (
-        Array.isArray(
-          data
-        )
-          ? data
-          : []
-      )
-        .filter(
-          item =>
-            item &&
-            item.uid != null &&
-            item.url
-        );
+thumbnailReevaluationQueue =
+  (
+    Array.isArray(
+      data
+    )
+      ? data
+      : []
+  )
+    .filter(
+      item =>
+        item &&
+        item.uid != null &&
+        item.url
+    )
+    .map(
+      item => ({
+        ...item,
 
+        thumbnail_missing:
+          thumbnailReevaluationMissingUids.has(
+            String(
+              item.uid
+            )
+          )
+      })
+    );
+  
 
     if (
       !thumbnailReevaluationQueue.length
@@ -4073,6 +4144,21 @@ async function startThumbnailReevaluation(
 /**
  * Generates candidates for the video at the current queue position.
  */
+/**
+ * Generates candidates for the video at the current queue position.
+ *
+ * Existing catalogue videos:
+ *   - show the current images/{uid}.png thumbnail
+ *   - generate a suggested replacement
+ *   - allow Keep Current or Use New
+ *
+ * Newly imported videos with no thumbnail:
+ *   - do not request the missing images/{uid}.png file
+ *   - show the Current side as missing
+ *   - disable Keep Current
+ *   - generate a suggested thumbnail normally
+ *   - allow Use New to create images/{uid}.png
+ */
 async function loadCurrentThumbnailReevaluationVideo() {
 
   if (
@@ -4088,19 +4174,27 @@ async function loadCurrentThumbnailReevaluationVideo() {
       thumbnailReevaluationIndex
     ];
 
-    if (
-      thumbnailReevaluateProgress
-    ) {
-  
-      thumbnailReevaluateProgress.textContent =
-        `${
-          thumbnailReevaluationIndex + 1
-        } of ${
-          thumbnailReevaluationQueue.length
-        }`;
-    }
 
-  
+  /* -------------------------------------------------------------------
+     PROGRESS
+  ------------------------------------------------------------------- */
+
+  if (
+    thumbnailReevaluateProgress
+  ) {
+
+    thumbnailReevaluateProgress.textContent =
+      `${
+        thumbnailReevaluationIndex + 1
+      } of ${
+        thumbnailReevaluationQueue.length
+      }`;
+  }
+
+
+  /*
+   * Reaching the end of the queue completes the review.
+   */
   if (
     !item
   ) {
@@ -4116,9 +4210,17 @@ async function loadCurrentThumbnailReevaluationVideo() {
   );
 
 
+  /*
+   * thumbnails.js maintains shared candidate state.
+   *
+   * Always reset it before analysing the next video.
+   */
   resetThumbnailState();
 
 
+  /*
+   * Remove the previous Suggested preview/object URL.
+   */
   clearThumbnailReevaluationPreview();
 
 
@@ -4131,12 +4233,25 @@ async function loadCurrentThumbnailReevaluationVideo() {
     thumbnailReevaluationQueue.length;
 
 
+  const thumbnailMissing =
+    Boolean(
+      item.thumbnail_missing
+    );
+
+
+  /* -------------------------------------------------------------------
+     FILM / UID
+  ------------------------------------------------------------------- */
+
   if (
     thumbnailReevaluateFilm
   ) {
 
     thumbnailReevaluateFilm.textContent =
-      `${item.film || `UID ${item.uid}`} · UID ${item.uid}`;
+      `${
+        item.film ||
+        `UID ${item.uid}`
+      } · UID ${item.uid}`;
   }
 
 
@@ -4145,39 +4260,147 @@ async function loadCurrentThumbnailReevaluationVideo() {
   );
 
 
-  /*
-   * Existing thumbnail.
-   *
-   * The cache-busting parameter is important because an earlier review
-   * may have replaced images/{uid}.png while the browser or Cloudflare
-   * still has the previous image cached.
-   */
+  /* -------------------------------------------------------------------
+     CURRENT THUMBNAIL
+  ------------------------------------------------------------------- */
+
   if (
     thumbnailReevaluateCurrent
   ) {
 
-    thumbnailReevaluateCurrent.src =
-      `https://media.zulu-orchid-falcon.co.uk/images/${
-        encodeURIComponent(
-          item.uid
-        )
-      }.png?review=${
-        Date.now()
-      }`;
+    /*
+     * Newly imported videos may not have images/{uid}.png yet.
+     *
+     * Do not deliberately request a nonexistent image because that
+     * creates a 404 and gives the impression that loading failed.
+     */
+    if (
+      thumbnailMissing
+    ) {
+
+      thumbnailReevaluateCurrent.removeAttribute(
+        "src"
+      );
+
+
+      thumbnailReevaluateCurrent.alt =
+        "No current thumbnail";
+
+
+      thumbnailReevaluateCurrent.classList.add(
+        "is-missing"
+      );
+
+    } else {
+
+      thumbnailReevaluateCurrent.classList.remove(
+        "is-missing"
+      );
+
+
+      thumbnailReevaluateCurrent.alt =
+        "Current thumbnail";
+
+
+      /*
+       * The cache-busting parameter is important because an earlier
+       * review may have replaced images/{uid}.png while the browser
+       * or Cloudflare still has the previous image cached.
+       */
+      thumbnailReevaluateCurrent.src =
+        `https://media.zulu-orchid-falcon.co.uk/images/${
+          encodeURIComponent(
+            item.uid
+          )
+        }.png?review=${
+          Date.now()
+        }`;
+    }
+  }
+
+
+  /* -------------------------------------------------------------------
+     KEEP CURRENT BUTTON
+  ------------------------------------------------------------------- */
+
+  if (
+    thumbnailReevaluateKeep
+  ) {
+
+    /*
+     * There is nothing to keep when the physical thumbnail is missing.
+     */
+    thumbnailReevaluateKeep.disabled =
+      thumbnailMissing;
+
+
+    const keepLabel =
+      thumbnailReevaluateKeep.querySelector(
+        "span"
+      );
+
+
+    if (
+      keepLabel
+    ) {
+
+      keepLabel.textContent =
+        thumbnailMissing
+          ? "No Current Thumbnail"
+          : "Keep Current";
+    }
+  }
+
+
+  /* -------------------------------------------------------------------
+     USE NEW BUTTON
+  ------------------------------------------------------------------- */
+
+  if (
+    thumbnailReevaluateUse
+  ) {
+
+    /*
+     * setThumbnailReevaluationBusy(true) may already disable this
+     * button while analysis is taking place.
+     *
+     * We only ensure its visible label is correct here.
+     */
+    const useLabel =
+      thumbnailReevaluateUse.querySelector(
+        "span"
+      );
+
+
+    if (
+      useLabel
+    ) {
+
+      useLabel.textContent =
+        "Use New";
+    }
   }
 
 
   try {
 
+    /* ===============================================================
+       STEP 1 — SIGN EXISTING CATALOGUE MP4
+    =============================================================== */
+
     /*
      * Reuse the same signing route already used by Missing Thumbnail
      * repair. This means the browser does not need direct B2 access.
      */
+    const signedVideoUrl =
+      await getAdminSignedVideoUrl(
+        item.url
+      );
 
-const signedVideoUrl =
-  await getAdminSignedVideoUrl(
-    item.url
-  );
+
+    /* ===============================================================
+       STEP 2 — GENERATE FACE-AWARE THUMBNAIL CANDIDATES
+    =============================================================== */
 
     await generateThumbnailCandidatesFromUrl(
       signedVideoUrl,
@@ -4198,6 +4421,10 @@ const signedVideoUrl =
     );
 
 
+    /*
+     * The user may have stopped the review while thumbnail generation
+     * was running.
+     */
     if (
       !thumbnailReevaluationRunning
     ) {
@@ -4206,13 +4433,31 @@ const signedVideoUrl =
     }
 
 
+    /* ===============================================================
+       STEP 3 — DISPLAY THE SELECTED SUGGESTED CANDIDATE
+    =============================================================== */
+
     refreshThumbnailReevaluationCandidate();
 
 
-    setThumbnailReevaluationStatus(
-      `Reviewing ${queueNumber} of ${queueTotal}.`
-    );
+    /* ===============================================================
+       STEP 4 — REVIEW READY
+    =============================================================== */
 
+if (
+  thumbnailMissing
+) {
+
+  setThumbnailReevaluationStatus(
+    `Reviewing ${queueNumber} of ${queueTotal} · New video has no thumbnail yet.`
+  );
+
+} else {
+
+  setThumbnailReevaluationStatus(
+    `Reviewing ${queueNumber} of ${queueTotal}.`
+  );
+}
 
   } catch (
     error
@@ -4232,9 +4477,41 @@ const signedVideoUrl =
 
   } finally {
 
+    /*
+     * Re-enable the review controls after generation finishes.
+     *
+     * IMPORTANT:
+     * setThumbnailReevaluationBusy(false) may re-enable Keep Current,
+     * so restore the missing-thumbnail restriction afterwards.
+     */
     setThumbnailReevaluationBusy(
       false
     );
+
+
+    if (
+      thumbnailMissing &&
+      thumbnailReevaluateKeep
+    ) {
+
+      thumbnailReevaluateKeep.disabled =
+        true;
+
+
+      const keepLabel =
+        thumbnailReevaluateKeep.querySelector(
+          "span"
+        );
+
+
+      if (
+        keepLabel
+      ) {
+
+        keepLabel.textContent =
+          "No Current Thumbnail";
+      }
+    }
   }
 }
 
@@ -4367,9 +4644,23 @@ async function keepCurrentThumbnail() {
   }
 
 
+  if (
+    item.thumbnail_missing
+  ) {
+
+    setThumbnailReevaluationStatus(
+      "This video has no current thumbnail. Choose Use New to publish the selected thumbnail.",
+      "error"
+    );
+
+    return;
+  }
+
+
   setThumbnailReevaluationBusy(
     true
   );
+  
 
 
   setThumbnailReevaluationStatus(
