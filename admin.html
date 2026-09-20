@@ -439,6 +439,167 @@
     </section>
 
 
+
+        <!-- ===================================================
+         CANDIDATE APPROVAL MODAL
+    ==================================================== -->
+
+    <div
+      id="admin-candidate-approval-modal"
+      class="admin-candidate-approval-modal"
+      hidden
+    >
+
+      <div
+        class="admin-candidate-approval-backdrop"
+        data-candidate-approval-close
+      ></div>
+
+      <div
+        class="admin-candidate-approval-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="admin-candidate-approval-title"
+      >
+
+        <div class="admin-candidate-approval-header">
+
+          <div>
+
+            <div class="admin-section-kicker">
+              CANDIDATE REVIEW
+            </div>
+
+            <h2 id="admin-candidate-approval-title">
+              Approve Candidate
+            </h2>
+
+          </div>
+
+          <button
+            type="button"
+            id="admin-candidate-approval-close"
+            class="admin-candidate-approval-close"
+            aria-label="Close"
+          >
+            <i data-lucide="x"></i>
+          </button>
+
+        </div>
+
+
+        <div class="admin-candidate-approval-content">
+
+          <div
+            id="admin-candidate-approval-preview"
+            class="admin-candidate-approval-preview"
+          ></div>
+
+
+          <form
+            id="admin-candidate-approval-form"
+            class="admin-candidate-approval-form"
+          >
+
+            <input
+              type="hidden"
+              id="admin-candidate-approval-id"
+            >
+
+
+            <label class="admin-candidate-approval-field">
+
+              <span>
+                Film
+              </span>
+
+              <input
+                type="text"
+                id="admin-candidate-approval-film"
+                autocomplete="off"
+                required
+              >
+
+            </label>
+
+
+            <label class="admin-candidate-approval-field">
+
+              <span>
+                Actors
+              </span>
+
+              <input
+                type="text"
+                id="admin-candidate-approval-actors"
+                autocomplete="off"
+                placeholder="Actor One, Actor Two"
+                required
+              >
+
+              <small>
+                Separate multiple actors with commas.
+              </small>
+
+            </label>
+
+
+            <label class="admin-candidate-approval-field">
+
+              <span>
+                Tags
+              </span>
+
+              <input
+                type="text"
+                id="admin-candidate-approval-tags"
+                autocomplete="off"
+                placeholder="Tag One, Tag Two"
+              >
+
+              <small>
+                Optional. Separate multiple tags with commas.
+              </small>
+
+            </label>
+
+
+            <div
+              id="admin-candidate-approval-error"
+              class="admin-candidate-approval-error"
+              hidden
+            ></div>
+
+
+            <div class="admin-candidate-approval-actions">
+
+              <button
+                type="button"
+                id="admin-candidate-approval-cancel"
+                class="admin-button admin-button-secondary"
+              >
+                Cancel
+              </button>
+
+              <button
+                type="submit"
+                id="admin-candidate-approval-submit"
+                class="admin-button admin-candidate-approval-submit"
+              >
+                <i data-lucide="check"></i>
+                <span>Approve for Import</span>
+              </button>
+
+            </div>
+
+          </form>
+
+        </div>
+
+      </div>
+
+    </div>
+
     <!-- ===================================================
          INGESTION HEALTH
     ==================================================== -->
