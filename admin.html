@@ -135,6 +135,18 @@
           type="button"
           class="admin-tab"
           role="tab"
+          data-admin-tab="candidates"
+          aria-controls="admin-candidates-heading"
+        >
+          <i data-lucide="inbox"></i>
+          <span>Candidates</span>
+          <span id="admin-candidates-tab-count" class="admin-tab-count">—</span>
+        </button>
+
+        <button
+          type="button"
+          class="admin-tab"
+          role="tab"
           data-admin-tab="ingestion-health"
           aria-controls="admin-health-heading"
         >
@@ -324,6 +336,104 @@
 
         </article>
 
+      </div>
+
+    </section>
+
+
+    <!-- ===================================================
+         CANDIDATES
+    ==================================================== -->
+
+    <section
+      class="admin-section"
+      aria-labelledby="admin-candidates-heading"
+      data-admin-tab-panel="candidates"
+    >
+
+      <div class="admin-section-heading admin-section-heading-row">
+
+        <div>
+          <div class="admin-section-kicker">
+            DISCOVERED VIDEOS
+          </div>
+
+          <h2 id="admin-candidates-heading">
+            Candidates
+          </h2>
+        </div>
+
+        <div class="admin-candidates-summary">
+          <span id="admin-candidates-total">—</span>
+          pending
+        </div>
+
+      </div>
+
+      <div class="admin-candidates-toolbar">
+
+        <div class="admin-candidates-filter-group" role="group" aria-label="Candidate status">
+          <button type="button" class="admin-candidates-filter is-active" data-candidate-status="pending">
+            Pending
+          </button>
+          <button type="button" class="admin-candidates-filter" data-candidate-status="accepted">
+            Accepted
+          </button>
+          <button type="button" class="admin-candidates-filter" data-candidate-status="rejected">
+            Rejected
+          </button>
+        </div>
+
+        <button
+          type="button"
+          id="admin-candidates-refresh"
+          class="admin-button admin-button-secondary"
+        >
+          <i data-lucide="refresh-cw"></i>
+          <span>Refresh Candidates</span>
+        </button>
+
+      </div>
+
+      <div
+        id="admin-candidates-status"
+        class="admin-candidates-status"
+        role="status"
+      >
+        Loading candidates…
+      </div>
+
+      <div
+        id="admin-candidates-grid"
+        class="admin-candidates-grid"
+      ></div>
+
+      <div
+        id="admin-candidates-pagination"
+        class="admin-candidates-pagination"
+        hidden
+      >
+        <button
+          type="button"
+          id="admin-candidates-prev"
+          class="admin-button admin-button-secondary"
+        >
+          <i data-lucide="chevron-left"></i>
+          <span>Previous</span>
+        </button>
+
+        <span id="admin-candidates-page" class="admin-candidates-page">
+          Page 1
+        </span>
+
+        <button
+          type="button"
+          id="admin-candidates-next"
+          class="admin-button admin-button-secondary"
+        >
+          <span>Next</span>
+          <i data-lucide="chevron-right"></i>
+        </button>
       </div>
 
     </section>
