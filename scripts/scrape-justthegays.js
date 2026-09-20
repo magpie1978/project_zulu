@@ -66,40 +66,6 @@ async function scrapePage(pageNumber, cutoff, now) {
 
   const $ = cheerio.load(html);
 
-  if (pageNumber === 2) {
-
-  console.log("");
-  console.log("===== PAGE 2 DEBUG =====");
-
-  console.log(
-    `post-grid count: ${$(".post-grid").length}`
-  );
-
-  $(".post-grid").each((index, element) => {
-
-    const grid = $(element);
-
-    console.log("");
-    console.log(
-      `GRID ${index + 1}: ${grid.find(".post-item").length} post-items`
-    );
-
-    console.log(
-      grid
-        .text()
-        .replace(/\s+/g, " ")
-        .trim()
-        .substring(0, 1000)
-    );
-
-  });
-
-  console.log("");
-  console.log("===== END PAGE 2 DEBUG =====");
-  console.log("");
-
-}
-
   let grid = null;
 
 
@@ -141,18 +107,44 @@ async function scrapePage(pageNumber, cutoff, now) {
       titleWrap.next(".post-grid");
 
   }
-  else {
+else {
 
-    /*
-     * Paginated archive pages don't necessarily have the
-     * "Latest Videos" heading, so use the main video grid.
-     */
+  /*
+   * Paginated pages contain more than one post grid.
+   *
+   * Select the grid containing the largest number of
+   * .post-item elements. This is the main video archive,
+   * rather than the smaller recommendation/sidebar grid.
+   */
 
-    grid =
-      $(".post-grid").first();
+  let largestGrid = null;
+  let largestCount = 0;
 
-  }
+  $(".post-grid").each((_, element) => {
 
+    const candidateGrid =
+      $(element);
+
+    const count =
+      candidateGrid.find(
+        ".post-item"
+      ).length;
+
+    if (count > largestCount) {
+
+      largestCount = count;
+      largestGrid = element;
+
+    }
+
+  });
+
+  grid =
+    largestGrid
+      ? $(largestGrid)
+      : $();
+
+}
 
   if (!grid || !grid.length) {
     throw new Error(
