@@ -5716,3 +5716,321 @@ a {
   }
 }
 
+
+/* =====================================================================
+   CANDIDATE APPROVAL MODAL
+===================================================================== */
+
+body.admin-modal-open {
+  overflow: hidden;
+}
+
+
+.admin-candidate-approval-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  padding: 28px;
+}
+
+
+.admin-candidate-approval-modal[hidden] {
+  display: none;
+}
+
+
+.admin-candidate-approval-backdrop {
+  position: absolute;
+  inset: 0;
+
+  background: rgba(0, 0, 0, 0.78);
+  backdrop-filter: blur(5px);
+}
+
+
+.admin-candidate-approval-dialog {
+  position: relative;
+  z-index: 1;
+
+  width: min(680px, 100%);
+  max-height: calc(100vh - 56px);
+  overflow: auto;
+
+  border: 1px solid #333;
+  border-radius: 12px;
+
+  background: #141414;
+
+  box-shadow:
+    0 24px 80px rgba(0, 0, 0, 0.55);
+}
+
+
+.admin-candidate-approval-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+
+  padding: 20px 22px;
+
+  border-bottom: 1px solid #292929;
+}
+
+
+.admin-candidate-approval-header h2 {
+  margin: 4px 0 0;
+
+  font-size: 20px;
+}
+
+
+.admin-candidate-approval-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  width: 36px;
+  height: 36px;
+  padding: 0;
+
+  flex: 0 0 36px;
+
+  border: 0;
+  border-radius: 7px;
+
+  background: transparent;
+  color: #777;
+
+  cursor: pointer;
+}
+
+
+.admin-candidate-approval-close:hover {
+  background: #242424;
+  color: #fff;
+}
+
+
+.admin-candidate-approval-close svg {
+  width: 18px;
+  height: 18px;
+}
+
+
+.admin-candidate-approval-content {
+  padding: 22px;
+}
+
+
+.admin-candidate-approval-preview {
+  display: grid;
+  grid-template-columns: 150px minmax(0, 1fr);
+  gap: 17px;
+
+  margin-bottom: 22px;
+  padding-bottom: 22px;
+
+  border-bottom: 1px solid #292929;
+}
+
+
+.admin-candidate-approval-preview-image {
+  width: 150px;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+
+  border-radius: 8px;
+
+  background: #090909;
+}
+
+
+.admin-candidate-approval-preview-image img {
+  display: block;
+
+  width: 100%;
+  height: 100%;
+
+  object-fit: cover;
+}
+
+
+.admin-candidate-approval-no-thumbnail {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  width: 100%;
+  height: 100%;
+
+  color: #444;
+}
+
+
+.admin-candidate-approval-no-thumbnail svg {
+  width: 28px;
+  height: 28px;
+}
+
+
+.admin-candidate-approval-preview-copy {
+  min-width: 0;
+
+  align-self: center;
+}
+
+
+.admin-candidate-approval-source-title {
+  margin-top: 7px;
+
+  color: #ddd;
+
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.5;
+}
+
+
+.admin-candidate-approval-form {
+  display: grid;
+  gap: 17px;
+}
+
+
+.admin-candidate-approval-field {
+  display: grid;
+  gap: 7px;
+}
+
+
+.admin-candidate-approval-field > span {
+  color: #bbb;
+
+  font-size: 12px;
+  font-weight: 700;
+}
+
+
+.admin-candidate-approval-field input {
+  width: 100%;
+  min-height: 42px;
+  padding: 9px 11px;
+
+  border: 1px solid #333;
+  border-radius: 7px;
+
+  outline: none;
+
+  background: #0f0f0f;
+  color: #fff;
+
+  font-size: 13px;
+}
+
+
+.admin-candidate-approval-field input:focus {
+  border-color: #666;
+}
+
+
+.admin-candidate-approval-field input:disabled {
+  opacity: 0.55;
+}
+
+
+.admin-candidate-approval-field small {
+  color: #666;
+
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+
+.admin-candidate-approval-error {
+  padding: 11px 12px;
+
+  border: 1px solid rgba(229, 9, 20, 0.4);
+  border-radius: 7px;
+
+  background: rgba(229, 9, 20, 0.07);
+  color: #ef777d;
+
+  font-size: 12px;
+}
+
+
+.admin-candidate-approval-error[hidden] {
+  display: none;
+}
+
+
+.admin-candidate-approval-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 9px;
+
+  padding-top: 5px;
+}
+
+
+.admin-candidate-approval-submit {
+  border-color: rgba(76, 175, 80, 0.4);
+
+  background: rgba(76, 175, 80, 0.12);
+  color: #81c784;
+}
+
+
+.admin-candidate-approval-submit:hover {
+  background: rgba(76, 175, 80, 0.2);
+  color: #a5d6a7;
+}
+
+
+.admin-candidate-approval-modal.is-loading
+.admin-candidate-approval-dialog {
+  cursor: wait;
+}
+
+
+@media (max-width: 600px) {
+
+  .admin-candidate-approval-modal {
+    align-items: flex-end;
+
+    padding: 12px;
+  }
+
+
+  .admin-candidate-approval-dialog {
+    max-height: calc(100vh - 24px);
+  }
+
+
+  .admin-candidate-approval-preview {
+    grid-template-columns: 1fr;
+  }
+
+
+  .admin-candidate-approval-preview-image {
+    width: 100%;
+  }
+
+
+  .admin-candidate-approval-actions {
+    align-items: stretch;
+    flex-direction: column-reverse;
+  }
+
+
+  .admin-candidate-approval-actions .admin-button {
+    width: 100%;
+  }
+}
