@@ -1446,7 +1446,7 @@
     </section>
 
 
-        <!-- ===================================================
+    <!-- ===================================================
          THUMBNAIL RE-EVALUATION
     ==================================================== -->
 
@@ -1470,32 +1470,102 @@
         </div>
 
 
-        <button
-          id="admin-thumbnail-reevaluate-start"
-          class="admin-button admin-button-secondary"
-          type="button"
-        >
-          <i data-lucide="scan-search"></i>
-          <span>Start Review</span>
-        </button>
+        <div class="admin-thumbnail-reevaluate-header-actions">
+
+          <button
+            id="admin-thumbnail-reevaluate-start"
+            class="admin-button admin-button-secondary"
+            type="button"
+          >
+            <i data-lucide="scan-search"></i>
+            <span>Start Review</span>
+          </button>
+
+
+          <button
+            id="admin-thumbnail-reevaluate-reviewed"
+            class="admin-button admin-button-secondary"
+            type="button"
+          >
+            <i data-lucide="history"></i>
+            <span>Re-review Evaluated</span>
+          </button>
+
+        </div>
 
       </div>
 
 
       <div class="admin-thumbnail-reevaluate-intro">
 
-        Re-run existing videos through the current face-aware thumbnail
-        selection system. Existing thumbnails are not replaced unless you
-        explicitly choose <strong>Use New</strong>.
+        Review existing thumbnails using the current face-aware thumbnail
+        selection system. Once you choose <strong>Keep Current</strong> or
+        <strong>Use New</strong>, the video is marked as evaluated and removed
+        from the normal review queue.
 
       </div>
 
+
+      <!-- EVALUATION COUNTS -->
+
+      <div class="admin-thumbnail-reevaluate-summary">
+
+        <div class="admin-thumbnail-reevaluate-summary-item">
+
+          <span class="admin-thumbnail-reevaluate-summary-label">
+            Awaiting evaluation
+          </span>
+
+          <span
+            id="admin-thumbnail-reevaluate-awaiting-count"
+            class="admin-thumbnail-reevaluate-summary-value"
+          >
+            —
+          </span>
+
+        </div>
+
+
+        <div class="admin-thumbnail-reevaluate-summary-item">
+
+          <span class="admin-thumbnail-reevaluate-summary-label">
+            Evaluated
+          </span>
+
+          <span
+            id="admin-thumbnail-reevaluate-evaluated-count"
+            class="admin-thumbnail-reevaluate-summary-value"
+          >
+            —
+          </span>
+
+        </div>
+
+      </div>
+
+
+      <!-- REVIEW PANEL -->
 
       <div
         id="admin-thumbnail-reevaluate-panel"
         class="admin-thumbnail-reevaluate-panel"
         hidden
       >
+
+        <div class="admin-thumbnail-reevaluate-session">
+
+          <span
+            id="admin-thumbnail-reevaluate-mode"
+            class="admin-thumbnail-reevaluate-mode"
+          ></span>
+
+          <span
+            id="admin-thumbnail-reevaluate-progress"
+            class="admin-thumbnail-reevaluate-progress"
+          ></span>
+
+        </div>
+
 
         <div
           id="admin-thumbnail-reevaluate-film"
@@ -1621,7 +1691,6 @@
       </div>
 
     </section>
-
 
     <!-- ===================================================
          RECENT INGESTIONS
