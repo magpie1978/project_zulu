@@ -1,6 +1,32 @@
 const cheerio = require("cheerio");
+const { createClient } = require("@supabase/supabase-js");
 
 const SOURCE_URL = "https://justthegays.com/";
+
+const supabaseUrl = process.env.SUPABASE_URL;
+const supabaseServiceRoleKey =
+  process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+if (!supabaseUrl) {
+  throw new Error("SUPABASE_URL is not configured.");
+}
+
+if (!supabaseServiceRoleKey) {
+  throw new Error(
+    "SUPABASE_SERVICE_ROLE_KEY is not configured."
+  );
+}
+
+const supabase = createClient(
+  supabaseUrl,
+  supabaseServiceRoleKey,
+  {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false
+    }
+  }
+);
 
 async function run() {
 
@@ -28,7 +54,9 @@ async function run() {
   const $ = cheerio.load(html);
 
   /*
-   * Find the Latest Videos heading.
+   * ------------------------------------------------------------
+   * FIND LATEST VIDEOS SECTION
+   * ------------------------------------------------------------
    */
 
   let latestHeading = null;
@@ -55,16 +83,6 @@ async function run() {
 
   console.log('Found "Latest Videos" section.');
 
-  /*
-   * The site's structure is:
-   *
-   * widget-title-wrap
-   * post-grid
-   *   row
-   *     post-item
-   *       article
-   */
-
   const titleWrap =
     $(latestHeading).closest(".widget-title-wrap");
 
@@ -83,6 +101,13 @@ async function run() {
   console.log(
     `Found ${cards.length} video cards in Latest Videos.`
   );
+
+
+  /*
+   * ------------------------------------------------------------
+   * EXTRACT VIDEOS
+   * ------------------------------------------------------------
+   */
 
   const now = Date.now();
 
@@ -120,7 +145,7 @@ async function run() {
 
 
     /*
-     * EXACT UPLOAD DATE
+     * UPLOAD DATE
      */
 
     const time =
@@ -134,15 +159,6 @@ async function run() {
     if (!datetime) {
       return;
     }
-
-
-    /*
-     * JustTheGays provides:
-     *
-     * 2026-09-19 16:51:22
-     *
-     * Convert it into an ISO-compatible format.
-     */
 
     const uploaded =
       new Date(
@@ -159,8 +175,7 @@ async function run() {
 
 
     /*
-     * Only videos uploaded during
-     * the previous 24 hours.
+     * ONLY VIDEOS FROM LAST 24 HOURS
      */
 
     if (
@@ -172,35 +187,8 @@ async function run() {
 
 
     /*
-     * THUMBNAIL
+     * SOURCE URL
      */
-
-    const image =
-      card.find(
-        ".post-thumbnail img"
-      ).first();
-
-    const thumbnail =
-      image.attr("src") ||
-      image.attr("data-src") ||
-      null;
-
-
-    /*
-     * RELATIVE AGE
-     */
-
-    const dateContainer =
-      card.find(
-        ".post-meta__date"
-      );
-
-    const sourceAge =
-      dateContainer
-        .text()
-        .replace(/\s+/g, " ")
-        .trim();
-
 
     let sourceUrl;
 
@@ -220,6 +208,20 @@ async function run() {
     }
 
 
+    /*
+     * THUMBNAIL
+     */
+
+    const image =
+      card.find(
+        ".post-thumbnail img"
+      ).first();
+
+    const thumbnail =
+      image.attr("src") ||
+      image.attr("data-src") ||
+      null;
+
     let thumbnailUrl = null;
 
     if (thumbnail) {
@@ -234,10 +236,25 @@ async function run() {
 
       }
       catch {
+
         thumbnailUrl = null;
+
       }
 
     }
+
+
+    /*
+     * DISPLAYED AGE
+     */
+
+    const sourceAge =
+      card.find(
+        ".post-meta__date"
+      )
+        .text()
+        .replace(/\s+/g, " ")
+        .trim();
 
 
     videos.push({
@@ -262,7 +279,9 @@ async function run() {
 
 
   /*
-   * Deduplicate by source URL.
+   * ------------------------------------------------------------
+   * REMOVE DUPLICATES
+   * ------------------------------------------------------------
    */
 
   const unique =
@@ -278,10 +297,6 @@ async function run() {
     ];
 
 
-  /*
-   * Newest first.
-   */
-
   unique.sort(
     (a, b) =>
       new Date(
@@ -293,58 +308,258 @@ async function run() {
   );
 
 
-  console.log("");
   console.log(
-    "============================================"
-  );
-
-  console.log(
-    `FOUND ${unique.length} VIDEOS <= 24 HOURS`
-  );
-
-  console.log(
-    "============================================"
+    `Found ${unique.length} candidate videos <= 24 hours.`
   );
 
 
-  unique.forEach(
-    (video, index) => {
+  if (!unique.length) {
 
-      console.log("");
+    console.log(
+      "Nothing to write to Supabase."
+    );
 
-      console.log(
-        `${index + 1}. ${video.title}`
+    return;
+
+  }
+
+
+  /*
+   * ------------------------------------------------------------
+   * CHECK WHICH URLS ALREADY EXIST
+   * ------------------------------------------------------------
+   *
+   * This is deliberate rather than doing a blind upsert.
+   *
+   * We don't want future scraper runs to reset:
+   *
+   * status
+   * first_seen_at
+   * reviewed_at
+   *
+   * for candidates you have already reviewed.
+   */
+
+  const sourceUrls =
+    unique.map(
+      video => video.source_url
+    );
+
+  const {
+    data: existingRows,
+    error: existingError
+  } =
+    await supabase
+      .from("zulu_candidates")
+      .select(
+        "id, source_url, status, first_seen_at, reviewed_at"
+      )
+      .in(
+        "source_url",
+        sourceUrls
       );
 
-      console.log(
-        `   Uploaded: ${video.source_uploaded_at}`
+  if (existingError) {
+    throw existingError;
+  }
+
+
+  const existingByUrl =
+    new Map(
+      (existingRows || []).map(
+        row => [
+          row.source_url,
+          row
+        ]
+      )
+    );
+
+
+  const currentTimestamp =
+    new Date().toISOString();
+
+
+  /*
+   * ------------------------------------------------------------
+   * NEW CANDIDATES
+   * ------------------------------------------------------------
+   */
+
+  const newCandidates =
+    unique
+      .filter(
+        video =>
+          !existingByUrl.has(
+            video.source_url
+          )
+      )
+      .map(
+        video => ({
+
+          title:
+            video.title,
+
+          source_url:
+            video.source_url,
+
+          source_age:
+            video.source_age,
+
+          source_uploaded_at:
+            video.source_uploaded_at,
+
+          thumbnail_url:
+            video.thumbnail_url,
+
+          status:
+            "pending",
+
+          first_seen_at:
+            currentTimestamp,
+
+          last_seen_at:
+            currentTimestamp
+
+        })
       );
 
-      console.log(
-        `   Age: ${video.source_age}`
-      );
 
-      console.log(
-        `   URL: ${video.source_url}`
-      );
+  /*
+   * ------------------------------------------------------------
+   * EXISTING CANDIDATES
+   * ------------------------------------------------------------
+   *
+   * Only refresh metadata.
+   *
+   * We DO NOT alter status, reviewed_at or first_seen_at.
+   */
 
-      if (
-        video.thumbnail_url
-      ) {
+  const existingCandidates =
+    unique.filter(
+      video =>
+        existingByUrl.has(
+          video.source_url
+        )
+    );
 
-        console.log(
-          `   Thumbnail: ${video.thumbnail_url}`
+
+  /*
+   * ------------------------------------------------------------
+   * INSERT NEW ROWS
+   * ------------------------------------------------------------
+   */
+
+  let insertedCount = 0;
+
+  if (newCandidates.length) {
+
+    console.log(
+      `Inserting ${newCandidates.length} new candidates...`
+    );
+
+    const {
+      data,
+      error
+    } =
+      await supabase
+        .from("zulu_candidates")
+        .insert(
+          newCandidates
+        )
+        .select("id");
+
+    if (error) {
+      throw error;
+    }
+
+    insertedCount =
+      data?.length || 0;
+
+  }
+
+
+  /*
+   * ------------------------------------------------------------
+   * UPDATE EXISTING ROWS
+   * ------------------------------------------------------------
+   */
+
+  let updatedCount = 0;
+
+  for (
+    const video of existingCandidates
+  ) {
+
+    const {
+      error
+    } =
+      await supabase
+        .from("zulu_candidates")
+        .update({
+
+          title:
+            video.title,
+
+          source_age:
+            video.source_age,
+
+          source_uploaded_at:
+            video.source_uploaded_at,
+
+          thumbnail_url:
+            video.thumbnail_url,
+
+          last_seen_at:
+            currentTimestamp
+
+        })
+        .eq(
+          "source_url",
+          video.source_url
         );
 
-      }
-
+    if (error) {
+      throw error;
     }
-  );
 
+    updatedCount++;
+
+  }
+
+
+  /*
+   * ------------------------------------------------------------
+   * SUMMARY
+   * ------------------------------------------------------------
+   */
 
   console.log("");
   console.log(
-    "TEST MODE — nothing written to Supabase."
+    "============================================"
+  );
+
+  console.log(
+    "CANDIDATE SCRAPE COMPLETE"
+  );
+
+  console.log(
+    "============================================"
+  );
+
+  console.log(
+    `Scraped:  ${unique.length}`
+  );
+
+  console.log(
+    `Inserted: ${insertedCount}`
+  );
+
+  console.log(
+    `Updated:  ${updatedCount}`
+  );
+
+  console.log(
+    "============================================"
   );
 
 }
