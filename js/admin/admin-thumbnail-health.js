@@ -3848,6 +3848,17 @@ async function loadThumbnailReevaluationMissingUids() {
 /**
  * Begins a new review session.
  */
+/**
+ * Begins a new review session.
+ *
+ * Normal review:
+ *   1. genuinely missing thumbnails first
+ *   2. all remaining unevaluated thumbnails
+ *   3. UID ascending within each group
+ *
+ * Re-review:
+ *   oldest evaluation first
+ */
 async function startThumbnailReevaluation(
   mode =
     "unevaluated"
@@ -3902,15 +3913,18 @@ async function startThumbnailReevaluation(
   );
 
 
-try {
+  try {
 
     /*
      * Normal review needs to know which catalogue videos do not yet
      * have images/{uid}.png.
      *
-     * Re-review mode contains already-evaluated videos, so those should
-     * normally already have thumbnails and does not need this extra
-     * health request.
+     * Thumbnail Health is the authority for this rather than assuming
+     * that thumbnail_evaluated=false means the physical thumbnail is
+     * missing.
+     *
+     * Re-review mode contains already-evaluated videos, so it does not
+     * need this extra health request.
      */
     if (
       thumbnailReevaluationMode ===
@@ -3926,6 +3940,9 @@ try {
     }
 
 
+    /*
+     * Load the appropriate catalogue rows.
+     */
     let query =
       supabase
         .from(
@@ -3948,7 +3965,7 @@ try {
 
     /*
      * Normal review:
-     * catalogue UID order.
+     * initially request catalogue UID order.
      *
      * Re-review:
      * oldest evaluation first, so thumbnails which have gone longest
@@ -3967,7 +3984,6 @@ try {
             nullsFirst: true
           }
         );
-
 
     } else {
 
@@ -4001,33 +4017,100 @@ try {
     }
 
 
-thumbnailReevaluationQueue =
-  (
-    Array.isArray(
-      data
-    )
-      ? data
-      : []
-  )
-    .filter(
-      item =>
-        item &&
-        item.uid != null &&
-        item.url
-    )
-    .map(
-      item => ({
-        ...item,
+    /*
+     * Build the review queue and record whether each catalogue video
+     * genuinely lacks its expected Backblaze thumbnail.
+     */
+    thumbnailReevaluationQueue =
+      (
+        Array.isArray(
+          data
+        )
+          ? data
+          : []
+      )
+        .filter(
+          item =>
+            item &&
+            item.uid != null &&
+            item.url
+        )
+        .map(
+          item => ({
+            ...item,
 
-        thumbnail_missing:
-          thumbnailReevaluationMissingUids.has(
-            String(
-              item.uid
+            thumbnail_missing:
+              thumbnailReevaluationMissingUids.has(
+                String(
+                  item.uid
+                )
+              )
+          })
+        );
+
+
+    /*
+     * For normal review, put videos with genuinely missing thumbnails
+     * at the front of the queue.
+     *
+     * This means a newly imported video such as UID 1642 appears before
+     * the historical unevaluated catalogue.
+     *
+     * Within both groups, retain UID ascending order.
+     */
+    if (
+      thumbnailReevaluationMode ===
+        "unevaluated"
+    ) {
+
+      thumbnailReevaluationQueue.sort(
+        (
+          a,
+          b
+        ) => {
+
+          const aMissing =
+            Boolean(
+              a.thumbnail_missing
+            );
+
+
+          const bMissing =
+            Boolean(
+              b.thumbnail_missing
+            );
+
+
+          /*
+           * Missing thumbnails first.
+           */
+          if (
+            aMissing !==
+            bMissing
+          ) {
+
+            return aMissing
+              ? -1
+              : 1;
+          }
+
+
+          /*
+           * Same thumbnail state:
+           * retain catalogue UID order.
+           */
+          return (
+            Number(
+              a.uid
+            ) -
+            Number(
+              b.uid
             )
-          )
-      })
-    );
-  
+          );
+        }
+      );
+    }
+
 
     if (
       !thumbnailReevaluationQueue.length
@@ -4140,6 +4223,7 @@ thumbnailReevaluationQueue =
     );
   }
 }
+
 
 /**
  * Generates candidates for the video at the current queue position.
