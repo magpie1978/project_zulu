@@ -673,6 +673,65 @@ const candidatesNext =
 const candidatesPageLabel =
   document.getElementById("admin-candidates-page");
 
+const candidateApprovalModal =
+  document.getElementById(
+    "admin-candidate-approval-modal"
+  );
+
+const candidateApprovalClose =
+  document.getElementById(
+    "admin-candidate-approval-close"
+  );
+
+const candidateApprovalCancel =
+  document.getElementById(
+    "admin-candidate-approval-cancel"
+  );
+
+const candidateApprovalForm =
+  document.getElementById(
+    "admin-candidate-approval-form"
+  );
+
+const candidateApprovalId =
+  document.getElementById(
+    "admin-candidate-approval-id"
+  );
+
+const candidateApprovalFilm =
+  document.getElementById(
+    "admin-candidate-approval-film"
+  );
+
+const candidateApprovalActors =
+  document.getElementById(
+    "admin-candidate-approval-actors"
+  );
+
+const candidateApprovalTags =
+  document.getElementById(
+    "admin-candidate-approval-tags"
+  );
+
+const candidateApprovalPreview =
+  document.getElementById(
+    "admin-candidate-approval-preview"
+  );
+
+const candidateApprovalError =
+  document.getElementById(
+    "admin-candidate-approval-error"
+  );
+
+const candidateApprovalSubmit =
+  document.getElementById(
+    "admin-candidate-approval-submit"
+  );
+
+
+let candidateApprovalRow =
+  null;
+
 const candidateFilters =
   Array.from(
     document.querySelectorAll("[data-candidate-status]")
@@ -759,6 +818,55 @@ function initialiseCandidates() {
     "click",
     handleCandidateAction
   );
+
+    candidateApprovalClose?.addEventListener(
+    "click",
+    closeCandidateApprovalModal
+  );
+
+
+  candidateApprovalCancel?.addEventListener(
+    "click",
+    closeCandidateApprovalModal
+  );
+
+
+  candidateApprovalModal?.addEventListener(
+    "click",
+    event => {
+
+      if (
+        event.target.closest(
+          "[data-candidate-approval-close]"
+        )
+      ) {
+
+        closeCandidateApprovalModal();
+      }
+    }
+  );
+
+
+  candidateApprovalForm?.addEventListener(
+    "submit",
+    submitCandidateApproval
+  );
+
+
+  document.addEventListener(
+    "keydown",
+    event => {
+
+      if (
+        event.key === "Escape" &&
+        candidateApprovalModal &&
+        !candidateApprovalModal.hidden
+      ) {
+
+        closeCandidateApprovalModal();
+      }
+    }
+  );
 }
 
 async function loadCandidates() {
@@ -808,7 +916,16 @@ async function loadCandidates() {
             thumbnail_url,
             status,
             first_seen_at,
-            reviewed_at
+            reviewed_at,
+            import_film,
+            import_actors,
+            import_tags,
+            import_status,
+            imported_uid,
+            ingestion_id,
+            import_started_at,
+            imported_at,
+            import_error
           `,
           {
             count: "exact"
@@ -1022,7 +1139,7 @@ function renderCandidateCard(
       <button
         type="button"
         class="admin-candidate-action admin-candidate-accept"
-        data-candidate-action="accepted"
+        data-candidate-action="approve"
         data-candidate-id="${Number(
           row.id
         )}"
@@ -1068,8 +1185,13 @@ function renderCandidateCard(
       data-candidate-card="${Number(
         row.id
       )}"
+      data-candidate-title="${escapeCandidateAttribute(
+        row.title || ""
+      )}"
+      data-candidate-thumbnail="${escapeCandidateAttribute(
+        row.thumbnail_url || ""
+      )}"
     >
-
       <a
         class="admin-candidate-thumbnail"
         href="${sourceUrl}"
@@ -1159,20 +1281,13 @@ async function handleCandidateAction(
     );
 
 
-  const status =
+  const action =
     button.dataset.candidateAction;
 
 
   if (
     !Number.isFinite(
       id
-    ) ||
-    ![
-      "pending",
-      "accepted",
-      "rejected"
-    ].includes(
-      status
     )
   ) {
     return;
@@ -1183,6 +1298,44 @@ async function handleCandidateAction(
     button.closest(
       "[data-candidate-card]"
     );
+
+
+  /* -------------------------------------------------------------------
+     APPROVE
+     -------------------------------------------------------------------
+
+     Accept no longer writes directly to the database.
+
+     It opens the approval form so film / actors / tags can be reviewed
+     before the candidate enters the automated import queue.
+  ------------------------------------------------------------------- */
+
+  if (
+    action === "approve"
+  ) {
+
+    await openCandidateApprovalModal(
+      id
+    );
+
+    return;
+  }
+
+
+  /* -------------------------------------------------------------------
+     SIMPLE STATUS CHANGES
+  ------------------------------------------------------------------- */
+
+  if (
+    ![
+      "pending",
+      "rejected"
+    ].includes(
+      action
+    )
+  ) {
+    return;
+  }
 
 
   button.disabled =
@@ -1198,14 +1351,85 @@ async function handleCandidateAction(
 
     const update = {
 
-      status,
+      status:
+        action,
 
       reviewed_at:
-        status === "pending"
+        action === "pending"
           ? null
           : new Date().toISOString()
 
     };
+
+
+    /*
+     * Returning a candidate to Pending also removes it from the
+     * not-yet-started import queue.
+     *
+     * Already imported/importing candidates are deliberately protected.
+     */
+
+    if (
+      action === "pending"
+    ) {
+
+      const {
+        data: currentCandidate,
+        error: currentError
+      } =
+        await supabase
+          .from(
+            "zulu_candidates"
+          )
+          .select(
+            `
+              import_status
+            `
+          )
+          .eq(
+            "id",
+            id
+          )
+          .single();
+
+
+      if (
+        currentError
+      ) {
+        throw currentError;
+      }
+
+
+      if (
+        [
+          "importing",
+          "imported"
+        ].includes(
+          currentCandidate?.import_status
+        )
+      ) {
+
+        throw new Error(
+          `This candidate cannot be returned to Pending because its import status is "${currentCandidate.import_status}".`
+        );
+      }
+
+
+      update.import_status =
+        "not_started";
+
+      update.import_film =
+        null;
+
+      update.import_actors =
+        [];
+
+      update.import_tags =
+        [];
+
+      update.import_error =
+        null;
+    }
 
 
     const {
@@ -1228,49 +1452,6 @@ async function handleCandidateAction(
       error
     ) {
       throw error;
-    }
-
-
-    card?.remove();
-
-
-    candidatesCount =
-      Math.max(
-        0,
-        candidatesCount - 1
-      );
-
-
-    if (
-      candidatesCurrentStatus ===
-      "pending"
-    ) {
-
-      if (
-        candidatesTotal
-      ) {
-
-        candidatesTotal.textContent =
-          candidatesCount.toLocaleString();
-      }
-
-
-      if (
-        candidatesTabCount
-      ) {
-
-        candidatesTabCount.textContent =
-          candidatesCount.toLocaleString();
-      }
-    }
-
-
-    if (
-      !candidatesGrid.children.length &&
-      candidatesPage > 0
-    ) {
-
-      candidatesPage--;
     }
 
 
@@ -1304,6 +1485,718 @@ async function handleCandidateAction(
     );
   }
 }
+
+async function openCandidateApprovalModal(
+  id
+) {
+
+  if (
+    !candidateApprovalModal ||
+    !candidateApprovalForm
+  ) {
+    return;
+  }
+
+
+  setCandidateApprovalError(
+    ""
+  );
+
+
+  setCandidateApprovalLoading(
+    true
+  );
+
+
+  candidateApprovalModal.hidden =
+    false;
+
+
+  document.body.classList.add(
+    "admin-modal-open"
+  );
+
+
+  try {
+
+    const {
+      data,
+      error
+    } =
+      await supabase
+        .from(
+          "zulu_candidates"
+        )
+        .select(
+          `
+            id,
+            title,
+            thumbnail_url,
+            status,
+            import_film,
+            import_actors,
+            import_tags,
+            import_status,
+            imported_uid,
+            ingestion_id
+          `
+        )
+        .eq(
+          "id",
+          id
+        )
+        .single();
+
+
+    if (
+      error
+    ) {
+      throw error;
+    }
+
+
+    if (
+      !data
+    ) {
+
+      throw new Error(
+        "Candidate could not be found."
+      );
+    }
+
+
+    if (
+      data.status !== "pending"
+    ) {
+
+      throw new Error(
+        `Candidate is already "${data.status}".`
+      );
+    }
+
+
+    if (
+      [
+        "importing",
+        "imported"
+      ].includes(
+        data.import_status
+      )
+    ) {
+
+      throw new Error(
+        `Candidate import is already "${data.import_status}".`
+      );
+    }
+
+
+    candidateApprovalRow =
+      data;
+
+
+    candidateApprovalId.value =
+      String(
+        data.id
+      );
+
+
+    candidateApprovalFilm.value =
+      data.import_film ||
+      data.title ||
+      "";
+
+
+    const suggestedActors =
+      Array.isArray(
+        data.import_actors
+      ) &&
+      data.import_actors.length
+        ? data.import_actors
+        : inferCandidateActors(
+            data.title
+          );
+
+
+    candidateApprovalActors.value =
+      suggestedActors.join(
+        ", "
+      );
+
+
+    candidateApprovalTags.value =
+      Array.isArray(
+        data.import_tags
+      )
+        ? data.import_tags.join(
+            ", "
+          )
+        : "";
+
+
+    renderCandidateApprovalPreview(
+      data
+    );
+
+
+    window.lucide?.createIcons();
+
+
+    requestAnimationFrame(
+      () => {
+
+        candidateApprovalFilm?.focus();
+
+        candidateApprovalFilm?.select();
+      }
+    );
+
+
+  } catch (
+    error
+  ) {
+
+    console.error(
+      "CANDIDATE APPROVAL LOAD ERROR:",
+      error
+    );
+
+
+    setCandidateApprovalError(
+      error?.message ||
+      "Could not load candidate."
+    );
+
+
+  } finally {
+
+    setCandidateApprovalLoading(
+      false
+    );
+  }
+}
+
+
+function closeCandidateApprovalModal() {
+
+  if (
+    !candidateApprovalModal
+  ) {
+    return;
+  }
+
+
+  candidateApprovalModal.hidden =
+    true;
+
+
+  document.body.classList.remove(
+    "admin-modal-open"
+  );
+
+
+  candidateApprovalRow =
+    null;
+
+
+  candidateApprovalForm?.reset();
+
+
+  setCandidateApprovalError(
+    ""
+  );
+
+
+  setCandidateApprovalLoading(
+    false
+  );
+}
+
+
+async function submitCandidateApproval(
+  event
+) {
+
+  event.preventDefault();
+
+
+  if (
+    !candidateApprovalRow
+  ) {
+    return;
+  }
+
+
+  const id =
+    Number(
+      candidateApprovalId?.value
+    );
+
+
+  const film =
+    String(
+      candidateApprovalFilm?.value ||
+      ""
+    ).trim();
+
+
+  const actors =
+    parseCandidateList(
+      candidateApprovalActors?.value
+    );
+
+
+  const tags =
+    parseCandidateList(
+      candidateApprovalTags?.value
+    );
+
+
+  if (
+    !Number.isFinite(
+      id
+    )
+  ) {
+
+    setCandidateApprovalError(
+      "Invalid candidate ID."
+    );
+
+    return;
+  }
+
+
+  if (
+    !film
+  ) {
+
+    setCandidateApprovalError(
+      "Film title is required."
+    );
+
+    candidateApprovalFilm?.focus();
+
+    return;
+  }
+
+
+  if (
+    !actors.length
+  ) {
+
+    setCandidateApprovalError(
+      "At least one actor is required."
+    );
+
+    candidateApprovalActors?.focus();
+
+    return;
+  }
+
+
+  setCandidateApprovalError(
+    ""
+  );
+
+
+  setCandidateApprovalLoading(
+    true
+  );
+
+
+  try {
+
+    const now =
+      new Date().toISOString();
+
+
+    const {
+      error
+    } =
+      await supabase
+        .from(
+          "zulu_candidates"
+        )
+        .update(
+          {
+            status:
+              "accepted",
+
+            reviewed_at:
+              now,
+
+            import_film:
+              film,
+
+            import_actors:
+              actors,
+
+            import_tags:
+              tags,
+
+            import_status:
+              "ready",
+
+            import_started_at:
+              null,
+
+            imported_at:
+              null,
+
+            imported_uid:
+              null,
+
+            ingestion_id:
+              null,
+
+            import_error:
+              null
+          }
+        )
+        .eq(
+          "id",
+          id
+        )
+        .eq(
+          "status",
+          "pending"
+        );
+
+
+    if (
+      error
+    ) {
+      throw error;
+    }
+
+
+    closeCandidateApprovalModal();
+
+
+    await loadCandidates();
+
+
+  } catch (
+    error
+  ) {
+
+    console.error(
+      "CANDIDATE APPROVAL ERROR:",
+      error
+    );
+
+
+    setCandidateApprovalError(
+      `Could not approve candidate: ${
+        error?.message ||
+        "Unknown error"
+      }`
+    );
+
+
+    setCandidateApprovalLoading(
+      false
+    );
+  }
+}
+
+
+function renderCandidateApprovalPreview(
+  row
+) {
+
+  if (
+    !candidateApprovalPreview
+  ) {
+    return;
+  }
+
+
+  const thumbnail =
+    row.thumbnail_url
+      ? `
+          <img
+            src="${escapeCandidateAttribute(
+              row.thumbnail_url
+            )}"
+            alt=""
+            referrerpolicy="no-referrer"
+          >
+        `
+      : `
+          <div class="admin-candidate-approval-no-thumbnail">
+            <i data-lucide="image-off"></i>
+          </div>
+        `;
+
+
+  candidateApprovalPreview.innerHTML = `
+    <div class="admin-candidate-approval-preview-image">
+      ${thumbnail}
+    </div>
+
+    <div class="admin-candidate-approval-preview-copy">
+
+      <div class="admin-section-kicker">
+        SOURCE TITLE
+      </div>
+
+      <div class="admin-candidate-approval-source-title">
+        ${escapeCandidateHtml(
+          row.title ||
+          "Untitled"
+        )}
+      </div>
+
+    </div>
+  `;
+}
+
+
+function parseCandidateList(
+  value
+) {
+
+  const seen =
+    new Set();
+
+
+  return String(
+    value ||
+    ""
+  )
+    .split(",")
+    .map(
+      item =>
+        item.trim()
+    )
+    .filter(
+      Boolean
+    )
+    .filter(
+      item => {
+
+        const key =
+          item.toLocaleLowerCase();
+
+
+        if (
+          seen.has(
+            key
+          )
+        ) {
+          return false;
+        }
+
+
+        seen.add(
+          key
+        );
+
+
+        return true;
+      }
+    );
+}
+
+
+function inferCandidateActors(
+  title
+) {
+
+  const value =
+    String(
+      title ||
+      ""
+    ).trim();
+
+
+  if (
+    !value
+  ) {
+    return [];
+  }
+
+
+  /*
+   * Actor A with Actor B
+   * Actor A with Actor B & Actor C
+   * Actor A with Actor B and Actor C
+   */
+
+  const withMatch =
+    value.match(
+      /^(.+?)\s+with\s+(.+)$/i
+    );
+
+
+  if (
+    withMatch
+  ) {
+
+    const firstActor =
+      withMatch[1].trim();
+
+
+    const remainingActors =
+      withMatch[2]
+        .split(
+          /\s*(?:&|\band\b)\s*/i
+        )
+        .map(
+          actor =>
+            actor.trim()
+        )
+        .filter(
+          Boolean
+        );
+
+
+    return [
+      firstActor,
+      ...remainingActors
+    ].filter(
+      Boolean
+    );
+  }
+
+
+  /*
+   * Actor – description
+   * Actor — description
+   * Actor - description
+   */
+
+  const dashMatch =
+    value.match(
+      /^(.+?)\s+[–—-]\s+.+$/
+    );
+
+
+  if (
+    dashMatch
+  ) {
+
+    const actor =
+      dashMatch[1].trim();
+
+
+    return actor
+      ? [
+          actor
+        ]
+      : [];
+  }
+
+
+  /*
+   * Unknown title format.
+   *
+   * Do not guess. The reviewer must enter the actor manually.
+   */
+
+  return [];
+}
+
+
+function setCandidateApprovalError(
+  message
+) {
+
+  if (
+    !candidateApprovalError
+  ) {
+    return;
+  }
+
+
+  candidateApprovalError.textContent =
+    message ||
+    "";
+
+
+  candidateApprovalError.hidden =
+    !message;
+}
+
+
+function setCandidateApprovalLoading(
+  loading
+) {
+
+  if (
+    candidateApprovalSubmit
+  ) {
+
+    candidateApprovalSubmit.disabled =
+      Boolean(
+        loading
+      );
+  }
+
+
+  if (
+    candidateApprovalClose
+  ) {
+
+    candidateApprovalClose.disabled =
+      Boolean(
+        loading
+      );
+  }
+
+
+  if (
+    candidateApprovalCancel
+  ) {
+
+    candidateApprovalCancel.disabled =
+      Boolean(
+        loading
+      );
+  }
+
+
+  if (
+    candidateApprovalFilm
+  ) {
+
+    candidateApprovalFilm.disabled =
+      Boolean(
+        loading
+      );
+  }
+
+
+  if (
+    candidateApprovalActors
+  ) {
+
+    candidateApprovalActors.disabled =
+      Boolean(
+        loading
+      );
+  }
+
+
+  if (
+    candidateApprovalTags
+  ) {
+
+    candidateApprovalTags.disabled =
+      Boolean(
+        loading
+      );
+  }
+
+
+  candidateApprovalModal?.classList.toggle(
+    "is-loading",
+    Boolean(
+      loading
+    )
+  );
+}
+
 
   function updateCandidatesPagination() {
 
