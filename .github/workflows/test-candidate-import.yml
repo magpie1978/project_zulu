@@ -3,8 +3,22 @@ name: Test Candidate Import
 on:
   workflow_dispatch:
 
+  workflow_run:
+    workflows:
+      - Resolve Candidate Media
+    types:
+      - completed
+
+concurrency:
+  group: candidate-import
+  cancel-in-progress: false
+
 jobs:
   test:
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
+
     runs-on: ubuntu-latest
 
     defaults:
