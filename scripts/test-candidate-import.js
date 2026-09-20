@@ -1138,6 +1138,469 @@ async function finalizeVideo({
   return data;
 }
 
+/* =====================================================================
+   RESUME EXISTING VIDEO_UPLOADED INGESTION
+===================================================================== */
+
+async function findResumableIngestion({
+  film,
+  canonicalFilename
+}) {
+
+  console.log("");
+  console.log(
+    "Checking for an existing resumable ingestion..."
+  );
+
+
+  const {
+    data,
+    error
+  } =
+    await supabase
+      .from(
+        "zulu_ingestions"
+      )
+      .select(`
+        id,
+        original_filename,
+        canonical_filename,
+        film,
+        filesize_bytes,
+        fingerprint,
+        status,
+        backblaze_file_id,
+        public_url,
+        video_uploaded_at,
+        video_uid,
+        created_at
+      `)
+      .eq(
+        "film",
+        film
+      )
+      .eq(
+        "canonical_filename",
+        canonicalFilename
+      )
+      .eq(
+        "status",
+        "video_uploaded"
+      )
+      .not(
+        "public_url",
+        "is",
+        null
+      )
+      .not(
+        "fingerprint",
+        "is",
+        null
+      )
+      .order(
+        "created_at",
+        {
+          ascending: false
+        }
+      )
+      .limit(1)
+      .maybeSingle();
+
+
+  if (
+    error
+  ) {
+
+    throw error;
+  }
+
+
+  if (
+    !data
+  ) {
+
+    console.log(
+      "No resumable video_uploaded ingestion found."
+    );
+
+    return null;
+  }
+
+
+  console.log(
+    "RESUMABLE INGESTION FOUND"
+  );
+
+  console.log(
+    `  Ingestion: ${data.id}`
+  );
+
+  console.log(
+    `  Status: ${data.status}`
+  );
+
+  console.log(
+    `  Public URL: ${data.public_url}`
+  );
+
+  console.log(
+    `  Fingerprint: ${data.fingerprint}`
+  );
+
+  console.log(
+    `  Size: ${data.filesize_bytes}`
+  );
+
+
+  return data;
+}
+
+
+async function resumeVideoUploadedIngestion({
+  ingestion,
+  film,
+  actors,
+  tags,
+  mediaUrl
+}) {
+
+  console.log("");
+  console.log(
+    "============================================================"
+  );
+
+  console.log(
+    "RESUMING EXISTING VIDEO UPLOAD"
+  );
+
+  console.log(
+    "============================================================"
+  );
+
+
+  /*
+   * The MP4 itself is already safely in Backblaze.
+   *
+   * We therefore do NOT:
+   *
+   *   - download the MP4
+   *   - calculate the fingerprint again
+   *   - calculate the B2 SHA-1 again
+   *   - upload anything to Backblaze
+   *
+   * We only need duration/dimensions for the finalizer.
+   *
+   * ffprobe can read these directly from the source media URL.
+   */
+  console.log("");
+  console.log(
+    "Reading video metadata directly from source URL..."
+  );
+
+
+  const metadata =
+    await probeVideo(
+      mediaUrl
+    );
+
+
+  console.log(
+    `Duration: ${metadata.duration}`
+  );
+
+  console.log(
+    `Dimensions: ${metadata.width}x${metadata.height}`
+  );
+
+
+  const filesizeBytes =
+    Number(
+      ingestion.filesize_bytes
+    );
+
+
+  if (
+    !Number.isFinite(filesizeBytes) ||
+    filesizeBytes <= 0
+  ) {
+
+    throw new Error(
+      `Existing ingestion ${ingestion.id} has an invalid filesize_bytes value.`
+    );
+  }
+
+
+  if (
+    !ingestion.fingerprint
+  ) {
+
+    throw new Error(
+      `Existing ingestion ${ingestion.id} has no fingerprint.`
+    );
+  }
+
+
+  if (
+    !ingestion.public_url
+  ) {
+
+    throw new Error(
+      `Existing ingestion ${ingestion.id} has no public_url.`
+    );
+  }
+
+
+  console.log("");
+  console.log(
+    "Submitting existing upload to zulu-finalize-video:"
+  );
+
+  console.log(
+    `  Ingestion: ${ingestion.id}`
+  );
+
+  console.log(
+    `  Film: ${film}`
+  );
+
+  console.log(
+    `  Actors: ${actors.join(", ")}`
+  );
+
+  console.log(
+    `  URL: ${ingestion.public_url}`
+  );
+
+  console.log(
+    `  Size: ${filesizeBytes}`
+  );
+
+  console.log(
+    `  Duration: ${metadata.duration}`
+  );
+
+  console.log(
+    `  Dimensions: ${metadata.width}x${metadata.height}`
+  );
+
+
+  const finalizeData =
+    await finalizeVideo({
+      ingestionId:
+        ingestion.id,
+
+      film,
+
+      publicUrl:
+        ingestion.public_url,
+
+      actors,
+
+      tags,
+
+      filesizeBytes,
+
+      durationSeconds:
+        metadata.duration,
+
+      width:
+        metadata.width,
+
+      height:
+        metadata.height,
+
+      fingerprint:
+        ingestion.fingerprint
+    });
+
+
+  console.log("");
+  console.log(
+    "CATALOGUE FINALIZATION SUCCESSFUL"
+  );
+
+  console.log(
+    `Video UID: ${finalizeData.uid}`
+  );
+
+  console.log(
+    `Ingestion status returned: ${finalizeData.ingestion_status}`
+  );
+
+
+  /*
+   * Thumbnail processing is deliberately not part of this test yet.
+   */
+  await markIngestionCompleteWithoutThumbnail(
+    ingestion.id
+  );
+
+
+  console.log(
+    "Ingestion marked complete_without_thumbnail."
+  );
+
+
+  /*
+   * Verify that the catalogue record actually exists.
+   */
+  const {
+    data: savedVideo,
+    error: videoError
+  } =
+    await supabase
+      .from(
+        "zulu_videos"
+      )
+      .select(`
+        uid,
+        film,
+        url,
+        filesize_bytes,
+        duration_seconds,
+        width,
+        height,
+        fingerprint
+      `)
+      .eq(
+        "uid",
+        finalizeData.uid
+      )
+      .single();
+
+
+  if (
+    videoError
+  ) {
+
+    throw new Error(
+      `Finalization succeeded but catalogue verification failed: ${videoError.message}`
+    );
+  }
+
+
+  const {
+    data: savedActors,
+    error: actorsError
+  } =
+    await supabase
+      .from(
+        "zulu_actors"
+      )
+      .select(
+        "actor"
+      )
+      .eq(
+        "uid",
+        finalizeData.uid
+      );
+
+
+  if (
+    actorsError
+  ) {
+
+    throw new Error(
+      `Finalization succeeded but actor verification failed: ${actorsError.message}`
+    );
+  }
+
+
+  const {
+    data: finalIngestion,
+    error: ingestionError
+  } =
+    await supabase
+      .from(
+        "zulu_ingestions"
+      )
+      .select(`
+        id,
+        status,
+        video_uid,
+        public_url,
+        thumbnail_status,
+        completed_at
+      `)
+      .eq(
+        "id",
+        ingestion.id
+      )
+      .single();
+
+
+  if (
+    ingestionError
+  ) {
+
+    throw new Error(
+      `Finalization succeeded but ingestion verification failed: ${ingestionError.message}`
+    );
+  }
+
+
+  console.log("");
+  console.log(
+    "============================================================"
+  );
+
+  console.log(
+    "RESUMED IMPORT SUCCESSFUL"
+  );
+
+  console.log(
+    "============================================================"
+  );
+
+  console.log(
+    `Video UID: ${savedVideo.uid}`
+  );
+
+  console.log(
+    `Film: ${savedVideo.film}`
+  );
+
+  console.log(
+    `Actors: ${
+      savedActors
+        ?.map(
+          row =>
+            row.actor
+        )
+        .join(", ") ||
+      "(none)"
+    }`
+  );
+
+  console.log(
+    `URL: ${savedVideo.url}`
+  );
+
+  console.log(
+    `Ingestion: ${finalIngestion.id}`
+  );
+
+  console.log(
+    `Ingestion status: ${finalIngestion.status}`
+  );
+
+  console.log(
+    `Thumbnail status: ${finalIngestion.thumbnail_status}`
+  );
+
+  console.log(
+    "============================================================"
+  );
+
+
+  return {
+    finalizeData,
+    savedVideo,
+    savedActors,
+    finalIngestion
+  };
+}
+
 
 /* =====================================================================
    MAIN
@@ -1320,12 +1783,70 @@ async function main() {
 
 
     /* ---------------------------------------------------------------
-       3. DOWNLOAD MP4
+       3. CHECK FOR INTERRUPTED/RESUMABLE IMPORT
+    --------------------------------------------------------------- */
+
+    const expectedCanonicalFilename =
+      `${film}.mp4`;
+
+
+    const resumableIngestion =
+      await findResumableIngestion({
+        film,
+
+        canonicalFilename:
+          expectedCanonicalFilename
+      });
+
+
+    if (
+      resumableIngestion
+    ) {
+
+      /*
+       * Candidate #1 has already reached Backblaze.
+       *
+       * Do NOT download or upload the MP4 again.
+       */
+      ingestionId =
+        resumableIngestion.id;
+
+
+      currentStage =
+        "cataloguing";
+
+
+      await resumeVideoUploadedIngestion({
+        ingestion:
+          resumableIngestion,
+
+        film,
+
+        actors,
+
+        tags,
+
+        mediaUrl:
+          candidate.media_url
+      });
+
+
+      /*
+       * The resumed import is complete.
+       *
+       * Returning here is important: none of the normal download /
+       * analysis / Backblaze code below should execute.
+       */
+      return;
+    }
+
+
+    /* ---------------------------------------------------------------
+       4. DOWNLOAD MP4
     --------------------------------------------------------------- */
 
     currentStage =
       "downloading";
-
 
     console.log("");
     console.log(
