@@ -17,7 +17,11 @@ const execFileAsync =
    CONFIGURATION
 ===================================================================== */
 
-const CANDIDATE_ID = 1;
+const MAX_CANDIDATES_PER_RUN =
+  Number(
+    process.env.MAX_CANDIDATES_PER_RUN ||
+    10
+  );
 
 const SAMPLE_SIZE =
   4 * 1024 * 1024;
@@ -1603,15 +1607,531 @@ async function resumeVideoUploadedIngestion({
 
 
 /* =====================================================================
+   CANDIDATE QUEUE
+===================================================================== */
+
+async function loadReadyCandidates() {
+
+  console.log("");
+  console.log(
+    "Loading ready candidate queue..."
+  );
+
+
+  const {
+    data,
+    error
+  } =
+    await supabase
+      .from(
+        "zulu_candidates"
+      )
+      .select(`
+        id,
+        title,
+        status,
+        media_url,
+        media_filename,
+        media_size_bytes,
+        import_film,
+        import_actors,
+        import_tags,
+        import_status,
+        imported_uid,
+        ingestion_id,
+        import_started_at,
+        imported_at,
+        import_error,
+        source_uploaded_at,
+        first_seen_at
+      `)
+      .eq(
+        "status",
+        "accepted"
+      )
+      .eq(
+        "import_status",
+        "ready"
+      )
+      .order(
+        "source_uploaded_at",
+        {
+          ascending: true,
+          nullsFirst: false
+        }
+      )
+      .order(
+        "id",
+        {
+          ascending: true
+        }
+      )
+      .limit(
+        MAX_CANDIDATES_PER_RUN
+      );
+
+
+  if (
+    error
+  ) {
+    throw error;
+  }
+
+
+  console.log(
+    `Ready candidates: ${
+      data?.length || 0
+    }`
+  );
+
+
+  return data || [];
+}
+
+
+async function loadCandidateById(
+  candidateId
+) {
+
+  const {
+    data,
+    error
+  } =
+    await supabase
+      .from(
+        "zulu_candidates"
+      )
+      .select(`
+        id,
+        title,
+        status,
+        media_url,
+        media_filename,
+        media_size_bytes,
+        import_film,
+        import_actors,
+        import_tags,
+        import_status,
+        imported_uid,
+        ingestion_id,
+        import_started_at,
+        imported_at,
+        import_error
+      `)
+      .eq(
+        "id",
+        candidateId
+      )
+      .single();
+
+
+  if (
+    error
+  ) {
+    throw error;
+  }
+
+
+  return data;
+}
+
+
+async function updateCandidateImport(
+  candidateId,
+  values
+) {
+
+  const {
+    error
+  } =
+    await supabase
+      .from(
+        "zulu_candidates"
+      )
+      .update(
+        values
+      )
+      .eq(
+        "id",
+        candidateId
+      );
+
+
+  if (
+    error
+  ) {
+    throw error;
+  }
+}
+
+
+async function markCandidateImporting(
+  candidateId
+) {
+
+  await updateCandidateImport(
+    candidateId,
+    {
+      import_status:
+        "importing",
+
+      import_started_at:
+        nowIso(),
+
+      import_error:
+        null
+    }
+  );
+}
+
+
+async function linkCandidateIngestion(
+  candidateId,
+  ingestionId
+) {
+
+  await updateCandidateImport(
+    candidateId,
+    {
+      ingestion_id:
+        ingestionId,
+
+      import_error:
+        null
+    }
+  );
+}
+
+
+async function markCandidateImported(
+  candidateId,
+  videoUid,
+  ingestionId
+) {
+
+  await updateCandidateImport(
+    candidateId,
+    {
+      import_status:
+        "imported",
+
+      imported_uid:
+        videoUid,
+
+      ingestion_id:
+        ingestionId,
+
+      imported_at:
+        nowIso(),
+
+      import_error:
+        null
+    }
+  );
+}
+
+
+async function markCandidateDuplicate(
+  candidateId,
+  duplicateUid,
+  ingestionId,
+  message
+) {
+
+  await updateCandidateImport(
+    candidateId,
+    {
+      import_status:
+        "duplicate",
+
+      imported_uid:
+        duplicateUid || null,
+
+      ingestion_id:
+        ingestionId || null,
+
+      imported_at:
+        null,
+
+      import_error:
+        message ||
+        "Duplicate video detected."
+    }
+  );
+}
+
+
+async function markCandidateFailed(
+  candidateId,
+  ingestionId,
+  error
+) {
+
+  try {
+
+    await updateCandidateImport(
+      candidateId,
+      {
+        import_status:
+          "failed",
+
+        ingestion_id:
+          ingestionId || null,
+
+        imported_at:
+          null,
+
+        import_error:
+          errorMessage(
+            error
+          )
+      }
+    );
+
+  } catch (
+    candidateError
+  ) {
+
+    console.error(
+      "Could not record candidate failure:",
+      candidateError
+    );
+  }
+}
+
+
+/* =====================================================================
+   INGESTION RESUME BY ID
+===================================================================== */
+
+async function loadCandidateIngestion(
+  ingestionId
+) {
+
+  if (
+    !ingestionId
+  ) {
+    return null;
+  }
+
+
+  console.log("");
+  console.log(
+    `Loading linked ingestion ${ingestionId}...`
+  );
+
+
+  const {
+    data,
+    error
+  } =
+    await supabase
+      .from(
+        "zulu_ingestions"
+      )
+      .select(`
+        id,
+        original_filename,
+        canonical_filename,
+        film,
+        filesize_bytes,
+        fingerprint,
+        status,
+        failed_stage,
+        error_message,
+        backblaze_file_id,
+        public_url,
+        video_uploaded_at,
+        video_uid,
+        catalogued_at,
+        thumbnail_status,
+        completed_at,
+        created_at,
+        updated_at
+      `)
+      .eq(
+        "id",
+        ingestionId
+      )
+      .maybeSingle();
+
+
+  if (
+    error
+  ) {
+    throw error;
+  }
+
+
+  return data;
+}
+
+/* =====================================================================
    MAIN
 ===================================================================== */
 
 async function main() {
 
+  console.log(
+    "============================================================"
+  );
+
+  console.log(
+    "PORNFLIX CANDIDATE IMPORT QUEUE"
+  );
+
+  console.log(
+    "============================================================"
+  );
+
+
+  const candidates =
+    await loadReadyCandidates();
+
+
+  if (
+    candidates.length === 0
+  ) {
+
+    console.log("");
+    console.log(
+      "No candidates are ready for import."
+    );
+
+    console.log(
+      "Nothing to do."
+    );
+
+    return;
+  }
+
+
+  console.log("");
+  console.log(
+    `Processing up to ${MAX_CANDIDATES_PER_RUN} candidate(s) sequentially.`
+  );
+
+
+  let imported =
+    0;
+
+  let duplicates =
+    0;
+
+  let failed =
+    0;
+
+
+  for (
+    const queuedCandidate
+    of candidates
+  ) {
+
+    try {
+
+      const result =
+        await processCandidate(
+          queuedCandidate.id
+        );
+
+
+      if (
+        result === "imported"
+      ) {
+
+        imported++;
+      }
+
+
+      if (
+        result === "duplicate"
+      ) {
+
+        duplicates++;
+      }
+
+
+    } catch (
+      error
+    ) {
+
+      failed++;
+
+
+      console.error("");
+      console.error(
+        `Candidate ${queuedCandidate.id} failed:`
+      );
+
+      console.error(
+        errorMessage(
+          error
+        )
+      );
+
+
+      /*
+       * A failure of one candidate must not prevent later ready
+       * candidates from being attempted.
+       */
+    }
+  }
+
+
+  console.log("");
+  console.log(
+    "============================================================"
+  );
+
+  console.log(
+    "CANDIDATE QUEUE COMPLETE"
+  );
+
+  console.log(
+    "============================================================"
+  );
+
+  console.log(
+    `Imported: ${imported}`
+  );
+
+  console.log(
+    `Duplicates: ${duplicates}`
+  );
+
+  console.log(
+    `Failed: ${failed}`
+  );
+
+  console.log(
+    "============================================================"
+  );
+
+
+  /*
+   * We deliberately fail the GitHub Actions job if any candidate failed,
+   * even though later candidates were allowed to continue.
+   */
+
+  if (
+    failed > 0
+  ) {
+
+    throw new Error(
+      `${failed} candidate import(s) failed.`
+    );
+  }
+}
+
+
+async function processCandidate(
+  candidateId
+) {
+
   const tempFilename =
     path.join(
       process.cwd(),
-      `candidate-${CANDIDATE_ID}.mp4`
+      `candidate-${candidateId}.mp4`
     );
 
 
@@ -1625,60 +2145,28 @@ async function main() {
 
   try {
 
-    console.log(
-      "============================================================"
-    );
-
-    console.log(
-      `PORNFLIX CANDIDATE IMPORT TEST — CANDIDATE ${CANDIDATE_ID}`
-    );
-
-    console.log(
-      "============================================================"
-    );
-
     console.log("");
+    console.log(
+      "============================================================"
+    );
+
+    console.log(
+      `CANDIDATE ${candidateId}`
+    );
+
+    console.log(
+      "============================================================"
+    );
 
 
     /* ---------------------------------------------------------------
-       1. LOAD CANDIDATE
+       1. LOAD CURRENT CANDIDATE STATE
     --------------------------------------------------------------- */
 
-    console.log(
-      `Loading candidate ${CANDIDATE_ID}...`
-    );
-
-
-    const {
-      data: candidate,
-      error
-    } =
-      await supabase
-        .from(
-          "zulu_candidates"
-        )
-        .select(`
-          id,
-          title,
-          status,
-          media_url,
-          media_filename,
-          media_size_bytes,
-          import_status
-        `)
-        .eq(
-          "id",
-          CANDIDATE_ID
-        )
-        .single();
-
-
-    if (
-      error
-    ) {
-
-      throw error;
-    }
+    const candidate =
+      await loadCandidateById(
+        candidateId
+      );
 
 
     if (
@@ -1703,6 +2191,19 @@ async function main() {
 
 
     if (
+      candidate.import_status !==
+      "ready"
+    ) {
+
+      console.log(
+        `Skipping candidate ${candidateId}; import status is now "${candidate.import_status}".`
+      );
+
+      return "skipped";
+    }
+
+
+    if (
       !candidate.media_url
     ) {
 
@@ -1714,9 +2215,39 @@ async function main() {
 
     const film =
       String(
-        candidate.title ||
+        candidate.import_film ||
         ""
       ).trim();
+
+
+    const actors =
+      Array.isArray(
+        candidate.import_actors
+      )
+        ? candidate.import_actors
+            .map(
+              value =>
+                String(
+                  value
+                ).trim()
+            )
+            .filter(Boolean)
+        : [];
+
+
+    const tags =
+      Array.isArray(
+        candidate.import_tags
+      )
+        ? candidate.import_tags
+            .map(
+              value =>
+                String(
+                  value
+                ).trim()
+            )
+            .filter(Boolean)
+        : [];
 
 
     if (
@@ -1724,13 +2255,35 @@ async function main() {
     ) {
 
       throw new Error(
-        "Candidate has no film title."
+        "Candidate has no approved import_film."
+      );
+    }
+
+
+    if (
+      actors.length === 0
+    ) {
+
+      throw new Error(
+        "Candidate has no approved import_actors."
       );
     }
 
 
     console.log(
-      `Title: ${film}`
+      `Film: ${film}`
+    );
+
+    console.log(
+      `Actors: ${actors.join(", ")}`
+    );
+
+    console.log(
+      `Tags: ${
+        tags.length
+          ? tags.join(", ")
+          : "(none)"
+      }`
     );
 
     console.log(
@@ -1739,105 +2292,179 @@ async function main() {
 
 
     /* ---------------------------------------------------------------
-       2. INFER ACTORS
+       2. CLAIM CANDIDATE
     --------------------------------------------------------------- */
 
-    const actors =
-      inferActorsFromTitle(
-        film
-      );
+    currentStage =
+      "candidate_claim";
 
 
-    console.log("");
-    console.log(
-      "Catalogue metadata:"
-    );
-
-    console.log(
-      `  Film: ${film}`
-    );
-
-    console.log(
-      `  Actors: ${
-        actors.length
-          ? actors.join(", ")
-          : "(none detected)"
-      }`
+    await markCandidateImporting(
+      candidateId
     );
 
 
-    if (
-      actors.length === 0
-    ) {
-
-      throw new Error(
-        `Could not infer actors from candidate title "${film}". Nothing has been uploaded.`
-      );
-    }
-
-
-    /*
-     * Tags are intentionally empty for this first controlled test.
-     */
-    const tags = [];
+    console.log(
+      "Candidate marked importing."
+    );
 
 
     /* ---------------------------------------------------------------
-       3. CHECK FOR INTERRUPTED/RESUMABLE IMPORT
+       3. CHECK LINKED INGESTION
     --------------------------------------------------------------- */
 
-    const expectedCanonicalFilename =
-      `${film}.mp4`;
-
-
-    const resumableIngestion =
-      await findResumableIngestion({
-        film,
-
-        canonicalFilename:
-          expectedCanonicalFilename
-      });
+    ingestionId =
+      candidate.ingestion_id ||
+      null;
 
 
     if (
-      resumableIngestion
+      ingestionId
     ) {
 
-      /*
-       * Candidate #1 has already reached Backblaze.
-       *
-       * Do NOT download or upload the MP4 again.
-       */
-      ingestionId =
-        resumableIngestion.id;
+      const linkedIngestion =
+        await loadCandidateIngestion(
+          ingestionId
+        );
 
 
-      currentStage =
-        "cataloguing";
+      if (
+        !linkedIngestion
+      ) {
+
+        throw new Error(
+          `Candidate references missing ingestion ${ingestionId}.`
+        );
+      }
 
 
-      await resumeVideoUploadedIngestion({
-        ingestion:
-          resumableIngestion,
-
-        film,
-
-        actors,
-
-        tags,
-
-        mediaUrl:
-          candidate.media_url
-      });
+      console.log(
+        `Linked ingestion status: ${linkedIngestion.status}`
+      );
 
 
       /*
-       * The resumed import is complete.
-       *
-       * Returning here is important: none of the normal download /
-       * analysis / Backblaze code below should execute.
+       * The MP4 is already in B2. Resume at catalogue finalization.
        */
-      return;
+
+      if (
+        linkedIngestion.status ===
+        "video_uploaded"
+      ) {
+
+        currentStage =
+          "cataloguing";
+
+
+        const resumed =
+          await resumeVideoUploadedIngestion({
+            ingestion:
+              linkedIngestion,
+
+            film,
+
+            actors,
+
+            tags,
+
+            mediaUrl:
+              candidate.media_url
+          });
+
+
+        await markCandidateImported(
+          candidateId,
+          resumed.savedVideo.uid,
+          ingestionId
+        );
+
+
+        console.log(
+          `Candidate ${candidateId} marked imported.`
+        );
+
+
+        return "imported";
+      }
+
+
+      /*
+       * Catalogue finalization may have completed before the previous
+       * process stopped while updating the candidate row.
+       */
+
+      if (
+        [
+          "catalogued",
+          "complete",
+          "complete_without_thumbnail"
+        ].includes(
+          linkedIngestion.status
+        ) &&
+        linkedIngestion.video_uid
+      ) {
+
+        if (
+          linkedIngestion.status ===
+          "catalogued"
+        ) {
+
+          await markIngestionCompleteWithoutThumbnail(
+            ingestionId
+          );
+        }
+
+
+        await markCandidateImported(
+          candidateId,
+          linkedIngestion.video_uid,
+          ingestionId
+        );
+
+
+        console.log(
+          `Candidate ${candidateId} recovered from completed ingestion.`
+        );
+
+
+        return "imported";
+      }
+
+
+      if (
+        linkedIngestion.status ===
+        "duplicate"
+      ) {
+
+        await markCandidateDuplicate(
+          candidateId,
+          linkedIngestion.video_uid,
+          ingestionId,
+          linkedIngestion.error_message ||
+          "Linked ingestion is a duplicate."
+        );
+
+
+        console.log(
+          `Candidate ${candidateId} marked duplicate from linked ingestion.`
+        );
+
+
+        return "duplicate";
+      }
+
+
+      /*
+       * A linked ingestion in an earlier state cannot safely be resumed
+       * from the remote source without knowing exactly which local work
+       * completed before interruption.
+       *
+       * We fail closed instead of creating another ingestion/B2 object.
+       */
+
+      throw new Error(
+        `Linked ingestion ${ingestionId} is in status "${linkedIngestion.status}" and cannot yet be resumed automatically.`
+      );
     }
 
 
@@ -1847,6 +2474,7 @@ async function main() {
 
     currentStage =
       "downloading";
+
 
     console.log("");
     console.log(
@@ -1923,7 +2551,7 @@ async function main() {
 
 
     /* ---------------------------------------------------------------
-       4. CREATE INGESTION JOURNAL
+       5. CREATE INGESTION
     --------------------------------------------------------------- */
 
     currentStage =
@@ -1942,11 +2570,23 @@ async function main() {
 
 
     /*
-     * Analysis begins.
+     * This linkage is written immediately.
      *
-     * We are not generating a thumbnail during this first automated
-     * test, so thumbnail_status remains pending for now.
+     * From this point onward, a retry knows exactly which ingestion
+     * belongs to this candidate.
      */
+
+    await linkCandidateIngestion(
+      candidateId,
+      ingestionId
+    );
+
+
+    console.log(
+      `Candidate linked to ingestion ${ingestionId}.`
+    );
+
+
     await updateIngestion(
       ingestionId,
       {
@@ -1965,7 +2605,7 @@ async function main() {
 
 
     /* ---------------------------------------------------------------
-       5. FFPROBE
+       6. FFPROBE
     --------------------------------------------------------------- */
 
     currentStage =
@@ -1994,7 +2634,7 @@ async function main() {
 
 
     /* ---------------------------------------------------------------
-       6. FINGERPRINT
+       7. FINGERPRINT
     --------------------------------------------------------------- */
 
     console.log(
@@ -2043,7 +2683,7 @@ async function main() {
 
 
     /* ---------------------------------------------------------------
-       7. DUPLICATE CHECK
+       8. DUPLICATE CHECK
     --------------------------------------------------------------- */
 
     currentStage =
@@ -2079,7 +2719,6 @@ async function main() {
     if (
       duplicateError
     ) {
-
       throw duplicateError;
     }
 
@@ -2091,6 +2730,10 @@ async function main() {
 
       const duplicate =
         duplicates[0];
+
+
+      const duplicateMessage =
+        `Fingerprint already exists as video UID ${duplicate.uid}.`;
 
 
       console.log("");
@@ -2113,7 +2756,7 @@ async function main() {
             "duplicate_check",
 
           error_message:
-            `Fingerprint already exists as video UID ${duplicate.uid}.`,
+            duplicateMessage,
 
           video_uid:
             duplicate.uid
@@ -2121,12 +2764,24 @@ async function main() {
       );
 
 
+      await markCandidateDuplicate(
+        candidateId,
+        duplicate.uid,
+        ingestionId,
+        duplicateMessage
+      );
+
+
+      console.log(
+        "Candidate marked duplicate."
+      );
+
       console.log(
         "Stopping before Backblaze upload."
       );
 
 
-      return;
+      return "duplicate";
     }
 
 
@@ -2134,8 +2789,9 @@ async function main() {
       "NO DUPLICATE FOUND"
     );
 
-      /* ---------------------------------------------------------------
-       8. B2 SHA-1
+
+    /* ---------------------------------------------------------------
+       9. B2 SHA-1
     --------------------------------------------------------------- */
 
     currentStage =
@@ -2158,15 +2814,11 @@ async function main() {
       `SHA-1: ${sha1}`
     );
 
-
     console.log(
       `Canonical filename: ${remoteFilename}`
     );
 
 
-    /*
-     * The ingestion enters uploading BEFORE contacting Backblaze.
-     */
     await updateIngestion(
       ingestionId,
       {
@@ -2186,7 +2838,7 @@ async function main() {
 
 
     /* ---------------------------------------------------------------
-       9. BACKBLAZE AUTH
+       10. BACKBLAZE AUTH
     --------------------------------------------------------------- */
 
     const {
@@ -2197,7 +2849,7 @@ async function main() {
 
 
     /* ---------------------------------------------------------------
-       10. GET B2 UPLOAD URL
+       11. GET B2 UPLOAD URL
     --------------------------------------------------------------- */
 
     const {
@@ -2212,7 +2864,7 @@ async function main() {
 
 
     /* ---------------------------------------------------------------
-       11. UPLOAD MP4
+       12. UPLOAD
     --------------------------------------------------------------- */
 
     const uploadResult =
@@ -2265,7 +2917,7 @@ async function main() {
 
 
     /* ---------------------------------------------------------------
-       12. MARK VIDEO_UPLOADED
+       13. VIDEO_UPLOADED
     --------------------------------------------------------------- */
 
     currentStage =
@@ -2317,7 +2969,7 @@ async function main() {
 
 
     /* ---------------------------------------------------------------
-       13. FINALIZE CATALOGUE
+       14. FINALIZE CATALOGUE
     --------------------------------------------------------------- */
 
     currentStage =
@@ -2358,14 +3010,6 @@ async function main() {
     );
 
 
-    /*
-     * IMPORTANT:
-     *
-     * We do NOT insert zulu_videos or zulu_actors here.
-     *
-     * zulu-finalize-video remains the single authoritative catalogue
-     * finalization path.
-     */
     const finalizeData =
       await finalizeVideo({
         ingestionId,
@@ -2403,25 +3047,15 @@ async function main() {
       `Video UID: ${finalizeData.uid}`
     );
 
-    console.log(
-      `Ingestion status returned: ${finalizeData.ingestion_status}`
-    );
-
 
     /* ---------------------------------------------------------------
-       14. COMPLETE WITHOUT THUMBNAIL
+       15. COMPLETE WITHOUT THUMBNAIL
     --------------------------------------------------------------- */
 
     currentStage =
       "completion";
 
 
-    /*
-     * Thumbnail automation is deliberately outside this first test.
-     *
-     * The MP4 and catalogue are now both valid, so the correct final
-     * ingestion state is complete_without_thumbnail rather than failed.
-     */
     await markIngestionCompleteWithoutThumbnail(
       ingestionId
     );
@@ -2433,7 +3067,7 @@ async function main() {
 
 
     /* ---------------------------------------------------------------
-       15. VERIFY RESULT
+       16. VERIFY CATALOGUE
     --------------------------------------------------------------- */
 
     const {
@@ -2531,13 +3165,24 @@ async function main() {
     }
 
 
+    /* ---------------------------------------------------------------
+       17. MARK CANDIDATE IMPORTED
+    --------------------------------------------------------------- */
+
+    await markCandidateImported(
+      candidateId,
+      savedVideo.uid,
+      ingestionId
+    );
+
+
     console.log("");
     console.log(
       "============================================================"
     );
 
     console.log(
-      "END-TO-END IMPORT SUCCESSFUL"
+      "IMPORT SUCCESSFUL"
     );
 
     console.log(
@@ -2545,7 +3190,7 @@ async function main() {
     );
 
     console.log(
-      `Candidate: ${CANDIDATE_ID}`
+      `Candidate: ${candidateId}`
     );
 
     console.log(
@@ -2584,13 +3229,8 @@ async function main() {
       `Thumbnail status: ${finalIngestion.thumbnail_status}`
     );
 
-    console.log("");
     console.log(
-      "Candidate import_status has deliberately NOT been changed yet."
-    );
-
-    console.log(
-      "Thumbnail generation/upload has deliberately NOT been run yet."
+      `Candidate status: imported`
     );
 
     console.log(
@@ -2598,7 +3238,12 @@ async function main() {
     );
 
 
-  } catch (error) {
+    return "imported";
+
+
+  } catch (
+    error
+  ) {
 
     console.error("");
     console.error(
@@ -2606,7 +3251,7 @@ async function main() {
     );
 
     console.error(
-      "TEST FAILED"
+      `CANDIDATE ${candidateId} FAILED`
     );
 
     console.error(
@@ -2623,13 +3268,9 @@ async function main() {
 
 
     /*
-     * zulu-finalize-video manages its own catalogue-stage failures.
-     *
-     * For failures before catalogue finalization, this script records
-     * the failure itself.
-     *
-     * We avoid overwriting a duplicate state returned by the finalizer.
+     * The finalizer owns ingestion catalogue-stage failures.
      */
+
     if (
       ingestionId &&
       currentStage !==
@@ -2648,14 +3289,41 @@ async function main() {
       error?.isDuplicate
     ) {
 
+      const duplicateUid =
+        error?.duplicateData?.uid ||
+        error?.duplicateData?.existing_uid ||
+        null;
+
+
+      await markCandidateDuplicate(
+        candidateId,
+        duplicateUid,
+        ingestionId,
+        errorMessage(
+          error
+        )
+      );
+
+
       console.error(
         "Finalizer reported duplicate:",
         error.duplicateData
       );
+
+
+      return "duplicate";
     }
 
 
+    await markCandidateFailed(
+      candidateId,
+      ingestionId,
+      error
+    );
+
+
     throw error;
+
 
   } finally {
 
@@ -2672,7 +3340,6 @@ async function main() {
   }
 }
 
-
 /* =====================================================================
    RUN
 ===================================================================== */
@@ -2683,7 +3350,7 @@ main()
 
       console.error("");
       console.error(
-        "Candidate import test terminated:"
+       "Candidate import queue terminated:"
       );
 
       console.error(
