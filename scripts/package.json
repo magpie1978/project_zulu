@@ -1,12 +1,5 @@
-{
-  "name": "pornflix-tools",
-  "private": true,
-  "scripts": {
-    "scrape:candidates": "node scrape-justthegays.js",
-    "inspect:video": "node inspect-video-page.js"
-  },
-  "dependencies": {
-    "@supabase/supabase-js": "^2.57.4",
-    "cheerio": "^1.1.2"
-  }
+"scripts": {
+  "scrape:candidates": "node scrape-justthegays.js",
+  "inspect:video": "node inspect-video-page.js",
+  "resolve:candidates": "node resolve-candidate-media.js"
 }
