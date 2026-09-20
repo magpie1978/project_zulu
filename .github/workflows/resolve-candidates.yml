@@ -3,6 +3,10 @@ name: Resolve Candidate Media
 on:
   workflow_dispatch:
 
+concurrency:
+  group: candidate-media-resolution
+  cancel-in-progress: false
+
 jobs:
   resolve:
     runs-on: ubuntu-latest
