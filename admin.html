@@ -108,12 +108,106 @@
 
 
     <!-- ===================================================
+         ADMIN TABS
+    ==================================================== -->
+
+    <nav
+      class="admin-tabs"
+      aria-label="Admin sections"
+    >
+      <div
+        class="admin-tabs-scroll"
+        role="tablist"
+        aria-label="Admin sections"
+      >
+        <button
+          type="button"
+          class="admin-tab"
+          role="tab"
+          data-admin-tab="library"
+          aria-controls="admin-library-heading"
+        >
+          <i data-lucide="layout-dashboard"></i>
+          <span>Library</span>
+        </button>
+
+        <button
+          type="button"
+          class="admin-tab"
+          role="tab"
+          data-admin-tab="ingestion-health"
+          aria-controls="admin-health-heading"
+        >
+          <i data-lucide="activity"></i>
+          <span>Ingestion Health</span>
+        </button>
+
+        <button
+          type="button"
+          class="admin-tab"
+          role="tab"
+          data-admin-tab="catalogue-integrity"
+          aria-controls="admin-integrity-heading"
+        >
+          <i data-lucide="shield-check"></i>
+          <span>Catalogue Integrity</span>
+        </button>
+
+        <button
+          type="button"
+          class="admin-tab"
+          role="tab"
+          data-admin-tab="video-storage"
+          aria-controls="admin-video-health-heading"
+        >
+          <i data-lucide="hard-drive"></i>
+          <span>Video Storage</span>
+        </button>
+
+        <button
+          type="button"
+          class="admin-tab"
+          role="tab"
+          data-admin-tab="thumbnail-health"
+          aria-controls="admin-thumbnail-heading"
+        >
+          <i data-lucide="images"></i>
+          <span>Thumbnail Health</span>
+        </button>
+
+        <button
+          type="button"
+          class="admin-tab"
+          role="tab"
+          data-admin-tab="thumbnail-review"
+          aria-controls="admin-thumbnail-reevaluate-heading"
+        >
+          <i data-lucide="scan-search"></i>
+          <span>Thumbnail Review</span>
+        </button>
+
+        <button
+          type="button"
+          class="admin-tab"
+          role="tab"
+          data-admin-tab="recent-ingestions"
+          aria-controls="admin-ingestions-heading"
+        >
+          <i data-lucide="history"></i>
+          <span>Recent Ingestions</span>
+        </button>
+      </div>
+    </nav>
+
+
+    <!-- ===================================================
          LIBRARY SUMMARY
     ==================================================== -->
 
     <section
       class="admin-section"
       aria-labelledby="admin-library-heading"
+      data-admin-tab-panel="library"
     >
 
       <div class="admin-section-heading">
@@ -242,6 +336,7 @@
     <section
       class="admin-section"
       aria-labelledby="admin-health-heading"
+      data-admin-tab-panel="ingestion-health"
     >
 
       <div class="admin-section-heading">
@@ -430,6 +525,7 @@
     <section
       class="admin-section"
       aria-labelledby="admin-integrity-heading"
+      data-admin-tab-panel="catalogue-integrity"
     >
 
       <div class="admin-section-heading">
@@ -804,6 +900,7 @@
     <section
       class="admin-section"
       aria-labelledby="admin-video-health-heading"
+      data-admin-tab-panel="video-storage"
     >
 
       <div class="admin-section-heading admin-section-heading-row">
@@ -1203,6 +1300,7 @@
     <section
       class="admin-section"
       aria-labelledby="admin-thumbnail-heading"
+      data-admin-tab-panel="thumbnail-health"
     >
 
       <div class="admin-section-heading admin-section-heading-row">
@@ -1453,6 +1551,7 @@
     <section
       class="admin-section"
       aria-labelledby="admin-thumbnail-reevaluate-heading"
+      data-admin-tab-panel="thumbnail-review"
     >
 
       <div class="admin-section-heading admin-section-heading-row">
@@ -1699,6 +1798,7 @@
     <section
       class="admin-section"
       aria-labelledby="admin-ingestions-heading"
+      data-admin-tab-panel="recent-ingestions"
     >
 
       <div class="admin-section-heading admin-section-heading-row">
@@ -1794,6 +1894,169 @@
   <!-- =====================================================
        SCRIPT
   ====================================================== -->
+
+  <script>
+    (() => {
+      const STORAGE_KEY = "pornflix-admin-active-tab";
+
+      const tabs = Array.from(
+        document.querySelectorAll("[data-admin-tab]")
+      );
+
+      const panels = Array.from(
+        document.querySelectorAll("[data-admin-tab-panel]")
+      );
+
+      if (!tabs.length || !panels.length) {
+        return;
+      }
+
+      const validTabs = new Set(
+        tabs.map(tab => tab.dataset.adminTab)
+      );
+
+      function getInitialTab() {
+        const hashTab =
+          window.location.hash.replace(/^#/, "");
+
+        if (validTabs.has(hashTab)) {
+          return hashTab;
+        }
+
+        const savedTab =
+          window.localStorage.getItem(STORAGE_KEY);
+
+        if (validTabs.has(savedTab)) {
+          return savedTab;
+        }
+
+        return tabs[0].dataset.adminTab;
+      }
+
+      function activateTab(tabId, updateUrl = true) {
+        if (!validTabs.has(tabId)) {
+          return;
+        }
+
+        tabs.forEach(tab => {
+          const active =
+            tab.dataset.adminTab === tabId;
+
+          tab.classList.toggle(
+            "is-active",
+            active
+          );
+
+          tab.setAttribute(
+            "aria-selected",
+            active ? "true" : "false"
+          );
+
+          tab.tabIndex =
+            active ? 0 : -1;
+        });
+
+        panels.forEach(panel => {
+          panel.hidden =
+            panel.dataset.adminTabPanel !== tabId;
+        });
+
+        window.localStorage.setItem(
+          STORAGE_KEY,
+          tabId
+        );
+
+        if (updateUrl) {
+          history.replaceState(
+            null,
+            "",
+            `#${tabId}`
+          );
+        }
+
+        window.lucide?.createIcons();
+      }
+
+      tabs.forEach((tab, index) => {
+        tab.addEventListener(
+          "click",
+          () => {
+            activateTab(
+              tab.dataset.adminTab
+            );
+          }
+        );
+
+        tab.addEventListener(
+          "keydown",
+          event => {
+            if (
+              event.key !== "ArrowLeft" &&
+              event.key !== "ArrowRight" &&
+              event.key !== "Home" &&
+              event.key !== "End"
+            ) {
+              return;
+            }
+
+            event.preventDefault();
+
+            let nextIndex = index;
+
+            if (event.key === "ArrowRight") {
+              nextIndex =
+                (index + 1) % tabs.length;
+            }
+
+            if (event.key === "ArrowLeft") {
+              nextIndex =
+                (index - 1 + tabs.length) %
+                tabs.length;
+            }
+
+            if (event.key === "Home") {
+              nextIndex = 0;
+            }
+
+            if (event.key === "End") {
+              nextIndex =
+                tabs.length - 1;
+            }
+
+            const nextTab =
+              tabs[nextIndex];
+
+            activateTab(
+              nextTab.dataset.adminTab
+            );
+
+            nextTab.focus();
+          }
+        );
+      });
+
+      window.addEventListener(
+        "hashchange",
+        () => {
+          const hashTab =
+            window.location.hash.replace(/^#/, "");
+
+          if (validTabs.has(hashTab)) {
+            activateTab(
+              hashTab,
+              false
+            );
+          }
+        }
+      );
+
+      activateTab(
+        getInitialTab(),
+        !window.location.hash
+      );
+    })();
+  </script>
+
 
   <script
     type="module"
