@@ -4,6 +4,13 @@ const cheerio =
   );
 
 const {
+  chromium
+} =
+  require(
+    "playwright"
+  );
+
+const {
   createClient
 } =
   require(
@@ -343,17 +350,12 @@ function extractThumbnailUrl(
 ================================================================ */
 
 async function scrapePage(
+  browser,
   pageNumber,
   cutoff,
   now
 ) {
 
-  /*
-   * The site's pagination links use its Latest/archive navigation.
-   *
-   * Page 1 can safely be read from the homepage because it contains
-   * the New Videos / Latest collection.
-   */
   const pageUrl =
     pageNumber === 1
       ? BASE_URL
@@ -369,471 +371,692 @@ async function scrapePage(
   );
 
 
-const response =
-  await fetch(
-    pageUrl,
-    {
-      redirect:
-        "follow",
+  const context =
+    await browser.newContext(
+      {
+        userAgent:
+          "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36",
 
-      headers: {
+        locale:
+          "en-GB",
 
-        "User-Agent":
-          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36",
+        viewport: {
+          width:
+            1440,
 
-        "Accept":
-          "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
-
-        "Accept-Language":
-          "en-GB,en-US;q=0.9,en;q=0.8",
-
-        "Accept-Encoding":
-          "gzip, deflate, br",
-
-        "Cache-Control":
-          "no-cache",
-
-        "Pragma":
-          "no-cache",
-
-        "Sec-Fetch-Dest":
-          "document",
-
-        "Sec-Fetch-Mode":
-          "navigate",
-
-        "Sec-Fetch-Site":
-          "none",
-
-        "Sec-Fetch-User":
-          "?1",
-
-        "Upgrade-Insecure-Requests":
-          "1"
+          height:
+            1000
+        }
       }
-    }
-  );
-
-
-if (
-  !response.ok
-) {
-
-  const failureBody =
-    await response
-      .text()
-      .catch(
-        () => ""
-      );
-
-
-  console.error(
-    ""
-  );
-
-  console.error(
-    "GayXFans request rejected."
-  );
-
-  console.error(
-    `HTTP status: ${response.status} ${response.statusText}`
-  );
-
-  console.error(
-    `Final URL: ${response.url}`
-  );
-
-  console.error(
-    "Response headers:"
-  );
-
-
-  for (
-    const [
-      name,
-      value
-    ] of response.headers
-  ) {
-
-    console.error(
-      `  ${name}: ${value}`
-    );
-  }
-
-
-  console.error(
-    ""
-  );
-
-  console.error(
-    "First 2000 characters of response:"
-  );
-
-  console.error(
-    failureBody.slice(
-      0,
-      2000
-    )
-  );
-
-
-  throw new Error(
-    `GayXFans page ${pageNumber}: HTTP ${response.status} ${response.statusText}`
-  );
-}
-
-  if (
-    !response.ok
-  ) {
-
-    throw new Error(
-      `GayXFans page ${pageNumber}: HTTP ${response.status} ${response.statusText}`
-    );
-  }
-
-
-  const html =
-    await response.text();
-
-
-  console.log(
-    `Received ${html.length.toLocaleString()} characters`
-  );
-
-
-  const $ =
-    cheerio.load(
-      html
     );
 
 
-  /*
-   * Find links to actual video watch pages.
-   *
-   * Current GayXFans video URLs use /watch/{id}/...
-   */
-  const videoLinks =
-    $(
-      'a[href*="/watch/"]'
+  const page =
+    await context.newPage();
+
+
+  try {
+
+    console.log(
+      "Navigating with Chromium..."
     );
 
 
-  console.log(
-    `Found ${videoLinks.length} candidate watch links.`
-  );
-
-
-  const videos = [];
-
-  const seenOnPage =
-    new Set();
-
-  let oldestTimestamp =
-    null;
-
-
-  videoLinks.each(
-    (
-      _,
-      element
-    ) => {
-
-      const link =
-        $(
-          element
-        );
-
-
-      const href =
-        link.attr(
-          "href"
-        );
-
-
-      if (
-        !href
-      ) {
-
-        return;
-      }
-
-
-      let sourceUrl;
-
-
-      try {
-
-        sourceUrl =
-          new URL(
-            href,
-            pageUrl
-          ).href;
-
-      } catch {
-
-        return;
-      }
-
-
-      /*
-       * The same video may have more than one clickable element inside
-       * its card. Only process each watch URL once.
-       */
-      if (
-        seenOnPage.has(
-          sourceUrl
-        )
-      ) {
-
-        return;
-      }
-
-
-      /*
-       * Move upward to the smallest useful container containing the
-       * video's metadata.
-       */
-      let card =
-        link.closest(
-          "li"
-        );
-
-
-      if (
-        !card.length
-      ) {
-
-        card =
-          link.closest(
-            "article"
-          );
-      }
-
-
-      if (
-        !card.length
-      ) {
-
-        card =
-          link.closest(
-            "div"
-          );
-      }
-
-
-      if (
-        !card.length
-      ) {
-
-        return;
-      }
-
-
-      const sourceAge =
-        extractRelativeAge(
-          card
-        );
-
-
-      if (
-        !sourceAge
-      ) {
-
-        return;
-      }
-
-
-      const uploadedMs =
-        relativeAgeToTimestamp(
-          sourceAge,
-          now
-        );
-
-
-      if (
-        uploadedMs ===
-          null
-      ) {
-
-        return;
-      }
-
-
-      if (
-        oldestTimestamp ===
-          null ||
-        uploadedMs <
-          oldestTimestamp
-      ) {
-
-        oldestTimestamp =
-          uploadedMs;
-      }
-
-
-      /*
-       * Restrict this source to the same 24-hour candidate window used
-       * by JustTheGays.
-       */
-      if (
-        uploadedMs <
-          cutoff ||
-        uploadedMs >
-          now
-      ) {
-
-        return;
-      }
-
-
-      /*
-       * Prefer explicit title attributes, then image alt text, then
-       * visible link text.
-       */
-      const image =
-        card.find(
-          "img"
-        ).first();
-
-
-      let title =
-        cleanText(
-          link.attr(
-            "title"
-          )
-        );
-
-
-      if (
-        !title
-      ) {
-
-        title =
-          cleanText(
-            image.attr(
-              "alt"
-            )
-          );
-      }
-
-
-      if (
-        !title
-      ) {
-
-        title =
-          cleanText(
-            link.text()
-          );
-      }
-
-
-      /*
-       * If this particular anchor is the thumbnail link, another watch
-       * link in the same card may contain the human-readable title.
-       */
-      if (
-        !title
-      ) {
-
-        card
-          .find(
-            'a[href*="/watch/"]'
-          )
-          .each(
-            (
-              __,
-              titleElement
-            ) => {
-
-              const candidateTitle =
-                cleanText(
-                  $(
-                    titleElement
-                  ).text()
-                );
-
-
-              if (
-                candidateTitle
-              ) {
-
-                title =
-                  candidateTitle;
-
-                return false;
-              }
-            }
-          );
-      }
-
-
-      if (
-        !title
-      ) {
-
-        return;
-      }
-
-
-      const thumbnailUrl =
-        extractThumbnailUrl(
-          $,
-          card,
-          pageUrl
-        );
-
-
-      seenOnPage.add(
-        sourceUrl
-      );
-
-
-      videos.push(
+    const response =
+      await page.goto(
+        pageUrl,
         {
+          waitUntil:
+            "domcontentloaded",
 
-          title,
+          timeout:
+            60000
+        }
+      );
 
-          source_url:
-            sourceUrl,
 
-          source_age:
-            sourceAge,
+    if (
+      !response
+    ) {
 
-          source_uploaded_at:
-            new Date(
-              uploadedMs
-            ).toISOString(),
+      throw new Error(
+        `GayXFans page ${pageNumber}: browser navigation returned no response.`
+      );
+    }
 
-          thumbnail_url:
-            thumbnailUrl
+
+    console.log(
+      `Initial HTTP status: ${response.status()}`
+    );
+
+
+    /*
+     * Cloudflare may initially display its challenge page and then
+     * replace it after Chromium has completed the browser checks.
+     *
+     * Give that process a short opportunity to finish.
+     */
+    let challengeDetected =
+      false;
+
+
+    for (
+      let attempt = 1;
+      attempt <= 15;
+      attempt++
+    ) {
+
+      const currentTitle =
+        await page
+          .title()
+          .catch(
+            () => ""
+          );
+
+
+      const bodyText =
+        await page
+          .locator(
+            "body"
+          )
+          .innerText()
+          .catch(
+            () => ""
+          );
+
+
+      challengeDetected =
+        /just a moment/i.test(
+          currentTitle
+        ) ||
+        /performing security verification/i.test(
+          bodyText
+        ) ||
+        /verify you are human/i.test(
+          bodyText
+        );
+
+
+      if (
+        !challengeDetected
+      ) {
+
+        break;
+      }
+
+
+      if (
+        attempt === 1
+      ) {
+
+        console.log(
+          "Cloudflare challenge detected. Waiting for browser verification..."
+        );
+      }
+
+
+      await page.waitForTimeout(
+        2000
+      );
+    }
+
+
+    const title =
+      await page.title();
+
+
+    const finalUrl =
+      page.url();
+
+
+    console.log(
+      `Page title: ${title}`
+    );
+
+    console.log(
+      `Final URL: ${finalUrl}`
+    );
+
+
+    const finalBodyText =
+      await page
+        .locator(
+          "body"
+        )
+        .innerText()
+        .catch(
+          () => ""
+        );
+
+
+    const stillChallenged =
+      /just a moment/i.test(
+        title
+      ) ||
+      /performing security verification/i.test(
+        finalBodyText
+      ) ||
+      /verify you are human/i.test(
+        finalBodyText
+      );
+
+
+    console.log(
+      `Cloudflare challenge: ${
+        stillChallenged
+          ? "YES"
+          : "NO"
+      }`
+    );
+
+
+    if (
+      stillChallenged
+    ) {
+
+      throw new Error(
+        "GayXFans Cloudflare challenge did not clear in Chromium."
+      );
+    }
+
+
+    /*
+     * Give lazy-loaded page content a moment to settle.
+     */
+    await page.waitForTimeout(
+      1500
+    );
+
+
+    const html =
+      await page.content();
+
+
+    console.log(
+      `Received ${html.length.toLocaleString()} rendered characters`
+    );
+
+
+    const $ =
+      cheerio.load(
+        html
+      );
+
+
+    /*
+     * Diagnostic information for the first Playwright run.
+     *
+     * This tells us whether the site's actual rendered URL structure
+     * matches the /watch/ pattern.
+     */
+    const watchLinks =
+      await page
+        .locator(
+          'a[href*="/watch/"]'
+        )
+        .evaluateAll(
+          elements =>
+            elements.map(
+              element => ({
+                href:
+                  element.href,
+
+                text:
+                  (
+                    element.textContent ||
+                    ""
+                  )
+                    .replace(
+                      /\s+/g,
+                      " "
+                    )
+                    .trim(),
+
+                title:
+                  element.getAttribute(
+                    "title"
+                  ) ||
+                  ""
+              })
+            )
+        );
+
+
+    console.log(
+      `/watch/ links found: ${watchLinks.length}`
+    );
+
+
+    if (
+      watchLinks.length
+    ) {
+
+      console.log(
+        ""
+      );
+
+      console.log(
+        "Sample GayXFans watch links:"
+      );
+
+
+      watchLinks
+        .slice(
+          0,
+          5
+        )
+        .forEach(
+          (
+            item,
+            index
+          ) => {
+
+            console.log(
+              `${index + 1}. ${
+                item.text ||
+                item.title ||
+                "(no link text)"
+              } -> ${item.href}`
+            );
+          }
+        );
+
+    } else {
+
+      /*
+       * If our assumed /watch/ structure is wrong, print a few actual
+       * links so that the next adjustment can be based on the live DOM.
+       */
+      const sampleLinks =
+        await page
+          .locator(
+            "a[href]"
+          )
+          .evaluateAll(
+            elements =>
+              elements
+                .slice(
+                  0,
+                  20
+                )
+                .map(
+                  element => ({
+                    href:
+                      element.href,
+
+                    text:
+                      (
+                        element.textContent ||
+                        ""
+                      )
+                        .replace(
+                          /\s+/g,
+                          " "
+                        )
+                        .trim()
+                  })
+                )
+          );
+
+
+      console.log(
+        ""
+      );
+
+      console.log(
+        "No /watch/ links found. Sample page links:"
+      );
+
+
+      sampleLinks.forEach(
+        (
+          item,
+          index
+        ) => {
+
+          console.log(
+            `${index + 1}. ${
+              item.text ||
+              "(no link text)"
+            } -> ${item.href}`
+          );
         }
       );
     }
-  );
 
 
-  console.log(
-    `${videos.length} GayXFans videos on page ${pageNumber} are within ${WINDOW_HOURS} hours.`
-  );
+    /*
+     * ------------------------------------------------------------
+     * EXISTING CHEERIO PARSER
+     * ------------------------------------------------------------
+     */
+
+    const videoLinks =
+      $(
+        'a[href*="/watch/"]'
+      );
 
 
-  return {
-    videos,
+    console.log(
+      `Found ${videoLinks.length} candidate watch links.`
+    );
 
-    linkCount:
-      videoLinks.length,
 
-    oldestTimestamp
-  };
+    const videos =
+      [];
+
+
+    const seenOnPage =
+      new Set();
+
+
+    let oldestTimestamp =
+      null;
+
+
+    videoLinks.each(
+      (
+        _,
+        element
+      ) => {
+
+        const link =
+          $(
+            element
+          );
+
+
+        const href =
+          link.attr(
+            "href"
+          );
+
+
+        if (
+          !href
+        ) {
+
+          return;
+        }
+
+
+        let sourceUrl;
+
+
+        try {
+
+          sourceUrl =
+            new URL(
+              href,
+              finalUrl
+            ).href;
+
+        } catch {
+
+          return;
+        }
+
+
+        if (
+          seenOnPage.has(
+            sourceUrl
+          )
+        ) {
+
+          return;
+        }
+
+
+        let card =
+          link.closest(
+            "li"
+          );
+
+
+        if (
+          !card.length
+        ) {
+
+          card =
+            link.closest(
+              "article"
+            );
+        }
+
+
+        if (
+          !card.length
+        ) {
+
+          card =
+            link.closest(
+              "div"
+            );
+        }
+
+
+        if (
+          !card.length
+        ) {
+
+          return;
+        }
+
+
+        const sourceAge =
+          extractRelativeAge(
+            card
+          );
+
+
+        if (
+          !sourceAge
+        ) {
+
+          return;
+        }
+
+
+        const uploadedMs =
+          relativeAgeToTimestamp(
+            sourceAge,
+            now
+          );
+
+
+        if (
+          uploadedMs ===
+            null
+        ) {
+
+          return;
+        }
+
+
+        if (
+          oldestTimestamp ===
+            null ||
+          uploadedMs <
+            oldestTimestamp
+        ) {
+
+          oldestTimestamp =
+            uploadedMs;
+        }
+
+
+        if (
+          uploadedMs <
+            cutoff ||
+          uploadedMs >
+            now
+        ) {
+
+          return;
+        }
+
+
+        const image =
+          card.find(
+            "img"
+          ).first();
+
+
+        let videoTitle =
+          cleanText(
+            link.attr(
+              "title"
+            )
+          );
+
+
+        if (
+          !videoTitle
+        ) {
+
+          videoTitle =
+            cleanText(
+              image.attr(
+                "alt"
+              )
+            );
+        }
+
+
+        if (
+          !videoTitle
+        ) {
+
+          videoTitle =
+            cleanText(
+              link.text()
+            );
+        }
+
+
+        if (
+          !videoTitle
+        ) {
+
+          card
+            .find(
+              'a[href*="/watch/"]'
+            )
+            .each(
+              (
+                __,
+                titleElement
+              ) => {
+
+                const candidateTitle =
+                  cleanText(
+                    $(
+                      titleElement
+                    ).text()
+                  );
+
+
+                if (
+                  candidateTitle
+                ) {
+
+                  videoTitle =
+                    candidateTitle;
+
+                  return false;
+                }
+              }
+            );
+        }
+
+
+        if (
+          !videoTitle
+        ) {
+
+          return;
+        }
+
+
+        const thumbnailUrl =
+          extractThumbnailUrl(
+            $,
+            card,
+            finalUrl
+          );
+
+
+        seenOnPage.add(
+          sourceUrl
+        );
+
+
+        videos.push(
+          {
+            title:
+              videoTitle,
+
+            source_url:
+              sourceUrl,
+
+            source_age:
+              sourceAge,
+
+            source_uploaded_at:
+              new Date(
+                uploadedMs
+              ).toISOString(),
+
+            thumbnail_url:
+              thumbnailUrl
+          }
+        );
+      }
+    );
+
+
+    console.log(
+      `${videos.length} GayXFans videos on page ${pageNumber} are within ${WINDOW_HOURS} hours.`
+    );
+
+
+    return {
+      videos,
+
+      linkCount:
+        videoLinks.length,
+
+      oldestTimestamp
+    };
+
+  } finally {
+
+    await context.close();
+
+  }
 }
-
 
 /* ================================================================
    MAIN
 ================================================================ */
 
 async function run() {
+
+    console.log(
+    "Launching Chromium..."
+  );
+
+
+  const browser =
+    await chromium.launch(
+      {
+        headless:
+          true
+      }
+    );
+
+
+  try {
 
   const now =
     Date.now();
@@ -862,13 +1085,13 @@ async function run() {
       MAX_PAGES
   ) {
 
-    const result =
-      await scrapePage(
-        pageNumber,
-        cutoff,
-        now
-      );
-
+const result =
+  await scrapePage(
+    browser,
+    pageNumber,
+    cutoff,
+    now
+  );
 
     allVideos.push(
       ...result.videos
@@ -1305,6 +1528,16 @@ async function run() {
   console.log(
     "============================================"
   );
+
+  } finally {
+
+    console.log(
+      "Closing Chromium..."
+    );
+
+    await browser.close();
+
+  }
 }
 
 
