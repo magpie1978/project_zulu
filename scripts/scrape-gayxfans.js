@@ -99,7 +99,7 @@ function cleanText(
 /**
  * Converts GayXFans relative ages such as:
  *
- *     9 hours ago
+ *     9 hours ago 
  *     1 day ago
  *     2 days ago
  *     1 week ago
