@@ -369,27 +369,118 @@ async function scrapePage(
   );
 
 
-  const response =
-    await fetch(
-      pageUrl,
-      {
-        headers: {
+const response =
+  await fetch(
+    pageUrl,
+    {
+      redirect:
+        "follow",
 
-          "User-Agent":
-            "Mozilla/5.0 (compatible; PornflixCandidateMonitor/1.0)",
+      headers: {
 
-          "Accept":
-            "text/html,application/xhtml+xml",
+        "User-Agent":
+          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36",
 
-          "Accept-Language":
-            "en-GB,en;q=0.9",
+        "Accept":
+          "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
 
-          "Cache-Control":
-            "no-cache"
-        }
+        "Accept-Language":
+          "en-GB,en-US;q=0.9,en;q=0.8",
+
+        "Accept-Encoding":
+          "gzip, deflate, br",
+
+        "Cache-Control":
+          "no-cache",
+
+        "Pragma":
+          "no-cache",
+
+        "Sec-Fetch-Dest":
+          "document",
+
+        "Sec-Fetch-Mode":
+          "navigate",
+
+        "Sec-Fetch-Site":
+          "none",
+
+        "Sec-Fetch-User":
+          "?1",
+
+        "Upgrade-Insecure-Requests":
+          "1"
       }
-    );
+    }
+  );
 
+
+if (
+  !response.ok
+) {
+
+  const failureBody =
+    await response
+      .text()
+      .catch(
+        () => ""
+      );
+
+
+  console.error(
+    ""
+  );
+
+  console.error(
+    "GayXFans request rejected."
+  );
+
+  console.error(
+    `HTTP status: ${response.status} ${response.statusText}`
+  );
+
+  console.error(
+    `Final URL: ${response.url}`
+  );
+
+  console.error(
+    "Response headers:"
+  );
+
+
+  for (
+    const [
+      name,
+      value
+    ] of response.headers
+  ) {
+
+    console.error(
+      `  ${name}: ${value}`
+    );
+  }
+
+
+  console.error(
+    ""
+  );
+
+  console.error(
+    "First 2000 characters of response:"
+  );
+
+  console.error(
+    failureBody.slice(
+      0,
+      2000
+    )
+  );
+
+
+  throw new Error(
+    `GayXFans page ${pageNumber}: HTTP ${response.status} ${response.statusText}`
+  );
+}
 
   if (
     !response.ok
