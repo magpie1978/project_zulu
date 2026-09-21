@@ -3,6 +3,8 @@
   "private": true,
   "scripts": {
     "scrape:candidates": "node scrape-justthegays.js",
+    "scrape:justthegays": "node scrape-justthegays.js",
+    "scrape:gayxfans": "node scrape-gayxfans.js",
     "inspect:video": "node inspect-video-page.js",
     "resolve:candidates": "node resolve-candidate-media.js",
     "test:candidate-import": "node test-candidate-import.js"
