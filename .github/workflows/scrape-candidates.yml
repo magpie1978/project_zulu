@@ -1,45 +1,276 @@
+# ------------------------------------------------------------
+# SCRAPE CANDIDATE VIDEOS
+# ------------------------------------------------------------
+#
+# This GitHub Actions workflow searches supported source
+# websites for videos that could potentially be added to the
+# project's database.
+#
+# It currently runs two separate scrapers:
+#
+#     1. JustTheGays
+#     2. GayXFans
+#
+# The results from these scrapers can be stored in Supabase
+# as "candidate" videos for later processing/resolution.
+#
+# GitHub creates a temporary Ubuntu computer, downloads the
+# repository, installs Node.js and the required packages,
+# installs Chromium for the GayXFans scraper, and then runs
+# each scraper in turn.
+#
+# The workflow is started manually from the "Actions" section
+# of the GitHub repository.
+# ------------------------------------------------------------
+
+
+# The name shown for this workflow in GitHub Actions.
 name: Scrape Candidate Videos
 
+
+# ------------------------------------------------------------
+# WHEN SHOULD THIS WORKFLOW RUN?
+# ------------------------------------------------------------
+
 on:
+
+  # "workflow_dispatch" means the workflow only runs when
+  # somebody manually starts it.
+  #
+  # GitHub provides a "Run workflow" button on the Actions
+  # page for doing this.
+  #
+  # It does NOT automatically run when code is changed.
   workflow_dispatch:
 
+
+# ------------------------------------------------------------
+# CONCURRENCY CONTROL
+# ------------------------------------------------------------
+#
+# This prevents two candidate-scraping workflows from running
+# at the same time.
+#
+# This helps avoid situations where two scrapers could be
+# simultaneously discovering and trying to save the same
+# candidate videos.
+# ------------------------------------------------------------
+
 concurrency:
+
+  # All runs of this workflow belong to this concurrency
+  # group.
   group: candidate-scrape
+
+
+  # If another scrape is already running, don't cancel it.
+  #
+  # Instead, a newly started scrape will wait for the current
+  # one to finish before it begins.
   cancel-in-progress: false
 
+
+# ------------------------------------------------------------
+# JOBS
+# ------------------------------------------------------------
+#
+# This workflow contains one job called "scrape".
+# ------------------------------------------------------------
+
 jobs:
+
   scrape:
+
+    # Create a temporary Ubuntu Linux computer on GitHub's
+    # servers.
+    #
+    # It exists only for the duration of this workflow.
     runs-on: ubuntu-latest
+
+
+    # --------------------------------------------------------
+    # DEFAULT WORKING FOLDER
+    # --------------------------------------------------------
+    #
+    # The scraper programs are stored in the repository's
+    # "scripts" folder.
+    #
+    # This tells GitHub to run subsequent shell commands from
+    # that folder automatically.
+    # --------------------------------------------------------
 
     defaults:
       run:
         working-directory: scripts
 
+
+    # --------------------------------------------------------
+    # STEPS
+    # --------------------------------------------------------
+    #
+    # These instructions are performed in order.
+    # --------------------------------------------------------
+
     steps:
+
+
+      # ------------------------------------------------------
+      # STEP 1 — DOWNLOAD THE REPOSITORY
+      # ------------------------------------------------------
+      #
+      # The temporary computer initially has none of our
+      # project files.
+      #
+      # This downloads the repository so the workflow can
+      # access the scraping scripts and package.json.
+      # ------------------------------------------------------
+
       - name: Checkout repository
         uses: actions/checkout@v4
 
+
+      # ------------------------------------------------------
+      # STEP 2 — INSTALL NODE.JS
+      # ------------------------------------------------------
+      #
+      # The scraping programs run using Node.js.
+      #
+      # This installs Node.js version 22 on the temporary
+      # GitHub computer.
+      # ------------------------------------------------------
+
       - name: Set up Node
         uses: actions/setup-node@v4
+
         with:
           node-version: 22
+
+
+      # ------------------------------------------------------
+      # STEP 3 — INSTALL THE NODE DEPENDENCIES
+      # ------------------------------------------------------
+      #
+      # "npm install" reads scripts/package.json and installs
+      # all of the JavaScript packages required by the
+      # scraping programs.
+      # ------------------------------------------------------
 
       - name: Install dependencies
         run: npm install
 
+
+      # ------------------------------------------------------
+      # STEP 4 — INSTALL CHROMIUM FOR GAYXFANS
+      # ------------------------------------------------------
+      #
+      # The GayXFans scraper needs an actual web browser to
+      # interact with/read the website.
+      #
+      # Playwright is a browser-automation system that allows
+      # JavaScript programs to control browsers.
+      #
+      # This command installs Chromium along with the Linux
+      # system packages required for Chromium to work.
+      #
+      # Chromium is the open-source browser on which Google
+      # Chrome is largely based.
+      #
+      # The JustTheGays scraper apparently does not require
+      # this browser installation, but GayXFans does.
+      # ------------------------------------------------------
+
       - name: Install Chromium for GayXFans
         run: npx playwright install --with-deps chromium
 
+
+      # ------------------------------------------------------
+      # STEP 5 — SCRAPE JUSTTHEGAYS
+      # ------------------------------------------------------
+      #
+      # Run the JustTheGays scraper.
+      #
+      # The scraper is given secure access to Supabase so it
+      # can read/write the candidate information required by
+      # the project.
+      # ------------------------------------------------------
+
       - name: Scrape JustTheGays
+
+
+        # IMPORTANT:
+        #
+        # Normally, if a GitHub Actions step fails, the job
+        # stops immediately.
+        #
+        # "continue-on-error: true" changes that behaviour.
+        #
+        # If the JustTheGays scraper encounters an error,
+        # GitHub will record the problem but will CONTINUE to
+        # the GayXFans scraper below.
+        #
+        # This means a problem with one website doesn't stop
+        # the other website from being scraped.
         continue-on-error: true
+
+
+        # Supply the scraper with the credentials it needs to
+        # communicate with Supabase.
         env:
+
+          # Address of the Supabase project.
+          #
+          # The actual value is securely retrieved from
+          # GitHub Secrets.
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+
+
+          # The highly privileged Supabase Service Role key.
+          #
+          # This is stored securely in GitHub Secrets rather
+          # than being written directly into this file.
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+
+
+        # Run the "scrape:justthegays" command defined in
+        # scripts/package.json.
         run: npm run scrape:justthegays
 
+
+      # ------------------------------------------------------
+      # STEP 6 — SCRAPE GAYXFANS
+      # ------------------------------------------------------
+      #
+      # Now run the second scraper.
+      #
+      # This scraper can make use of the Chromium browser
+      # that was installed earlier using Playwright.
+      # ------------------------------------------------------
+
       - name: Scrape GayXFans
+
+
+        # As with JustTheGays, don't stop the entire workflow
+        # if this scraper encounters an error.
+        #
+        # This is particularly useful for web scrapers because
+        # external websites can occasionally be unavailable,
+        # change their layout, block requests, or otherwise
+        # cause an individual scraping run to fail.
         continue-on-error: true
+
+
+        # Supply the GayXFans scraper with secure access to
+        # Supabase.
         env:
+
+          # Address of the Supabase project.
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+
+
+          # Privileged Supabase Service Role key.
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+
+
+        # Run the "scrape:gayxfans" command defined in
+        # scripts/package.json.
         run: npm run scrape:gayxfans
