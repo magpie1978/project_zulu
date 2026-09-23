@@ -1,34 +1,222 @@
+# ------------------------------------------------------------
+# RESOLVE CANDIDATE MEDIA
+# ------------------------------------------------------------
+#
+# This GitHub Actions workflow runs the project's candidate
+# media resolution process.
+#
+# In simple terms, the resolver takes candidate media that has
+# already been discovered and attempts to resolve/process it
+# using the project's "resolve:candidates" script.
+#
+# GitHub creates a temporary Ubuntu computer, downloads the
+# repository onto it, installs Node.js and the project's
+# dependencies, provides the script with secure access to
+# Supabase, and then runs:
+#
+#     npm run resolve:candidates
+#
+# The workflow is started manually from the "Actions" section
+# of the GitHub repository.
+# ------------------------------------------------------------
+
+
+# The name shown for this workflow in GitHub Actions.
 name: Resolve Candidate Media
 
+
+# ------------------------------------------------------------
+# WHEN SHOULD THIS WORKFLOW RUN?
+# ------------------------------------------------------------
+
 on:
+
+  # "workflow_dispatch" means this workflow is manually
+  # triggered.
+  #
+  # GitHub will provide a "Run workflow" button on the
+  # Actions page.
+  #
+  # It will NOT automatically run whenever code is changed
+  # or pushed to the repository.
   workflow_dispatch:
 
+
+# ------------------------------------------------------------
+# CONCURRENCY CONTROL
+# ------------------------------------------------------------
+#
+# This section prevents multiple copies of this particular
+# process from running at the same time.
+#
+# This is useful for a resolver because two copies running
+# simultaneously could potentially try to process the same
+# candidate records at the same time.
+# ------------------------------------------------------------
+
 concurrency:
+
+  # All runs using this group name are considered part of
+  # the same queue.
   group: candidate-media-resolution
+
+  # If the workflow is already running and another copy is
+  # started, DO NOT cancel the existing run.
+  #
+  # Instead, the new run will wait until the existing one
+  # has finished.
   cancel-in-progress: false
 
+
+# ------------------------------------------------------------
+# JOBS
+# ------------------------------------------------------------
+#
+# A workflow can contain several jobs.
+#
+# This workflow contains one job called "resolve".
+# ------------------------------------------------------------
+
 jobs:
+
   resolve:
+
+    # Create a temporary virtual computer running Ubuntu.
+    #
+    # GitHub creates this computer when the job starts and
+    # removes it again after the job has finished.
     runs-on: ubuntu-latest
+
+
+    # --------------------------------------------------------
+    # DEFAULT WORKING FOLDER
+    # --------------------------------------------------------
+    #
+    # The Node.js scripts for this project are stored inside
+    # the repository's "scripts" folder.
+    #
+    # This tells GitHub to run subsequent shell commands from
+    # that folder automatically.
+    #
+    # For example:
+    #
+    #     npm install
+    #
+    # effectively runs from:
+    #
+    #     scripts/
+    # --------------------------------------------------------
 
     defaults:
       run:
         working-directory: scripts
 
+
+    # --------------------------------------------------------
+    # STEPS
+    # --------------------------------------------------------
+    #
+    # These instructions are carried out one after another.
+    # --------------------------------------------------------
+
     steps:
+
+
+      # ------------------------------------------------------
+      # STEP 1 — DOWNLOAD THE REPOSITORY
+      # ------------------------------------------------------
+      #
+      # The temporary Ubuntu computer initially has none of
+      # our project files.
+      #
+      # This standard GitHub action checks out (downloads)
+      # the repository onto the temporary computer.
+      #
+      # "@v4" means version 4 of GitHub's checkout action.
+      # ------------------------------------------------------
+
       - name: Checkout repository
         uses: actions/checkout@v4
 
+
+      # ------------------------------------------------------
+      # STEP 2 — INSTALL NODE.JS
+      # ------------------------------------------------------
+      #
+      # The candidate resolver is a Node.js application.
+      #
+      # This standard GitHub action makes Node.js available
+      # on the temporary computer.
+      # ------------------------------------------------------
+
       - name: Set up Node
         uses: actions/setup-node@v4
+
         with:
+
+          # Use Node.js version 22.
           node-version: 22
+
+
+      # ------------------------------------------------------
+      # STEP 3 — INSTALL THE PROJECT'S DEPENDENCIES
+      # ------------------------------------------------------
+      #
+      # "npm install" reads the package.json file inside the
+      # scripts folder and downloads the Node packages needed
+      # by the resolver.
+      #
+      # These might include packages for Supabase, HTTP
+      # requests, media processing, browser automation, etc.,
+      # depending on what is listed in package.json.
+      # ------------------------------------------------------
 
       - name: Install dependencies
         run: npm install
 
+
+      # ------------------------------------------------------
+      # STEP 4 — RESOLVE THE CANDIDATE MEDIA
+      # ------------------------------------------------------
+      #
+      # This is the step that performs the actual work.
+      #
+      # Before running the resolver, we provide it with two
+      # pieces of information needed to communicate securely
+      # with Supabase.
+      #
+      # These values are stored as GitHub "Secrets", rather
+      # than being written directly into this workflow file.
+      #
+      # This keeps sensitive credentials out of the source
+      # code and prevents them from being publicly exposed.
+      # ------------------------------------------------------
+
       - name: Resolve candidate media
+
         env:
+
+          # The address of the Supabase project.
+          #
+          # The real value is retrieved securely from the
+          # repository's GitHub Secrets.
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+
+
+          # The Supabase Service Role key.
+          #
+          # This is a HIGHLY PRIVILEGED credential and should
+          # never be placed directly into the repository.
+          #
+          # The resolver can access it while this step is
+          # running, but the actual key remains stored in
+          # GitHub Secrets.
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+
+
+        # Run the "resolve:candidates" command defined in the
+        # scripts/package.json file.
+        #
+        # The package.json file determines which JavaScript
+        # program is actually launched by this command.
         run: npm run resolve:candidates
