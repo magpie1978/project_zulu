@@ -1,57 +1,389 @@
+# ------------------------------------------------------------
+# TEST CANDIDATE IMPORT
+# ------------------------------------------------------------
+#
+# This GitHub Actions workflow tests/imports candidate videos
+# that have progressed through the earlier stages of the
+# candidate-video pipeline.
+#
+# Unlike some of the other workflows, this one can start in
+# TWO different ways:
+#
+#     1. Manually from the GitHub Actions page.
+#
+#     2. Automatically after the workflow called
+#        "Resolve Candidate Media" finishes successfully.
+#
+# The workflow creates a temporary Ubuntu computer, downloads
+# the repository, installs Node.js and the project packages,
+# installs FFmpeg/ffprobe, supplies the required Supabase,
+# Backblaze B2 and automation credentials, and then runs:
+#
+#     npm run test:candidate-import
+#
+# A maximum of 10 candidates can be processed in a single run.
+# ------------------------------------------------------------
+
+
+# The name displayed for this workflow in GitHub Actions.
 name: Test Candidate Import
 
+
+# ------------------------------------------------------------
+# WHEN SHOULD THIS WORKFLOW RUN?
+# ------------------------------------------------------------
+
 on:
+
+  # OPTION 1 — MANUAL START
+  #
+  # This provides a "Run workflow" button in GitHub Actions,
+  # allowing us to start the candidate import manually.
   workflow_dispatch:
 
+
+  # OPTION 2 — AUTOMATIC START
+  #
+  # "workflow_run" allows this workflow to be triggered when
+  # another GitHub Actions workflow finishes.
   workflow_run:
+
+    # Watch the workflow with this exact name.
+    #
+    # IMPORTANT:
+    # This name must match the "name:" at the top of the
+    # Resolve Candidate Media workflow.
     workflows:
       - Resolve Candidate Media
+
+    # Trigger when that workflow has completed.
+    #
+    # Note that "completed" by itself includes successful and
+    # failed runs.
+    #
+    # A separate check further down makes sure we only run the
+    # actual import job when Resolve Candidate Media succeeded.
     types:
       - completed
 
+
+# ------------------------------------------------------------
+# CONCURRENCY CONTROL
+# ------------------------------------------------------------
+#
+# Candidate importing should only happen one run at a time.
+#
+# This prevents two copies of this workflow from simultaneously
+# attempting to process the same candidate records/files.
+# ------------------------------------------------------------
+
 concurrency:
+
+  # All runs of this workflow belong to the same concurrency
+  # group.
   group: candidate-import
+
+
+  # If another candidate import is already running, don't
+  # cancel it.
+  #
+  # The new run waits for the existing run to finish.
   cancel-in-progress: false
 
+
+# ------------------------------------------------------------
+# JOBS
+# ------------------------------------------------------------
+#
+# This workflow contains one job called "test".
+# ------------------------------------------------------------
+
 jobs:
+
   test:
+
+
+    # --------------------------------------------------------
+    # SHOULD THIS JOB ACTUALLY RUN?
+    # --------------------------------------------------------
+    #
+    # Remember that this workflow can be triggered either:
+    #
+    #     manually
+    #
+    # OR
+    #
+    #     when Resolve Candidate Media finishes.
+    #
+    # This condition deals with both situations.
+    # --------------------------------------------------------
+
     if: >
       github.event_name == 'workflow_dispatch' ||
       github.event.workflow_run.conclusion == 'success'
 
+
+    # In plain English, the condition above means:
+    #
+    # RUN if:
+    #
+    #     this workflow was manually started
+    #
+    # OR
+    #
+    #     Resolve Candidate Media finished successfully.
+    #
+    #
+    # Therefore:
+    #
+    # Resolve Candidate Media succeeds
+    #           ↓
+    # candidate import runs
+    #
+    # Resolve Candidate Media fails
+    #           ↓
+    # candidate import does NOT run
+    #
+    # Manual start
+    #           ↓
+    # candidate import runs regardless of the previous
+    # Resolve Candidate Media workflow.
+
+
+    # --------------------------------------------------------
+    # TEMPORARY COMPUTER
+    # --------------------------------------------------------
+    #
+    # Create a temporary Ubuntu Linux computer on GitHub's
+    # servers to perform the import.
+    # --------------------------------------------------------
+
     runs-on: ubuntu-latest
+
+
+    # --------------------------------------------------------
+    # DEFAULT WORKING FOLDER
+    # --------------------------------------------------------
+    #
+    # The Node.js programs used by this workflow are stored
+    # inside the repository's "scripts" folder.
+    #
+    # This means subsequent "run" commands automatically run
+    # from:
+    #
+    #     scripts/
+    # --------------------------------------------------------
 
     defaults:
       run:
         working-directory: scripts
 
+
+    # --------------------------------------------------------
+    # STEPS
+    # --------------------------------------------------------
+    #
+    # These instructions are performed one after another.
+    # --------------------------------------------------------
+
     steps:
+
+
+      # ------------------------------------------------------
+      # STEP 1 — DOWNLOAD THE REPOSITORY
+      # ------------------------------------------------------
+      #
+      # The temporary Ubuntu computer starts without our
+      # project files.
+      #
+      # This downloads the GitHub repository onto it.
+      # ------------------------------------------------------
+
       - name: Checkout repository
         uses: actions/checkout@v4
 
+
+      # ------------------------------------------------------
+      # STEP 2 — INSTALL NODE.JS
+      # ------------------------------------------------------
+      #
+      # The candidate import program runs using Node.js.
+      #
+      # Install Node.js version 22.
+      # ------------------------------------------------------
+
       - name: Set up Node
         uses: actions/setup-node@v4
+
         with:
           node-version: 22
+
+
+      # ------------------------------------------------------
+      # STEP 3 — INSTALL NODE DEPENDENCIES
+      # ------------------------------------------------------
+      #
+      # Read scripts/package.json and install the JavaScript
+      # packages required by the candidate import system.
+      # ------------------------------------------------------
 
       - name: Install dependencies
         run: npm install
 
+
+      # ------------------------------------------------------
+      # STEP 4 — INSTALL FFMPEG
+      # ------------------------------------------------------
+      #
+      # FFmpeg is a collection of tools for examining and
+      # processing video/audio files.
+      #
+      # This workflow specifically needs access to "ffprobe",
+      # which is supplied as part of the FFmpeg package.
+      #
+      # First update Ubuntu's list of available software, then
+      # install FFmpeg.
+      # ------------------------------------------------------
+
       - name: Install FFmpeg
+
         run: |
           sudo apt-get update
           sudo apt-get install -y ffmpeg
 
+
+      # ------------------------------------------------------
+      # STEP 5 — CHECK FFPROBE
+      # ------------------------------------------------------
+      #
+      # Before attempting the candidate import, verify that
+      # ffprobe was installed correctly.
+      #
+      # ffprobe can inspect a video file and report information
+      # such as:
+      #
+      #     • duration
+      #     • video codec
+      #     • audio codec
+      #     • resolution
+      #     • bitrate
+      #     • container/format information
+      #
+      # Running:
+      #
+      #     ffprobe -version
+      #
+      # confirms that the program exists and can be executed.
+      #
+      # If FFmpeg/ffprobe failed to install, this step will
+      # fail and the actual import will not be attempted.
+      # ------------------------------------------------------
+
       - name: Check ffprobe
         run: ffprobe -version
 
+
+      # ------------------------------------------------------
+      # STEP 6 — TEST/PROCESS THE CANDIDATE IMPORT
+      # ------------------------------------------------------
+      #
+      # This is the step that performs the actual candidate
+      # import process.
+      #
+      # It needs access to several external systems, so the
+      # required credentials are supplied securely through
+      # GitHub Secrets.
+      # ------------------------------------------------------
+
       - name: Test candidate import
+
         env:
+
+
+          # --------------------------------------------------
+          # SUPABASE
+          # --------------------------------------------------
+          #
+          # These allow the importer to communicate with the
+          # project's Supabase database.
+          # --------------------------------------------------
+
+
+          # Address of the Supabase project.
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+
+
+          # Privileged Supabase Service Role key.
+          #
+          # This should never be written directly into the
+          # repository, which is why it is stored as a
+          # GitHub Secret.
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+
+
+          # --------------------------------------------------
+          # BACKBLAZE B2
+          # --------------------------------------------------
+          #
+          # These credentials allow the import process to
+          # communicate with the Backblaze B2 storage used
+          # by the project.
+          # --------------------------------------------------
+
+
+          # Backblaze application/key identifier.
           B2_APPLICATION_KEY_ID: ${{ secrets.B2_APPLICATION_KEY_ID }}
+
+
+          # Secret Backblaze application key.
           B2_APPLICATION_KEY: ${{ secrets.B2_APPLICATION_KEY }}
+
+
+          # Identifies the particular Backblaze B2 bucket
+          # being used by the importer.
           B2_BUCKET_ID: ${{ secrets.B2_BUCKET_ID }}
+
+
+          # --------------------------------------------------
+          # ZULU AUTOMATION
+          # --------------------------------------------------
+          #
+          # A private key used by the project's automation
+          # system to authenticate authorised automated
+          # operations.
+          # --------------------------------------------------
+
           ZULU_AUTOMATION_KEY: ${{ secrets.ZULU_AUTOMATION_KEY }}
+
+
+          # --------------------------------------------------
+          # SAFETY / BATCH LIMIT
+          # --------------------------------------------------
+          #
+          # Do not attempt to process an unlimited number of
+          # candidates in one workflow run.
+          #
+          # This tells the importer to process no more than
+          # 10 candidates during this run.
+          #
+          # Keeping imports in relatively small batches helps
+          # limit the amount of work performed if something
+          # goes wrong and prevents a very large candidate
+          # queue from creating an excessively long job.
+          # --------------------------------------------------
+
           MAX_CANDIDATES_PER_RUN: 10
+
+
+        # ----------------------------------------------------
+        # RUN THE IMPORTER
+        # ----------------------------------------------------
+        #
+        # Run the "test:candidate-import" command defined in
+        # scripts/package.json.
+        #
+        # package.json determines which JavaScript program is
+        # actually launched by this command.
+        # ----------------------------------------------------
+
         run: npm run test:candidate-import
