@@ -1,27 +1,167 @@
+# ------------------------------------------------------------
+# INSPECT VIDEO PAGE
+# ------------------------------------------------------------
+#
+# This GitHub Actions workflow runs the project's video-page
+# inspection script.
+#
+# It creates a temporary Ubuntu computer on GitHub's servers,
+# downloads the repository onto it, installs Node.js and the
+# project's dependencies, and then runs:
+#
+#     npm run inspect:video
+#
+# The workflow only runs when it is manually started from the
+# "Actions" section of the GitHub repository.
+# ------------------------------------------------------------
+
+
+# The name shown for this workflow in the GitHub Actions page.
 name: Inspect Video Page
 
+
+# ------------------------------------------------------------
+# WHEN SHOULD THIS WORKFLOW RUN?
+# ------------------------------------------------------------
+
 on:
+
+  # "workflow_dispatch" means the workflow does NOT run
+  # automatically when code is changed or uploaded.
+  #
+  # Instead, GitHub provides a "Run workflow" button on the
+  # Actions page so it can be started manually whenever needed.
   workflow_dispatch:
 
+
+# ------------------------------------------------------------
+# JOBS
+# ------------------------------------------------------------
+#
+# A workflow can contain several separate jobs.
+#
+# This workflow has just one job, called "inspect".
+# ------------------------------------------------------------
+
 jobs:
+
   inspect:
+
+    # Create a temporary virtual computer running the latest
+    # supported version of Ubuntu Linux.
+    #
+    # GitHub creates this computer when the workflow starts
+    # and removes it again when the job has finished.
     runs-on: ubuntu-latest
+
+
+    # --------------------------------------------------------
+    # DEFAULT WORKING FOLDER
+    # --------------------------------------------------------
+    #
+    # The scripts used by this workflow live inside the
+    # repository's "scripts" folder.
+    #
+    # Setting this here means that subsequent "run" commands
+    # are executed from that folder automatically.
+    #
+    # In other words, instead of repeatedly doing:
+    #
+    #     cd scripts
+    #     npm install
+    #
+    # GitHub already knows that "scripts" is the folder
+    # we want to work inside.
+    # --------------------------------------------------------
 
     defaults:
       run:
         working-directory: scripts
 
+
+    # --------------------------------------------------------
+    # STEPS
+    # --------------------------------------------------------
+    #
+    # These are performed one after another, in this order.
+    # --------------------------------------------------------
+
     steps:
+
+
+      # ------------------------------------------------------
+      # STEP 1 — DOWNLOAD THE REPOSITORY
+      # ------------------------------------------------------
+      #
+      # The temporary Ubuntu computer starts off without our
+      # project files.
+      #
+      # This standard GitHub action checks out (downloads) the
+      # repository so that the workflow can access the scripts
+      # and other project files.
+      #
+      # "@v4" means version 4 of GitHub's checkout action.
+      # ------------------------------------------------------
+
       - name: Checkout repository
         uses: actions/checkout@v4
 
+
+      # ------------------------------------------------------
+      # STEP 2 — INSTALL NODE.JS
+      # ------------------------------------------------------
+      #
+      # The inspection tool is written to run using Node.js,
+      # so we need to make Node available on the temporary
+      # computer.
+      #
+      # This installs Node.js version 22.
+      # ------------------------------------------------------
+
       - name: Set up Node
         uses: actions/setup-node@v4
+
         with:
+
+          # Use Node.js version 22.
           node-version: 22
+
+
+      # ------------------------------------------------------
+      # STEP 3 — INSTALL THE PROJECT'S DEPENDENCIES
+      # ------------------------------------------------------
+      #
+      # "npm install" reads the package.json file inside the
+      # scripts folder and downloads all of the Node packages
+      # that the inspection scripts need.
+      #
+      # For example, if the inspection script relies on a
+      # browser automation package or another JavaScript
+      # library, it will be installed here.
+      # ------------------------------------------------------
 
       - name: Install dependencies
         run: npm install
+
+
+      # ------------------------------------------------------
+      # STEP 4 — INSPECT THE VIDEO PAGE
+      # ------------------------------------------------------
+      #
+      # Now that the repository is available and all required
+      # software has been installed, run the actual inspection.
+      #
+      # "npm run inspect:video" looks inside package.json for
+      # a script called:
+      #
+      #     inspect:video
+      #
+      # and executes whatever command has been assigned to it.
+      #
+      # The output from that script will appear in the GitHub
+      # Actions log, making it possible to see what the
+      # inspection found and whether it completed successfully.
+      # ------------------------------------------------------
 
       - name: Inspect video page
         run: npm run inspect:video
