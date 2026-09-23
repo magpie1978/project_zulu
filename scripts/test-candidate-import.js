@@ -1,3 +1,466 @@
+/*
+ * =====================================================================
+ * PORNFLIX AUTOMATIC CANDIDATE IMPORTER
+ * =====================================================================
+ *
+ * PURPOSE
+ * -------
+ *
+ * This script is the main worker that takes videos which have already
+ * been discovered, reviewed and approved in the Pornflix candidate
+ * system and imports them into the real Pornflix video catalogue.
+ *
+ * In simple terms, this is the part of the automation that turns:
+ *
+ *       "This looks like a video we want"
+ *
+ * into:
+ *
+ *       "This video is now stored in Backblaze and exists in Pornflix"
+ *
+ *
+ * ---------------------------------------------------------------------
+ * WHERE THE VIDEO COMES FROM
+ * ---------------------------------------------------------------------
+ *
+ * Earlier parts of the candidate system have already:
+ *
+ *     1. discovered a video
+ *     2. stored it in zulu_candidates
+ *     3. allowed it to be reviewed
+ *     4. resolved the actual MP4 address
+ *     5. prepared the approved film title, actors and tags
+ *
+ * This script therefore does NOT scrape JustTheGays or GayXFans.
+ *
+ * It starts further down the pipeline with candidates which are:
+ *
+ *     status = "accepted"
+ *
+ * AND
+ *
+ *     import_status = "ready"
+ *
+ *
+ * ---------------------------------------------------------------------
+ * WHAT THIS SCRIPT DOES
+ * ---------------------------------------------------------------------
+ *
+ * For each ready candidate it broadly performs this process:
+ *
+ *
+ *     READY CANDIDATE
+ *          │
+ *          ▼
+ *     Check candidate is still valid
+ *          │
+ *          ▼
+ *     Mark candidate "importing"
+ *          │
+ *          ▼
+ *     Has a previous ingestion already started?
+ *          │
+ *          ├── YES → attempt to safely resume it
+ *          │
+ *          └── NO  → start a new ingestion
+ *                       │
+ *                       ▼
+ *                  Download MP4
+ *                       │
+ *                       ▼
+ *                  Check downloaded size
+ *                       │
+ *                       ▼
+ *                  Create zulu_ingestions record
+ *                       │
+ *                       ▼
+ *                  Run ffprobe
+ *                       │
+ *                       ├── duration
+ *                       ├── width
+ *                       └── height
+ *                       │
+ *                       ▼
+ *                  Calculate video fingerprint
+ *                       │
+ *                       ▼
+ *                  DUPLICATE CHECK
+ *                       │
+ *                 ┌─────┴─────┐
+ *                 │           │
+ *             DUPLICATE     UNIQUE
+ *                 │           │
+ *                 ▼           ▼
+ *              STOP       Calculate SHA-1
+ *                             │
+ *                             ▼
+ *                       Authorize B2
+ *                             │
+ *                             ▼
+ *                       Upload MP4
+ *                             │
+ *                             ▼
+ *                       Create public
+ *                       media URL
+ *                             │
+ *                             ▼
+ *                    zulu-finalize-video
+ *                             │
+ *                             ▼
+ *                      zulu_videos
+ *                      zulu_actors
+ *                       etc.
+ *                             │
+ *                             ▼
+ *                       Verify result
+ *                             │
+ *                             ▼
+ *                    Candidate = imported
+ *
+ *
+ * ---------------------------------------------------------------------
+ * IMPORTANT SAFETY FEATURES
+ * ---------------------------------------------------------------------
+ *
+ * This script deliberately contains several safeguards because an
+ * interrupted import could otherwise result in duplicate database
+ * records or duplicate files in Backblaze.
+ *
+ *
+ * 1. CANDIDATE STATE CHECKING
+ * ---------------------------
+ *
+ * Before doing anything expensive, the script reloads the candidate
+ * from Supabase.
+ *
+ * It checks that the candidate is still:
+ *
+ *     status = accepted
+ *     import_status = ready
+ *
+ * and that it has:
+ *
+ *     media_url
+ *     import_film
+ *     import_actors
+ *
+ *
+ * 2. INGESTION JOURNAL
+ * --------------------
+ *
+ * zulu_ingestions acts as a journal recording how far an import has
+ * progressed.
+ *
+ * Example states include:
+ *
+ *     pending
+ *     analysing
+ *     ready
+ *     uploading
+ *     video_uploaded
+ *     catalogued
+ *     complete_without_thumbnail
+ *     duplicate
+ *     failed
+ *
+ * This is important because the GitHub Action could stop halfway
+ * through an import.
+ *
+ *
+ * 3. RESUMABLE IMPORTS
+ * --------------------
+ *
+ * If the MP4 has already successfully reached Backblaze, the script
+ * does NOT blindly upload another copy.
+ *
+ * It can recognise a "video_uploaded" ingestion and continue from the
+ * catalogue stage instead.
+ *
+ * This protects against situations such as:
+ *
+ *     MP4 uploaded successfully
+ *          ↓
+ *     GitHub Action crashes
+ *          ↓
+ *     workflow is run again
+ *
+ * Without the resume logic this could create another B2 object.
+ *
+ *
+ * 4. VIDEO FINGERPRINT
+ * --------------------
+ *
+ * Before uploading, the script calculates the same fingerprint used
+ * by the existing Pornflix ingestion system.
+ *
+ * The fingerprint is based on:
+ *
+ *     file size
+ *     +
+ *     SHA-256 of first 4 MB
+ *     +
+ *     SHA-256 of middle 4 MB
+ *     +
+ *     SHA-256 of final 4 MB
+ *
+ * These values are combined and SHA-256 hashed again.
+ *
+ * This gives Pornflix a practical way of recognising the same video
+ * even if it has a different filename.
+ *
+ *
+ * 5. DUPLICATE CHECK BEFORE UPLOAD
+ * --------------------------------
+ *
+ * The calculated fingerprint is checked against zulu_videos BEFORE
+ * the file is uploaded to Backblaze.
+ *
+ * If a matching fingerprint already exists:
+ *
+ *     candidate → duplicate
+ *     ingestion → duplicate
+ *
+ * and the Backblaze upload is skipped.
+ *
+ * This avoids wasting storage on a video we already have.
+ *
+ *
+ * 6. SECOND DUPLICATE PROTECTION
+ * ------------------------------
+ *
+ * zulu-finalize-video also performs catalogue duplicate protection.
+ *
+ * This gives us another safety check even after the earlier
+ * fingerprint test.
+ *
+ *
+ * 7. DOWNLOAD SIZE CHECK
+ * ----------------------
+ *
+ * If the resolver previously discovered the expected file size, the
+ * downloaded MP4 is checked against it.
+ *
+ * If:
+ *
+ *     expected size != downloaded size
+ *
+ * the import stops.
+ *
+ * This helps prevent a partial or incorrect download from being
+ * uploaded to Pornflix.
+ *
+ *
+ * 8. TEMPORARY FILE CLEANUP
+ * -------------------------
+ *
+ * Downloaded candidate files exist only temporarily on the GitHub
+ * runner.
+ *
+ * At the end of processing — whether successful or unsuccessful —
+ * the script attempts to delete the temporary MP4.
+ *
+ *
+ * ---------------------------------------------------------------------
+ * VIDEO ANALYSIS
+ * ---------------------------------------------------------------------
+ *
+ * FFmpeg's "ffprobe" utility is used to inspect the downloaded MP4.
+ *
+ * We obtain:
+ *
+ *     duration
+ *     width
+ *     height
+ *
+ * The import is rejected if valid video metadata cannot be obtained.
+ *
+ *
+ * ---------------------------------------------------------------------
+ * BACKBLAZE
+ * ---------------------------------------------------------------------
+ *
+ * Once the video has passed the duplicate checks, this script:
+ *
+ *     1. calculates the SHA-1 required for the B2 upload
+ *     2. authenticates with Backblaze
+ *     3. obtains a B2 upload URL
+ *     4. uploads the MP4
+ *
+ * The filename stored in Backblaze is:
+ *
+ *     <approved film title>.mp4
+ *
+ * For example:
+ *
+ *     Aaron Hugese with Ismatwink.mp4
+ *
+ * The resulting Pornflix media address is then constructed as:
+ *
+ *     https://media.zulu-orchid-falcon.co.uk/<filename>
+ *
+ *
+ * ---------------------------------------------------------------------
+ * FINAL CATALOGUING
+ * ---------------------------------------------------------------------
+ *
+ * Uploading the MP4 is only part of the process.
+ *
+ * Once the file exists in Backblaze, this script calls the Supabase
+ * Edge Function:
+ *
+ *     zulu-finalize-video
+ *
+ * It sends the approved information including:
+ *
+ *     ingestion ID
+ *     film title
+ *     public media URL
+ *     actors
+ *     tags
+ *     file size
+ *     duration
+ *     width
+ *     height
+ *     fingerprint
+ *
+ * The Edge Function is responsible for final catalogue creation.
+ *
+ *
+ * ---------------------------------------------------------------------
+ * VERIFICATION
+ * ---------------------------------------------------------------------
+ *
+ * The script does not simply assume that catalogue finalization
+ * succeeded.
+ *
+ * Afterwards it checks Supabase to confirm that the expected records
+ * actually exist in:
+ *
+ *     zulu_videos
+ *     zulu_actors
+ *     zulu_ingestions
+ *
+ * Only after these checks does it mark the candidate:
+ *
+ *     import_status = "imported"
+ *
+ *
+ * ---------------------------------------------------------------------
+ * THUMBNAILS
+ * ---------------------------------------------------------------------
+ *
+ * Thumbnail processing is deliberately NOT performed by this version
+ * of the automatic importer.
+ *
+ * A successful ingestion is therefore currently marked:
+ *
+ *     complete_without_thumbnail
+ *
+ * with:
+ *
+ *     thumbnail_status = skipped
+ *
+ * Thumbnail generation can be added to the automation separately.
+ *
+ *
+ * ---------------------------------------------------------------------
+ * FAILURE HANDLING
+ * ---------------------------------------------------------------------
+ *
+ * Each stage has a name such as:
+ *
+ *     candidate_validation
+ *     candidate_claim
+ *     downloading
+ *     ingestion_create
+ *     analysis
+ *     duplicate_check
+ *     uploading
+ *     video_uploaded
+ *     cataloguing
+ *     completion
+ *
+ * If something fails, that stage is recorded so that we can see
+ * approximately where the import stopped.
+ *
+ * The candidate itself is normally changed to:
+ *
+ *     import_status = failed
+ *
+ * with the error stored in:
+ *
+ *     import_error
+ *
+ * A failure of ONE candidate does not immediately stop the queue.
+ *
+ * The script continues trying the remaining ready candidates.
+ *
+ * At the end, however, if any candidate failed, the overall process
+ * exits with an error so that GitHub Actions clearly shows the run
+ * as failed.
+ *
+ *
+ * ---------------------------------------------------------------------
+ * BATCH LIMIT
+ * ---------------------------------------------------------------------
+ *
+ * To avoid one GitHub Action attempting an unlimited number of large
+ * video imports, each run processes only a limited number.
+ *
+ * The environment variable:
+ *
+ *     MAX_CANDIDATES_PER_RUN
+ *
+ * controls the limit.
+ *
+ * If it isn't supplied, the default is:
+ *
+ *     10 candidates
+ *
+ *
+ * ---------------------------------------------------------------------
+ * SECURITY
+ * ---------------------------------------------------------------------
+ *
+ * Credentials are NOT written directly into this source file.
+ *
+ * They are supplied to the GitHub Action as environment variables:
+ *
+ *     SUPABASE_URL
+ *     SUPABASE_SERVICE_ROLE_KEY
+ *     ZULU_AUTOMATION_KEY
+ *     B2_APPLICATION_KEY_ID
+ *     B2_APPLICATION_KEY
+ *     B2_BUCKET_ID
+ *
+ * The Supabase Service Role key and Backblaze credentials are highly
+ * privileged and must remain server-side secrets.
+ *
+ *
+ * ---------------------------------------------------------------------
+ * SHORT VERSION
+ * ---------------------------------------------------------------------
+ *
+ * This file is essentially the automated equivalent of:
+ *
+ *     "Take this approved candidate and safely add it to Pornflix."
+ *
+ * It handles:
+ *
+ *     download
+ *       → analyse
+ *       → fingerprint
+ *       → duplicate check
+ *       → upload
+ *       → catalogue
+ *       → verify
+ *       → mark imported
+ *
+ * while keeping enough state in Supabase to recover safely from many
+ * interrupted imports.
+ * =====================================================================
+ */
+
 const { createClient } = require("@supabase/supabase-js");
 const fs = require("fs");
 const fsp = require("fs/promises");
