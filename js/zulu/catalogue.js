@@ -528,6 +528,12 @@ function videoMatchesSearch(
  *   views-asc
  *       Least watched first.
  *
+ *   duration-desc / duration-asc
+ *       Longest / shortest video first.
+ *
+ *   size-desc / size-asc
+ *       Largest / smallest file first.
+ *
  * The original array is never modified.
  *
  * @param {Array} videos
@@ -619,6 +625,35 @@ function sortVideos(videos) {
             )
           );
 
+
+        /* -----------------------------------------------------------
+           VIDEO DURATION / FILE SIZE (NUMERIC)
+
+           Missing or invalid values are placed last in either direction.
+        ----------------------------------------------------------- */
+
+        case "duration-desc":
+        case "duration-asc":
+        case "size-desc":
+        case "size-asc": {
+          const field = sortMode.startsWith("duration")
+            ? "duration_seconds"
+            : "filesize_bytes";
+          const aValue = a[field] == null || a[field] === ""
+            ? NaN : Number(a[field]);
+          const bValue = b[field] == null || b[field] === ""
+            ? NaN : Number(b[field]);
+          const aValid = Number.isFinite(aValue) && aValue >= 0;
+          const bValid = Number.isFinite(bValue) && bValue >= 0;
+
+          if (!aValid && !bValid) return 0;
+          if (!aValid) return 1;
+          if (!bValid) return -1;
+
+          return sortMode.endsWith("desc")
+            ? bValue - aValue
+            : aValue - bValue;
+        }
 
         /* -----------------------------------------------------------
            FILM TITLE A → Z
