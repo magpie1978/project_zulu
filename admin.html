@@ -23,6 +23,7 @@
     href="favicon.ico"
     sizes="any"
   >
+  <link rel="stylesheet" href="style/recovery.css">
 </head>
 
 
@@ -207,6 +208,9 @@
         >
           <i data-lucide="history"></i>
           <span>Recent Ingestions</span>
+        </button>
+        <button type="button" class="admin-tab" role="tab" data-admin-tab="recovery" aria-controls="admin-recovery-heading">
+          <i data-lucide="database-zap"></i><span>Catalogue Recovery</span>
         </button>
       </div>
     </nav>
@@ -2159,12 +2163,28 @@
 
     </section>
 
+    <section class="admin-section" data-admin-tab-panel="recovery" aria-labelledby="admin-recovery-heading" hidden>
+      <div class="admin-section-heading"><div><div class="admin-section-kicker">RESTORATION WORKSPACE · STAGING ONLY</div>
+      <h2 id="admin-recovery-heading">Catalogue Recovery</h2><p>Review Backblaze inventory, propose metadata and validate historical UID assignments. Production catalogue is never changed here.</p></div></div>
+      <div id="recovery-message" class="recovery-message" role="status">Open this tab to load recovery data.</div>
+      <div class="recovery-stats" id="recovery-stats"></div>
+      <div class="recovery-toolbar">
+        <input id="recovery-search" type="search" placeholder="Search filename, title, actor or UID" aria-label="Search recovery catalogue">
+        <select id="recovery-filter" aria-label="Filter recovery entries"><option value="all">All videos</option><option value="unresolved">Unresolved UIDs</option><option value="assigned">Assigned UIDs</option><option value="reviewed">Reviewed</option><option value="unreviewed">Not reviewed</option></select>
+        <button id="recovery-reload" type="button" class="admin-button admin-button-secondary">Reload</button>
+      </div>
+      <div class="recovery-layout"><div><div class="recovery-grid" id="recovery-grid"></div><div class="recovery-pager"><button id="recovery-prev" type="button">Previous</button><span id="recovery-page"></span><button id="recovery-next" type="button">Next</button></div></div>
+      <aside id="recovery-editor" class="recovery-editor"><p>Select a video to review its details.</p></aside></div>
+    </section>
+
   </main>
 
 
   <!-- =====================================================
        SCRIPT
   ====================================================== -->
+
+
 
   <script>
     (() => {
@@ -2329,6 +2349,7 @@
   </script>
 
 
+  <script type="module" src="js/admin/admin-recovery.js"></script>
   <script
     type="module"
     src="js/admin/admin.js"
