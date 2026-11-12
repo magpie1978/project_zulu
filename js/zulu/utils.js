@@ -109,7 +109,15 @@ export function formatVideoQuality(
   }
 
 
-  return `${h}p`;
+  // Use the shorter dimension for landscape and portrait videos.
+  // For example, 1080x1920 and 1920x1080 are both 1080p.
+  const shortSide = Math.min(w, h);
+  if (shortSide >= 2160) return "4K";
+  if (shortSide >= 1440) return "1440p";
+  if (shortSide >= 1080) return "1080p";
+  if (shortSide >= 720) return "720p";
+  if (shortSide >= 480) return "480p";
+  return `${shortSide}p`;
 }
 
 
