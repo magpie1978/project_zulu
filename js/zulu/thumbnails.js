@@ -3037,6 +3037,39 @@ export function getSelectedThumbnailBlob() {
  *
  * The Blob itself remains available through getSelectedThumbnailBlob().
  */
+/**
+ * Admin Review crop API. Uses the same stored source frame and PNG
+ * renderer as Add Video, without coupling Admin to Add Video's DOM.
+ */
+export function getSelectedThumbnailCropInfo() {
+  const candidate = thumbnailCandidates[selectedThumbnailIndex];
+  if (!candidate?.sourceCanvas || candidate.crop?.direction !== "vertical" || !candidate.crop?.maxY) return null;
+  return { y: candidate.crop.y, maxY: candidate.crop.maxY, cropHeight: candidate.crop.height };
+}
+
+export function previewSelectedThumbnailCrop(y) {
+  const candidate = thumbnailCandidates[selectedThumbnailIndex];
+  if (!candidate?.sourceCanvas || candidate.crop?.direction !== "vertical") return null;
+  candidate.crop.y = Math.max(0, Math.min(candidate.crop.maxY, y));
+  const canvas = document.createElement("canvas");
+  canvas.width = 640;
+  canvas.height = 360;
+  const context = canvas.getContext("2d");
+  if (!context) return null;
+  context.drawImage(candidate.sourceCanvas, candidate.crop.x, candidate.crop.y,
+    candidate.crop.width, candidate.crop.height, 0, 0, canvas.width, canvas.height);
+  return canvas.toDataURL("image/jpeg", 0.85);
+}
+
+export async function commitSelectedThumbnailCrop() {
+  const candidate = thumbnailCandidates[selectedThumbnailIndex];
+  if (!candidate?.sourceCanvas || candidate.crop?.direction !== "vertical") return null;
+  const blob = await renderThumbnailCrop(candidate.sourceCanvas, candidate.crop);
+  candidate.blob = blob;
+  selectedThumbnailBlob = blob;
+  return blob;
+}
+
 export function getSelectedThumbnailCandidate() {
 
   if (
