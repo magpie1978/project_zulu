@@ -9,7 +9,10 @@ import {
   selectPreviousThumbnailCandidate,
   selectNextThumbnailCandidate,
   resetThumbnailState,
-  uploadThumbnailToBackblaze
+  uploadThumbnailToBackblaze,
+  getSelectedThumbnailCropInfo,
+  previewSelectedThumbnailCrop,
+  commitSelectedThumbnailCrop
 } from "../zulu/thumbnails.js";
 
 
@@ -3526,6 +3529,65 @@ let thumbnailReevaluationBusy =
 let thumbnailReevaluationPreviewUrl =
   null;
 
+// Admin Review: portrait crop dragging. Kept separate from Add Video controls.
+let adminCropDrag = null;
+let adminCropSaving = false;
+
+function setupAdminPortraitCrop() {
+  const preview = thumbnailReevaluateSuggested;
+  if (!preview) return;
+  preview.style.touchAction = "none";
+  preview.style.userSelect = "none";
+  preview.style.webkitUserDrag = "none";
+  preview.addEventListener("dragstart", event => event.preventDefault());
+
+  preview.addEventListener("pointerdown", event => {
+    if (!thumbnailReevaluationRunning || thumbnailReevaluationBusy || adminCropSaving) return;
+    const crop = getSelectedThumbnailCropInfo();
+    if (!crop) return;
+    event.preventDefault();
+    adminCropDrag = { pointerId: event.pointerId, startY: event.clientY,
+      initialY: crop.y, cropHeight: crop.cropHeight };
+    preview.setPointerCapture(event.pointerId);
+    preview.style.cursor = "grabbing";
+  });
+
+  preview.addEventListener("pointermove", event => {
+    if (!adminCropDrag || event.pointerId !== adminCropDrag.pointerId) return;
+    const height = preview.getBoundingClientRect().height;
+    if (!height) return;
+    event.preventDefault();
+    const newY = adminCropDrag.initialY -
+      (event.clientY - adminCropDrag.startY) * adminCropDrag.cropHeight / height;
+    const image = previewSelectedThumbnailCrop(newY);
+    if (image) preview.src = image;
+  });
+
+  const finish = async event => {
+    if (!adminCropDrag || event.pointerId !== adminCropDrag.pointerId) return;
+    adminCropDrag = null;
+    try { preview.releasePointerCapture(event.pointerId); } catch (_) {}
+    adminCropSaving = true;
+    setThumbnailReevaluationControlsDisabled(true);
+    try {
+      await commitSelectedThumbnailCrop();
+      if (thumbnailReevaluationRunning) refreshThumbnailReevaluationCandidate();
+    } catch (error) {
+      console.error("Admin thumbnail crop failed:", error);
+      setThumbnailReevaluationStatus("Could not save crop: " + (error?.message || error), "error");
+    } finally {
+      adminCropSaving = false;
+      if (thumbnailReevaluationRunning && !thumbnailReevaluationBusy) {
+        setThumbnailReevaluationControlsDisabled(false);
+      }
+      preview.style.cursor = getSelectedThumbnailCropInfo() ? "grab" : "default";
+    }
+  };
+  preview.addEventListener("pointerup", finish);
+  preview.addEventListener("pointercancel", finish);
+}
+
+
 let thumbnailReevaluationMode =
   "unevaluated";
 
@@ -3538,6 +3600,7 @@ let thumbnailReevaluationMissingUids =
  * Called once by initialiseThumbnailHealth().
  */
 function initialiseThumbnailReevaluation() {
+  setupAdminPortraitCrop();
 
   thumbnailReevaluateStart?.addEventListener(
     "click",
@@ -4867,6 +4930,10 @@ const candidateCount =
     );
 
 
+  if (thumbnailReevaluateSuggested) {
+    thumbnailReevaluateSuggested.style.cursor = getSelectedThumbnailCropInfo() ? "grab" : "default";
+  }
+
   if (
     thumbnailReevaluateDetail
   ) {
@@ -4886,7 +4953,7 @@ const candidateCount =
         Math.round(
           time
         )
-      }s`;
+      }s${getSelectedThumbnailCropInfo() ? " · Drag image up/down to adjust portrait crop" : ""}`;
   }
 }
 /**
