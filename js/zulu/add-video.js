@@ -670,7 +670,7 @@ async function loadZuluActorNames() {
       error
     } =
       await supabase
-        .from(
+        .schema("zulu").from(
           "zulu_distinct_actors"
         )
         .select(
@@ -2725,7 +2725,7 @@ async function findDuplicateVideoByFingerprint(
     error
   } =
     await supabase
-      .from(
+      .schema("zulu").from(
         "zulu_videos"
       )
       .select(
