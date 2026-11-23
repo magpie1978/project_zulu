@@ -738,6 +738,9 @@ BEGIN
 END;
 $procedure$;
 
+-- Restore pre-cutover RPC execution privileges (as observed in production).
+GRANT EXECUTE ON FUNCTION public.refresh_zulu_videos_search() TO PUBLIC;
+
 -- Restore the existing cron job's original target, preserving schedule and job ID.
 -- Abort the transaction if the job is missing or duplicated.
 DO $$
