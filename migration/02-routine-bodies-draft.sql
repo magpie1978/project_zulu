@@ -44,7 +44,7 @@ BEGIN
           COUNT(*) AS occurrences,
           array_agg(uid ORDER BY uid) AS uids,
           array_agg(film ORDER BY uid) AS films
-        FROM zulu.videos
+        FROM zulu.zulu_videos
         WHERE url IS NOT NULL
           AND btrim(url) <> ''
         GROUP BY url
@@ -83,7 +83,7 @@ BEGIN
           COUNT(*) AS occurrences,
           array_agg(uid ORDER BY uid) AS uids,
           array_agg(film ORDER BY uid) AS films
-        FROM zulu.videos
+        FROM zulu.zulu_videos
         WHERE fingerprint IS NOT NULL
           AND btrim(fingerprint) <> ''
         GROUP BY fingerprint
@@ -115,10 +115,10 @@ BEGIN
           '[]'::jsonb
         )
       )
-      FROM zulu.videos v
+      FROM zulu.zulu_videos v
       WHERE NOT EXISTS (
         SELECT 1
-        FROM zulu.actors a
+        FROM zulu.zulu_actors a
         WHERE a.uid = v.uid
       )
     ),
@@ -147,7 +147,7 @@ BEGIN
           '[]'::jsonb
         )
       )
-      FROM zulu.videos
+      FROM zulu.zulu_videos
       WHERE filesize_bytes IS NULL
          OR filesize_bytes <= 0
     ),
@@ -176,7 +176,7 @@ BEGIN
           '[]'::jsonb
         )
       )
-      FROM zulu.videos
+      FROM zulu.zulu_videos
       WHERE duration_seconds IS NULL
          OR duration_seconds <= 0
     ),
@@ -207,7 +207,7 @@ BEGIN
           '[]'::jsonb
         )
       )
-      FROM zulu.videos
+      FROM zulu.zulu_videos
       WHERE width IS NULL
          OR height IS NULL
          OR width <= 0
@@ -238,7 +238,7 @@ BEGIN
           '[]'::jsonb
         )
       )
-      FROM zulu.videos
+      FROM zulu.zulu_videos
       WHERE fingerprint IS NULL
          OR btrim(fingerprint) = ''
     ),
@@ -267,7 +267,7 @@ BEGIN
           '[]'::jsonb
         )
       )
-      FROM zulu.videos
+      FROM zulu.zulu_videos
       WHERE url IS NOT NULL
         AND btrim(url) <> ''
         AND url NOT LIKE
@@ -316,7 +316,7 @@ CREATE OR REPLACE FUNCTION public.refresh_zulu_videos_search()
  SECURITY DEFINER
 AS $function$
 BEGIN
-  REFRESH MATERIALIZED VIEW zulu.videos_search;
+  REFRESH MATERIALIZED VIEW zulu.zulu_videos_search;
 END;
 $function$
 
@@ -344,8 +344,8 @@ AS $function$
 
 DECLARE
 
-    v_survivor zulu.videos%ROWTYPE;
-    v_removed zulu.videos%ROWTYPE;
+    v_survivor zulu.zulu_videos%ROWTYPE;
+    v_removed zulu.zulu_videos%ROWTYPE;
 
     v_actor_count integer := 0;
     v_view_count integer := 0;
@@ -385,7 +385,7 @@ BEGIN
 
     SELECT *
     INTO v_survivor
-    FROM zulu.videos
+    FROM zulu.zulu_videos
     WHERE uid = p_survivor_uid
     FOR UPDATE;
 
@@ -401,7 +401,7 @@ BEGIN
 
     SELECT *
     INTO v_removed
-    FROM zulu.videos
+    FROM zulu.zulu_videos
     WHERE uid = p_removed_uid
     FOR UPDATE;
 
@@ -494,7 +494,7 @@ BEGIN
        the surviving record.
        ================================================================ */
 
-    INSERT INTO zulu.actors (
+    INSERT INTO zulu.zulu_actors (
         uid,
         actor
     )
@@ -503,7 +503,7 @@ BEGIN
         p_survivor_uid,
         actor
 
-    FROM zulu.actors
+    FROM zulu.zulu_actors
 
     WHERE uid = p_removed_uid
 
@@ -520,7 +520,7 @@ BEGIN
      * are no longer required.
      */
 
-    DELETE FROM zulu.actors
+    DELETE FROM zulu.zulu_actors
     WHERE uid = p_removed_uid;
 
 
@@ -534,7 +534,7 @@ BEGIN
        surviving UID.
        ================================================================ */
 
-    UPDATE zulu.video_views
+    UPDATE zulu.zulu_video_views
 
     SET
         video_uid = p_survivor_uid
@@ -552,7 +552,7 @@ BEGIN
 
        IMPORTANT:
 
-       zulu.video_counts is a VIEW.
+       zulu.zulu_video_counts is a VIEW.
 
        It must therefore NOT be updated, deleted from or inserted into
        here.
@@ -577,7 +577,7 @@ BEGIN
        We deliberately do not delete historical ingestion records.
        ================================================================ */
 
-    UPDATE zulu.ingestions
+    UPDATE zulu.zulu_ingestions
 
     SET
         video_uid = p_survivor_uid,
@@ -609,7 +609,7 @@ BEGIN
        changes back.
        ================================================================ */
 
-    DELETE FROM zulu.videos
+    DELETE FROM zulu.zulu_videos
 
     WHERE
         uid = p_removed_uid;
@@ -631,7 +631,7 @@ BEGIN
        ================================================================ */
 
     PERFORM 1
-    FROM zulu.videos
+    FROM zulu.zulu_videos
     WHERE uid = p_survivor_uid;
 
 
@@ -685,7 +685,7 @@ CREATE OR REPLACE FUNCTION zulu.zulu_refresh_videos_search()
 AS $function$
 BEGIN
 
-    REFRESH MATERIALIZED VIEW zulu.videos_search;
+    REFRESH MATERIALIZED VIEW zulu.zulu_videos_search;
 
 END;
 $function$
@@ -697,7 +697,7 @@ CREATE OR REPLACE FUNCTION zulu.zulu_request_refresh()
  SET search_path TO ''
 AS $function$
 BEGIN
-    UPDATE zulu.refresh_queue
+    UPDATE zulu.zulu_refresh_queue
     SET
         pending = true,
         requested_at = clock_timestamp()
@@ -717,15 +717,15 @@ DECLARE
 BEGIN
     SELECT pending
     INTO needs_refresh
-    FROM zulu.refresh_queue
+    FROM zulu.zulu_refresh_queue
     WHERE id = 1
     FOR UPDATE;
 
     IF COALESCE(needs_refresh, false) THEN
         REFRESH MATERIALIZED VIEW
-            zulu.videos_search;
+            zulu.zulu_videos_search;
 
-        UPDATE zulu.refresh_queue
+        UPDATE zulu.zulu_refresh_queue
         SET
             pending = false,
             refreshed_at = clock_timestamp()
