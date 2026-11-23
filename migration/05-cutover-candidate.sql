@@ -313,7 +313,7 @@ BEGIN
   RETURN result;
 
 END;
-$function$
+$function$;
 
 
 -- The legacy recovery editor function is moved, but deliberately NOT recreated:
@@ -331,7 +331,7 @@ AS $function$
     where username = input_username
       and password_hash = crypt(input_password, password_hash)
   );
-$function$
+$function$;
 
 
 CREATE OR REPLACE FUNCTION public.refresh_zulu_videos_search()
@@ -342,7 +342,7 @@ AS $function$
 BEGIN
   REFRESH MATERIALIZED VIEW zulu.zulu_videos_search;
 END;
-$function$
+$function$;
 
 
 CREATE OR REPLACE FUNCTION public.check_zulu_login(input_username text, input_password text)
@@ -356,7 +356,7 @@ AS $function$
     where username = input_username
       and password_hash = crypt(input_password, password_hash)
   );
-$function$
+$function$;
 
 
 CREATE OR REPLACE FUNCTION zulu.zulu_consolidate_duplicate(p_survivor_uid bigint, p_removed_uid bigint, p_fingerprint text)
@@ -698,7 +698,7 @@ BEGIN
 
 END;
 
-$function$
+$function$;
 
 
 CREATE OR REPLACE FUNCTION zulu.zulu_refresh_videos_search()
@@ -712,7 +712,7 @@ BEGIN
     REFRESH MATERIALIZED VIEW zulu.zulu_videos_search;
 
 END;
-$function$
+$function$;
 
 
 CREATE OR REPLACE FUNCTION zulu.zulu_request_refresh()
@@ -729,7 +729,7 @@ BEGIN
 
     RETURN NULL;
 END;
-$function$
+$function$;
 
 
 CREATE OR REPLACE PROCEDURE zulu.zulu_process_refresh()
@@ -756,7 +756,7 @@ BEGIN
         WHERE id = 1;
     END IF;
 END;
-$procedure$
+$procedure$;
 
 
 
