@@ -7,7 +7,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
    Read-only reconciliation between:
 
-       public.zulu_videos
+       zulu.zulu_videos
               ↕
        Backblaze B2 MP4 objects
 
