@@ -3720,7 +3720,7 @@ async function loadThumbnailEvaluationCounts() {
       await Promise.all([
 
         supabase
-          .from(
+          .schema("zulu").from(
             "zulu_videos"
           )
           .select(
@@ -3736,7 +3736,7 @@ async function loadThumbnailEvaluationCounts() {
           ),
 
         supabase
-          .from(
+          .schema("zulu").from(
             "zulu_videos"
           )
           .select(
@@ -3841,7 +3841,7 @@ async function markThumbnailEvaluated(
     error
   } =
     await supabase
-      .from(
+      .schema("zulu").from(
         "zulu_videos"
       )
       .update({
@@ -3917,7 +3917,7 @@ async function completeThumbnailIngestionIfNeeded(
       lookupError
   } =
     await supabase
-      .from(
+      .schema("zulu").from(
         "zulu_ingestions"
       )
       .select(
@@ -4198,7 +4198,7 @@ async function startThumbnailReevaluation(
      */
     let query =
       supabase
-        .from(
+        .schema("zulu").from(
           "zulu_videos"
         )
         .select(
