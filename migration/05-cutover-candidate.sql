@@ -35,7 +35,7 @@ CREATE OR REPLACE FUNCTION zulu.zulu_catalogue_integrity()
  RETURNS jsonb
  LANGUAGE plpgsql
  SECURITY DEFINER
- SET search_path TO ''
+ SET search_path TO 'public'
 AS $function$
 DECLARE
   result jsonb;
