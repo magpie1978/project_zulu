@@ -15,7 +15,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
    The browser must never receive the Supabase service-role key and does
    not need direct SELECT access to protected tables such as:
 
-       public.zulu_ingestions
+       zulu.zulu_ingestions
 
    This Edge Function:
 
