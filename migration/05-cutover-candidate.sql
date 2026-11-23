@@ -21,6 +21,9 @@ ALTER VIEW public.zulu_videos_with_actors SET SCHEMA zulu;
 ALTER MATERIALIZED VIEW public.zulu_video_stats SET SCHEMA zulu;
 ALTER MATERIALIZED VIEW public.zulu_videos_search SET SCHEMA zulu;
 
+-- The identity sequence is internally dependent on zulu_video_views.id and
+-- follows its owning table. Do not issue a separate ALTER SEQUENCE for it.
+
 -- Move routines without dropping them (preserves OIDs and dependent triggers).
 ALTER FUNCTION public.zulu_catalogue_integrity() SET SCHEMA zulu;
 ALTER FUNCTION public.zulu_consolidate_duplicate(bigint,bigint,text) SET SCHEMA zulu;
