@@ -23,7 +23,7 @@ import { createClient } from "jsr:@supabase/supabase-js@2";
        6. Mark an ingestion complete without a thumbnail.
 
    The browser is deliberately NOT given unrestricted write access to
-   public.zulu_ingestions.
+   zulu.zulu_ingestions.
 
 
    INGESTION LIFECYCLE
