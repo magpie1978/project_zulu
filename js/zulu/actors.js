@@ -769,7 +769,7 @@ async function fetchAllRows({
       error
     } =
       await supabase
-        .from(table)
+        .schema("zulu").from(table)
         .select(select)
         .order(
           orderColumn,
