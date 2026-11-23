@@ -292,7 +292,7 @@ CREATE OR REPLACE FUNCTION zulu.zulu_recovery_is_editor()
  STABLE SECURITY DEFINER
  SET search_path TO ''
 AS $function$
-  SELECT EXISTS (SELECT 1 FROM zulu.recovery_editors WHERE user_id = (SELECT auth.uid()));
+  SELECT EXISTS (SELECT 1 FROM public.zulu_recovery_editors WHERE user_id = (SELECT auth.uid()));
 $function$
 
 
