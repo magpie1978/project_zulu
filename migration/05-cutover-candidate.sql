@@ -313,17 +313,9 @@ END;
 $function$
 
 
--- WARNING: legacy zulu_recovery_is_editor references a missing zulu_recovery_editors table.
--- Keep function for compatibility, but calling it will fail until dependency is resolved.
-CREATE OR REPLACE FUNCTION zulu.zulu_recovery_is_editor()
- RETURNS boolean
- LANGUAGE sql
- STABLE SECURITY DEFINER
- SET search_path TO ''
-AS $function$
-  SELECT EXISTS (SELECT 1 FROM public.zulu_recovery_editors WHERE user_id = (SELECT auth.uid()));
-$function$
-
+-- The legacy recovery editor function is moved, but deliberately NOT recreated:
+-- its referenced public.zulu_recovery_editors table does not exist.
+-- Recreating the SQL function would fail validation; retain its existing body.
 
 CREATE OR REPLACE FUNCTION public.check_pornflix_login(input_username text, input_password text)
  RETURNS boolean
