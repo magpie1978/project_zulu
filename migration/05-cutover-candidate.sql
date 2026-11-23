@@ -768,6 +768,10 @@ SELECT cron.alter_job(
   command := 'CALL zulu.zulu_process_refresh();'
 );
 
+-- Restrict privileged legacy refresh RPC to server-side callers.
+REVOKE EXECUTE ON FUNCTION public.refresh_zulu_videos_search() FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.refresh_zulu_videos_search() TO service_role;
+
 -- Fail transaction if expected objects, grants or cron are absent.
 DO $$
 DECLARE
