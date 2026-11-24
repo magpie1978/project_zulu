@@ -3720,6 +3720,7 @@ async function loadThumbnailEvaluationCounts() {
       await Promise.all([
 
         supabase
+          .schema("zulu")
           .from(
             "zulu_videos"
           )
@@ -3736,6 +3737,7 @@ async function loadThumbnailEvaluationCounts() {
           ),
 
         supabase
+          .schema("zulu")
           .from(
             "zulu_videos"
           )
@@ -3841,6 +3843,7 @@ async function markThumbnailEvaluated(
     error
   } =
     await supabase
+      .schema("zulu")
       .from(
         "zulu_videos"
       )
@@ -4198,6 +4201,7 @@ async function startThumbnailReevaluation(
      */
     let query =
       supabase
+        .schema("zulu")
         .from(
           "zulu_videos"
         )

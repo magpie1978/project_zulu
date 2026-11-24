@@ -717,6 +717,7 @@ async function logVideoView(
     error
   } =
     await supabase
+      .schema("zulu")
       .from(
         "zulu_video_views"
       )

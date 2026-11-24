@@ -238,6 +238,7 @@ export async function loadZuluVideos() {
       error: videosError
     } =
       await supabase
+        .schema("zulu")
         .from(
           "zulu_videos_search"
         )
@@ -353,6 +354,7 @@ async function loadVideoViewCounts() {
     error
   } =
     await supabase
+      .schema("zulu")
       .from(
         "zulu_video_counts"
       )
