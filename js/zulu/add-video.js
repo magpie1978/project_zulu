@@ -2972,7 +2972,14 @@ function handleUploadProgress({
  *
  * Chunk 3 continues with the body of this function.
  */
+let submissionPending = false;
 async function handleSubmit() {
+  if (submissionPending || addVideoUploadInProgress) return;
+  submissionPending = true;
+  try { await submitVideo(); } finally { submissionPending = false; }
+}
+
+async function submitVideo() {
 
   const payload =
     getAddVideoPayload();
@@ -3222,8 +3229,7 @@ async function handleSubmit() {
      STEP 3: BUILD CANONICAL FILENAME
   ----------------------------------------------------------------- */
 
-  const canonicalFilename =
-    `${payload.film}.mp4`;
+  let canonicalFilename;
 
 
   /*
@@ -3252,15 +3258,28 @@ async function handleSubmit() {
         film:
           payload.film,
 
-        canonical_filename:
-          canonicalFilename,
-
         fingerprint:
           addVideoMetadata
             .fingerprint
       }
     );
 
+
+    const reservation = await invokeIngestionStatus({
+      action: "reserve_uid", ingestion_id: ingestionId
+    });
+    const reservedUid = Number(reservation?.reserved_uid);
+    if (!Number.isSafeInteger(reservedUid) || reservedUid <= 0) {
+      throw new Error("Invalid reserved UID; upload stopped.");
+    }
+    canonicalFilename = `${String(reservedUid).padStart(4, "0")} - ${payload.film}.mp4`;
+    if (addVideoIngestionId !== ingestionId || addVideoFile?.files?.[0] !== payload.file) {
+      throw new Error("File selection changed; upload stopped.");
+    }
+    await updateIngestionStatus(ingestionId, "ready", {canonical_filename: canonicalFilename});
+    if (addVideoIngestionId !== ingestionId || addVideoFile?.files?.[0] !== payload.file) {
+      throw new Error("File selection changed; upload stopped.");
+    }
 
     /* ---------------------------------------------------------------
        STEP 4: LOCK UPLOAD UI
